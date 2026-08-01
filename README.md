@@ -21,7 +21,7 @@
 |-----|---------|-----------------|
 | **Product Owner** | Amada Calero Leiva (representada por un miembro del equipo) | Valida que cada función resuelva un problema real del negocio. Prioriza el backlog. |
 | **Scrum Master** | Anderson | Elimina bloqueos técnicos, facilita ceremonias, protege al equipo de interrupciones. |
-| **Equipo de Desarrollo** | Erick, Rodrigo, Jenniffer | Diseño de BD (SQL Server), API (Flask/Python), Frontend (HTML/CSS/JS). |
+| **Equipo de Desarrollo** | Erick, Rodrigo | Diseño de BD (SQL Server), API (Flask/Python), Frontend (HTML/CSS/JS). |
 
 ---
 
