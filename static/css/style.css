@@ -248,3 +248,13 @@ h1, h2, h3 { font-family: 'Outfit', sans-serif; }
 .toast { background: var(--success); color: white; padding: 1rem 1.5rem; border-radius: 8px; box-shadow: var(--shadow); animation: slideIn 0.3s forwards; }
 .toast.error { background: var(--danger); }
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+.mt-2 { margin-top: 2rem; }
+
+
+.ingredientes-list { display: flex; flex-direction: column; gap: 0.75rem; max-height: 200px; overflow-y: auto; margin-bottom: 1rem; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--background); }
+.ingrediente-option { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; background: white; border-radius: 6px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.ingrediente-option input[type='checkbox'] { width: 1.2rem; height: 1.2rem; accent-color: var(--primary-color); }
+.ingrediente-option span { flex: 1; }
+.ing-precio { font-weight: bold; color: var(--success); }
+

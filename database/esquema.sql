@@ -15,10 +15,17 @@ CREATE TABLE Facturas (
     TipoVenta VARCHAR(50) DEFAULT 'Contado' -- 'Contado', 'Encargo'
 );
 
+CREATE TABLE Ingredientes (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    Nombre VARCHAR(100) NOT NULL,
+    PrecioAdicional DECIMAL(10, 2) DEFAULT 0.00
+);
+
 CREATE TABLE DetalleFacturas (
     ID INT PRIMARY KEY IDENTITY(1,1),
     FacturaID INT NOT NULL,
     ProductoID INT NOT NULL,
+    OpcionesExtra VARCHAR(255) NULL,
     Cantidad INT NOT NULL,
     PrecioUnitario DECIMAL(10, 2) NOT NULL,
     Subtotal DECIMAL(10, 2) NOT NULL,
@@ -43,3 +50,9 @@ INSERT INTO Productos (Nombre, Categoria, Precio, ImagenUrl) VALUES
 ('Milanesa', 'Mostrador', 25.00, 'milanesa.jpg'),
 ('Pastel de Tres Leches', 'Encargo', 350.00, 'tres_leches.jpg'),
 ('Pastel de Chocolate', 'Encargo', 400.00, 'chocolate.jpg');
+
+INSERT INTO Ingredientes (Nombre, PrecioAdicional) VALUES
+('Relleno de Fresa', 50.00),
+('Relleno de Cajeta', 40.00),
+('Cobertura de Chocolate', 30.00),
+('Extra Nuez', 60.00);

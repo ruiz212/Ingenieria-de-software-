@@ -16,7 +16,13 @@ def index():
         {'id': 4, 'nombre': 'Pastel 3 Leches', 'categoria': 'Encargo', 'precio': 350.00},
         {'id': 5, 'nombre': 'Pastel Chocolate', 'categoria': 'Encargo', 'precio': 400.00}
     ]
-    return render_template('index.html', productos=productos)
+    ingredientes = [
+        {'id': 1, 'nombre': 'Relleno de Fresa', 'precio': 50.00},
+        {'id': 2, 'nombre': 'Relleno de Cajeta', 'precio': 40.00},
+        {'id': 3, 'nombre': 'Cobertura de Chocolate', 'precio': 30.00},
+        {'id': 4, 'nombre': 'Extra Nuez', 'precio': 60.00}
+    ]
+    return render_template('index.html', productos=productos, ingredientes=ingredientes)
 
 @app.route('/api/factura', methods=['POST'])
 def registrar_factura():
