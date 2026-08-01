@@ -1,4 +1,4 @@
-# Proyecto Panadería - Amada Calero Leiva
+# Ingenieria-de-software- (Proyecto Panadería - Amada Calero Leiva)
 
 ## Descripción
 Sistema de Punto de Venta (POS) y control de producción para la panadería. 
