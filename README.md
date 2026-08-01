@@ -22,7 +22,7 @@ Diseñado utilizando SCRUM.
 
 ## Distribución de Ramas y Estructuración de Versiones
 
-> [!NOTE]
+> [!WARNING]
 > **Para el Equipo de Desarrollo:** Este proyecto utiliza Git para el control de versiones alineado con nuestros Sprints (SCRUM). Sigan esta estructura estrictamente para evitar conflictos:
 > 
 > * **`main` (Producción):** Contiene únicamente versiones estables, probadas y listas para entregar a la panadería. **No hacer commits directos aquí.**
