@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Punto de Venta - Panadería Amada Calero Leiva</title>
+    <meta name="description" content="Sistema de POS rápido e interactivo para mostrador">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="app-header">
+        <h1>Panadería Amada 🥖</h1>
+        <div class="user-info">Dependienta: Activa</div>
+    </header>
+    
+    <main class="pos-container">
+        <section class="products-grid">
+            {% for producto in productos %}
+            <article class="product-card" data-id="{{ producto.id }}" data-name="{{ producto.nombre }}" data-price="{{ producto.precio }}">
+                <div class="card-icon">🍞</div>
+                <div class="card-info">
+                    <h2>{{ producto.nombre }}</h2>
+                    <p class="price">${{ "%.2f"|format(producto.precio) }}</p>
+                </div>
+                <button class="btn-sell" aria-label="Vender {{ producto.nombre }}">
+                    Registrar Venta
+                </button>
+            </article>
+            {% endfor %}
+        </section>
+
+        <div id="toast-container" class="toast-container"></div>
+    </main>
+
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p>Procesando venta...</p>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/pos.js') }}"></script>
+</body>
+</html>
