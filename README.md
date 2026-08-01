@@ -6,8 +6,8 @@ Diseñado utilizando SCRUM.
 
 ## Roles del Equipo
 - **Product Owner:** (Dueño del Producto)
-- **Scrum Master:** Facilitador
-- **Equipo de Desarrollo:** Erick, Rodrigo, Jenniffer, Asistente IA.
+- **Scrum Master:** Anderson
+- **Equipo de Desarrollo:** Erick, Rodrigo.
 
 ## Tecnologías
 - Python (Flask)
@@ -19,3 +19,12 @@ Diseñado utilizando SCRUM.
 2. Activar entorno virtual.
 3. Instalar dependencias: `pip install -r requirements.txt`
 4. Ejecutar: `python app.py`
+
+## Distribución de Ramas y Estructuración de Versiones
+
+> [!NOTE]
+> **Para el Equipo de Desarrollo:** Este proyecto utiliza Git para el control de versiones alineado con nuestros Sprints (SCRUM). Sigan esta estructura estrictamente para evitar conflictos:
+> 
+> * **`main` (Producción):** Contiene únicamente versiones estables, probadas y listas para entregar a la panadería. **No hacer commits directos aquí.**
+> * **`develop` (Integración):** Rama central de desarrollo. Todo código nuevo que se finalice en un Sprint debe integrarse aquí primero.
+> * **`sprint-X-feature` (Desarrollo):** Para cada nueva tarea o épica (ej. `sprint-1-pos-async`), crea una rama con este formato a partir de `develop`. Al finalizar, envía un Pull Request hacia `develop`.
