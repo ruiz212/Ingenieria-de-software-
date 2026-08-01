@@ -1,65 +1,177 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const sellButtons = document.querySelectorAll('.btn-sell');
-    const loadingOverlay = document.getElementById('loading-overlay');
-    const toastContainer = document.getElementById('toast-container');
+let carrito = [];
 
-    sellButtons.forEach(button => {
-        button.addEventListener('click', async (e) => {
-            const card = e.target.closest('.product-card');
-            const productId = card.dataset.id;
-            const productName = card.dataset.name;
-            
-            // Mostrar indicador visual asíncrono
-            showLoading(true);
-
-            try {
-                const response = await fetch('/api/venta', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        producto_id: productId,
-                        cantidad: 1
-                    })
-                });
-
-                if (!response.ok) throw new Error('Error en la red');
-                
-                const data = await response.json();
-                
-                // Mostrar éxito
-                showToast(`¡Venta de ${productName} registrada!`);
-            } catch (error) {
-                console.error('Error al registrar venta:', error);
-                showToast(`Error al vender ${productName}`, true);
-            } finally {
-                showLoading(false);
-            }
+function agregarAlCarrito(id, nombre, precio, categoria) {
+    const itemExistente = carrito.find(item => item.id === id);
+    if (itemExistente) {
+        itemExistente.cantidad++;
+        itemExistente.subtotal = itemExistente.cantidad * itemExistente.precio;
+    } else {
+        carrito.push({
+            id: id,
+            nombre: nombre,
+            precio: precio,
+            categoria: categoria,
+            cantidad: 1,
+            subtotal: precio
         });
+    }
+    renderizarCarrito();
+}
+
+function modificarCantidad(id, delta) {
+    const item = carrito.find(item => item.id === id);
+    if (item) {
+        item.cantidad += delta;
+        if (item.cantidad <= 0) {
+            carrito = carrito.filter(i => i.id !== id);
+        } else {
+            item.subtotal = item.cantidad * item.precio;
+        }
+        renderizarCarrito();
+    }
+}
+
+function renderizarCarrito() {
+    const cartItemsContainer = document.getElementById('cart-items');
+    const subtotalDisplay = document.getElementById('subtotal-display');
+    const totalDisplay = document.getElementById('total-display');
+    const btnFacturar = document.getElementById('btn-facturar');
+
+    cartItemsContainer.innerHTML = '';
+
+    if (carrito.length === 0) {
+        cartItemsContainer.innerHTML = '<div class="empty-cart">Selecciona productos para comenzar</div>';
+        subtotalDisplay.textContent = '$0.00';
+        totalDisplay.textContent = '$0.00';
+        btnFacturar.disabled = true;
+        return;
+    }
+
+    let total = 0;
+
+    carrito.forEach(item => {
+        total += item.subtotal;
+        const itemEl = document.createElement('div');
+        itemEl.className = 'cart-item';
+        itemEl.innerHTML = `
+            <div class="cart-item-info">
+                <div class="cart-item-name">${item.nombre}</div>
+                <div class="cart-item-price">$${item.precio.toFixed(2)} x ${item.cantidad}</div>
+            </div>
+            <div class="cart-item-actions">
+                <button class="btn-qty" onclick="modificarCantidad(${item.id}, -1)">-</button>
+                <span>${item.cantidad}</span>
+                <button class="btn-qty" onclick="modificarCantidad(${item.id}, 1)">+</button>
+            </div>
+            <div style="font-weight: 600;">$${item.subtotal.toFixed(2)}</div>
+        `;
+        cartItemsContainer.appendChild(itemEl);
     });
 
-    function showLoading(show) {
-        if (show) {
-            loadingOverlay.classList.remove('hidden');
-        } else {
-            loadingOverlay.classList.add('hidden');
-        }
-    }
+    subtotalDisplay.textContent = `$${total.toFixed(2)}`;
+    totalDisplay.textContent = `$${total.toFixed(2)}`;
+    btnFacturar.disabled = false;
+}
 
-    function showToast(message, isError = false) {
-        const toast = document.createElement('div');
-        toast.className = 'toast';
-        if (isError) toast.style.backgroundColor = 'var(--danger)';
-        toast.textContent = message;
-        
-        toastContainer.appendChild(toast);
-        
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateX(100%)';
-            toast.style.transition = 'all 0.3s ease';
-            setTimeout(() => toast.remove(), 300);
-        }, 3000);
+function calcularTotal() {
+    return carrito.reduce((sum, item) => sum + item.subtotal, 0);
+}
+
+// Lógica de Facturación y Modal de Encargos
+const btnFacturar = document.getElementById('btn-facturar');
+const modal = document.getElementById('encargo-modal');
+const btnConfirmarEncargo = document.getElementById('btn-confirmar-encargo');
+
+const inputAdelanto = document.getElementById('modal-adelanto');
+const inputSaldo = document.getElementById('modal-saldo');
+const inputTotalModal = document.getElementById('modal-total');
+
+btnFacturar.addEventListener('click', () => {
+    const tieneEncargos = carrito.some(item => item.categoria === 'Encargo');
+    
+    if (tieneEncargos) {
+        inputTotalModal.value = `$${calcularTotal().toFixed(2)}`;
+        inputAdelanto.value = '';
+        inputSaldo.value = `$${calcularTotal().toFixed(2)}`;
+        modal.classList.remove('hidden');
+    } else {
+        procesarFactura(false);
     }
 });
+
+inputAdelanto.addEventListener('input', (e) => {
+    const adelanto = parseFloat(e.target.value) || 0;
+    const total = calcularTotal();
+    const saldo = total - adelanto;
+    inputSaldo.value = `$${saldo.toFixed(2)}`;
+});
+
+function cerrarModal() {
+    modal.classList.add('hidden');
+}
+
+btnConfirmarEncargo.addEventListener('click', () => {
+    const adelanto = parseFloat(inputAdelanto.value);
+    const fecha = document.getElementById('modal-fecha').value;
+    
+    if (isNaN(adelanto) || !fecha) {
+        showToast('Por favor, ingresa el adelanto y la fecha de entrega', true);
+        return;
+    }
+    
+    cerrarModal();
+    procesarFactura(true, {
+        adelanto: adelanto,
+        saldo: calcularTotal() - adelanto,
+        fecha_entrega: fecha
+    });
+});
+
+async function procesarFactura(esEncargo, encargoDetalles = null) {
+    showLoading(true);
+
+    try {
+        const payload = {
+            carrito: carrito,
+            total: calcularTotal(),
+            es_encargo: esEncargo,
+            encargo_detalles: encargoDetalles
+        };
+
+        const response = await fetch('/api/factura', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error('Error al facturar');
+        
+        showToast('¡Factura registrada exitosamente!');
+        carrito = []; 
+        renderizarCarrito();
+    } catch (error) {
+        console.error(error);
+        showToast('Error de conexión al servidor', true);
+    } finally {
+        showLoading(false);
+    }
+}
+
+function showLoading(show) {
+    const overlay = document.getElementById('loading-overlay');
+    if (show) overlay.classList.remove('hidden');
+    else overlay.classList.add('hidden');
+}
+
+function showToast(message, isError = false) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${isError ? 'error' : ''}`;
+    toast.textContent = message;
+    
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}

@@ -4,39 +4,103 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Punto de Venta - Panadería Amada Calero Leiva</title>
-    <meta name="description" content="Sistema de POS rápido e interactivo para mostrador">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <header class="app-header">
         <h1>Panadería Amada 🥖</h1>
-        <div class="user-info">Dependienta: Activa</div>
+        <div class="user-info">Caja: Activa | Usuario: Dependienta</div>
     </header>
     
-    <main class="pos-container">
-        <section class="products-grid">
-            {% for producto in productos %}
-            <article class="product-card" data-id="{{ producto.id }}" data-name="{{ producto.nombre }}" data-price="{{ producto.precio }}">
-                <div class="card-icon">🍞</div>
-                <div class="card-info">
-                    <h2>{{ producto.nombre }}</h2>
-                    <p class="price">${{ "%.2f"|format(producto.precio) }}</p>
-                </div>
-                <button class="btn-sell" aria-label="Vender {{ producto.nombre }}">
-                    Registrar Venta
-                </button>
-            </article>
-            {% endfor %}
+    <main class="pos-layout">
+        <!-- Panel Izquierdo: Catálogo -->
+        <section class="catalog-panel">
+            <h2 class="section-title">Mostrador</h2>
+            <div class="products-grid">
+                {% for producto in productos if producto.categoria == 'Mostrador' %}
+                <article class="product-card" onclick="agregarAlCarrito({{ producto.id }}, '{{ producto.nombre }}', {{ producto.precio }}, '{{ producto.categoria }}')">
+                    <div class="card-icon">🍞</div>
+                    <div class="card-info">
+                        <h3>{{ producto.nombre }}</h3>
+                        <p class="price">${{ "%.2f"|format(producto.precio) }}</p>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+
+            <h2 class="section-title" style="margin-top: 2rem;">Encargos (Pasteles y Especiales)</h2>
+            <div class="products-grid">
+                {% for producto in productos if producto.categoria == 'Encargo' %}
+                <article class="product-card encargo-card" onclick="agregarAlCarrito({{ producto.id }}, '{{ producto.nombre }}', {{ producto.precio }}, '{{ producto.categoria }}')">
+                    <div class="card-icon">🎂</div>
+                    <div class="card-info">
+                        <h3>{{ producto.nombre }}</h3>
+                        <p class="price">${{ "%.2f"|format(producto.precio) }}</p>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
         </section>
 
-        <div id="toast-container" class="toast-container"></div>
+        <!-- Panel Derecho: Carrito / Factura -->
+        <aside class="invoice-panel">
+            <h2>Factura Actual</h2>
+            <div class="cart-items" id="cart-items">
+                <div class="empty-cart">Selecciona productos para comenzar</div>
+            </div>
+            
+            <div class="invoice-summary">
+                <div class="summary-row">
+                    <span>Subtotal:</span>
+                    <span id="subtotal-display">$0.00</span>
+                </div>
+                <div class="summary-row total-row">
+                    <span>Total:</span>
+                    <span id="total-display">$0.00</span>
+                </div>
+            </div>
+
+            <button class="btn-checkout" id="btn-facturar" disabled>Facturar Venta</button>
+        </aside>
     </main>
+
+    <!-- Modal para Encargos -->
+    <div id="encargo-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Registrar Encargo</h2>
+            <p>Se detectaron productos por encargo en la factura.</p>
+            
+            <div class="form-group">
+                <label>Total de la Factura:</label>
+                <input type="text" id="modal-total" readonly>
+            </div>
+            <div class="form-group">
+                <label for="modal-adelanto">Adelanto (Pago parcial):</label>
+                <input type="number" id="modal-adelanto" min="0" step="0.01" required>
+            </div>
+            <div class="form-group">
+                <label>Saldo Pendiente:</label>
+                <input type="text" id="modal-saldo" readonly>
+            </div>
+            <div class="form-group">
+                <label for="modal-fecha">Fecha de Entrega:</label>
+                <input type="date" id="modal-fecha" required>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
+                <button class="btn-confirm" id="btn-confirmar-encargo">Confirmar y Facturar</button>
+            </div>
+        </div>
+    </div>
 
     <div id="loading-overlay" class="loading-overlay hidden">
         <div class="spinner"></div>
-        <p>Procesando venta...</p>
+        <p>Procesando Factura...</p>
     </div>
+
+    <div id="toast-container" class="toast-container"></div>
 
     <script src="{{ url_for('static', filename='js/pos.js') }}"></script>
 </body>
