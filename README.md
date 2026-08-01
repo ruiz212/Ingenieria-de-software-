@@ -6,8 +6,8 @@ Diseñado utilizando SCRUM.
 
 ## Roles del Equipo
 - **Product Owner:** (Dueño del Producto)
-- **Scrum Master:** Facilitador
-- **Equipo de Desarrollo:** Erick, Rodrigo, Jenniffer, Asistente IA.
+- **Scrum Master:** Anderson Ruiz
+- **Equipo de Desarrollo:** Erick, Rodrigo
 
 ## Tecnologías
 - Python (Flask)
