@@ -168,6 +168,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const total = calcularTotal();
         const saldo = total - adelanto;
         inputSaldo.value = `$${saldo.toFixed(2)}`;
+        
+        // Colorear en rojo si es inválido
+        if (adelanto > total) {
+            inputSaldo.style.color = 'var(--danger)';
+        } else {
+            inputSaldo.style.color = 'var(--text)';
+        }
     });
 
     function cerrarModal() {
@@ -183,16 +190,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const fecha = document.getElementById('modal-fecha').value;
         const nombreCliente = document.getElementById('modal-nombre-cliente').value.trim();
         const telefonoCliente = document.getElementById('modal-telefono-cliente').value.trim();
+        const total = calcularTotal();
         
         if (isNaN(adelanto) || !fecha) {
             showToast('Por favor, ingresa el adelanto y la fecha de entrega', true);
             return;
         }
         
+        if (adelanto > total) {
+            showToast('El adelanto no puede ser mayor al total ($' + total.toFixed(2) + ')', true);
+            return;
+        }
+        
         cerrarModal();
         procesarFactura(true, {
             adelanto: adelanto,
-            saldo: calcularTotal() - adelanto,
+            saldo: total - adelanto,
             fecha_entrega: fecha,
             nombre_cliente: nombreCliente,
             telefono: telefonoCliente
