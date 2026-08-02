@@ -25,11 +25,14 @@ def main_hub():
 def index():
     # Simulamos los productos de la DB para el MVP
     productos = [
-        {'id': 1, 'nombre': 'Bolillo', 'categoria': 'Mostrador', 'precio': 5.00},
-        {'id': 2, 'nombre': 'Pan Pizza', 'categoria': 'Mostrador', 'precio': 15.00},
-        {'id': 3, 'nombre': 'Milanesa', 'categoria': 'Mostrador', 'precio': 25.00},
-        {'id': 4, 'nombre': 'Pastel 3 Leches', 'categoria': 'Encargo', 'precio': 350.00},
-        {'id': 5, 'nombre': 'Pastel Chocolate', 'categoria': 'Encargo', 'precio': 400.00}
+        {'id': 1, 'nombre': 'Bolillo', 'categoria': 'Pan Salado', 'precio': 5.00},
+        {'id': 2, 'nombre': 'Concha de Vainilla', 'categoria': 'Pan Dulce', 'precio': 12.00},
+        {'id': 3, 'nombre': 'Pan Pizza', 'categoria': 'Pan Salado', 'precio': 15.00},
+        {'id': 4, 'nombre': 'Dona de Chocolate', 'categoria': 'Pan Dulce', 'precio': 10.00},
+        {'id': 5, 'nombre': 'Milanesa', 'categoria': 'Pan Dulce', 'precio': 25.00},
+        {'id': 6, 'nombre': 'Café Americano', 'categoria': 'Bebidas', 'precio': 20.00},
+        {'id': 7, 'nombre': 'Pastel 3 Leches (Base)', 'categoria': 'Encargo', 'precio': 350.00},
+        {'id': 8, 'nombre': 'Pastel Chocolate (Base)', 'categoria': 'Encargo', 'precio': 400.00}
     ]
     ingredientes = [
         {'id': 1, 'nombre': 'Relleno de Fresa', 'precio': 50.00},

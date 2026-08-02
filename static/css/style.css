@@ -39,19 +39,57 @@ h1, h2, h3 { font-family: 'Outfit', sans-serif; }
 
 .app-header h1 { color: var(--primary-color); }
 
-/* Layout de dos columnas */
+/* Layout de tres columnas */
 .pos-layout {
-    display: flex;
+    display: grid;
+    grid-template-columns: 200px 1fr 350px;
+    gap: 1.5rem;
+    padding: 1.5rem;
     flex: 1;
     overflow: hidden;
 }
 
+/* Sidebar Categorías */
+.category-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background: var(--card-bg);
+    padding: 1rem;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow-y: auto;
+}
+
+.category-btn {
+    padding: 1rem;
+    background: transparent;
+    border: none;
+    text-align: left;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.category-btn:hover {
+    background: var(--background);
+    color: var(--primary-color);
+}
+
+.category-btn.active {
+    background: var(--secondary);
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
 /* Panel Catálogo */
 .catalog-panel {
-    flex: 2;
-    padding: 2rem;
     overflow-y: auto;
-    background-color: var(--secondary);
+    background-color: var(--background);
+    border-radius: 12px;
 }
 
 .section-title { margin-bottom: 1rem; color: var(--text-main); }

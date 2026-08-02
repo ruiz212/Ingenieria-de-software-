@@ -8,32 +8,36 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-    <header class="app-header">
-        <h1>Panadería Amada 🥖</h1>
-        <div class="user-info">Caja: Activa | Usuario: Dependienta</div>
+    <header class="app-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <a href="/" style="text-decoration: none; color: inherit;">
+                <h1>Panadería Amada 🥖</h1>
+            </a>
+            <div class="user-info">Caja: Activa | Usuario: Dependienta</div>
+        </div>
+        <button id="btn-nuevo-encargo" style="background: var(--primary-color); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; box-shadow: 0 4px 6px rgba(217, 119, 6, 0.3);">+ Nuevo Encargo Especial</button>
     </header>
     
     <main class="pos-layout">
-        <!-- Panel Izquierdo: Catálogo -->
-        <section class="catalog-panel">
-            <h2 class="section-title">Mostrador</h2>
-            <div class="products-grid">
-                {% for producto in productos if producto.categoria == 'Mostrador' %}
-                <article class="product-card" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre }}" data-precio="{{ producto.precio }}" data-categoria="{{ producto.categoria }}">
-                    <div class="card-icon">🍞</div>
-                    <div class="card-info">
-                        <h3>{{ producto.nombre }}</h3>
-                        <p class="price">${{ "%.2f"|format(producto.precio) }}</p>
-                    </div>
-                </article>
-                {% endfor %}
-            </div>
+        <!-- Panel Izquierdo: Menú de Categorías -->
+        <aside class="category-sidebar">
+            <button class="category-btn active" data-filter="Todos">Todos</button>
+            <button class="category-btn" data-filter="Pan Dulce">Pan Dulce</button>
+            <button class="category-btn" data-filter="Pan Salado">Pan Salado</button>
+            <button class="category-btn" data-filter="Bebidas">Bebidas</button>
+        </aside>
 
-            <h2 class="section-title mt-2">Encargos (Pasteles y Especiales)</h2>
+        <!-- Centro: Catálogo de Productos -->
+        <section class="catalog-panel">
+            <h2 class="section-title" id="current-category-title">Mostrador - Todos</h2>
             <div class="products-grid">
-                {% for producto in productos if producto.categoria == 'Encargo' %}
-                <article class="product-card encargo-card" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre }}" data-precio="{{ producto.precio }}" data-categoria="{{ producto.categoria }}">
-                    <div class="card-icon">🎂</div>
+                {% for producto in productos if producto.categoria != 'Encargo' %}
+                <article class="product-card filterable-product" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre }}" data-precio="{{ producto.precio }}" data-categoria="{{ producto.categoria }}">
+                    <div class="card-icon">
+                        {% if producto.categoria == 'Pan Dulce' %}🍩
+                        {% elif producto.categoria == 'Bebidas' %}☕
+                        {% else %}🍞{% endif %}
+                    </div>
                     <div class="card-info">
                         <h3>{{ producto.nombre }}</h3>
                         <p class="price">${{ "%.2f"|format(producto.precio) }}</p>
@@ -181,6 +185,30 @@
             <div class="modal-actions">
                 <button type="button" class="btn-cancel" id="btn-cerrar-ingredientes">Cancelar</button>
                 <button type="button" class="btn-confirm" id="btn-confirmar-ingredientes">Agregar al Carrito</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Seleccionar Base de Pastel -->
+    <div id="base-encargo-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <h2>Paso 1: Seleccionar Base</h2>
+            <p>Elige el tipo de pastel o producto especial para el encargo.</p>
+            
+            <div class="products-grid" style="margin-top: 1rem;">
+                {% for producto in productos if producto.categoria == 'Encargo' %}
+                <article class="product-card base-encargo-option" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre }}" data-precio="{{ producto.precio }}" data-categoria="{{ producto.categoria }}">
+                    <div class="card-icon">🎂</div>
+                    <div class="card-info">
+                        <h3>{{ producto.nombre }}</h3>
+                        <p class="price">${{ "%.2f"|format(producto.precio) }}</p>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" id="btn-cerrar-base-encargo">Cancelar</button>
             </div>
         </div>
     </div>

@@ -6,11 +6,14 @@ document.addEventListener('DOMContentLoaded', () => {
     catalogPanel.addEventListener('click', (e) => {
         const card = e.target.closest('.product-card');
         if (card) {
-            const id = parseInt(card.dataset.id);
+            // Ignorar los clics en las bases de encargo en esta vista principal
+            if (card.classList.contains('base-encargo-option')) return;
+
+            const id = card.dataset.id;
             const nombre = card.dataset.nombre;
             const precio = parseFloat(card.dataset.precio);
             const categoria = card.dataset.categoria;
-            
+
             if (categoria === 'Encargo') {
                 abrirModalIngredientes(id, nombre, precio, categoria);
             } else {
@@ -19,12 +22,66 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Lógica del Modal de Ingredientes
-    let itemPendienteParaCarrito = null;
+    // Lógica de Pestañas (Categorías)
+    const categoryBtns = document.querySelectorAll('.category-btn');
+    const filterableProducts = document.querySelectorAll('.filterable-product');
+    const currentCategoryTitle = document.getElementById('current-category-title');
+
+    categoryBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Remover 'active' de todos y poner al actual
+            categoryBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            const filter = btn.dataset.filter;
+            currentCategoryTitle.textContent = `Mostrador - ${filter}`;
+            
+            filterableProducts.forEach(product => {
+                if (filter === 'Todos' || product.dataset.categoria === filter) {
+                    product.style.display = 'block';
+                } else {
+                    product.style.display = 'none';
+                }
+            });
+        });
+    });
+
+    // Lógica del Botón "+ Nuevo Encargo Especial"
+    const btnNuevoEncargo = document.getElementById('btn-nuevo-encargo');
+    const baseEncargoModal = document.getElementById('base-encargo-modal');
+    const btnCerrarBaseEncargo = document.getElementById('btn-cerrar-base-encargo');
+
+    if (btnNuevoEncargo) {
+        btnNuevoEncargo.addEventListener('click', () => {
+            baseEncargoModal.classList.remove('hidden');
+        });
+    }
+
+    if (btnCerrarBaseEncargo) {
+        btnCerrarBaseEncargo.addEventListener('click', () => {
+            baseEncargoModal.classList.add('hidden');
+        });
+    }
+
+    // Seleccionar Base del Pastel
+    document.querySelectorAll('.base-encargo-option').forEach(option => {
+        option.addEventListener('click', () => {
+            baseEncargoModal.classList.add('hidden');
+            const id = option.dataset.id;
+            const nombre = option.dataset.nombre;
+            const precio = parseFloat(option.dataset.precio);
+            const categoria = option.dataset.categoria;
+            abrirModalIngredientes(id, nombre, precio, categoria);
+        });
+    });
+
+    // Modal de Ingredientes
     const ingredientesModal = document.getElementById('ingredientes-modal');
     const btnConfirmarIngredientes = document.getElementById('btn-confirmar-ingredientes');
     const btnCerrarIngredientes = document.getElementById('btn-cerrar-ingredientes');
     const inputIngredientesTotal = document.getElementById('modal-ingredientes-total');
+
+    let itemPendienteParaCarrito = null;
 
     window.abrirModalIngredientes = function(id, nombre, precio, categoria) {
         itemPendienteParaCarrito = { id, nombre, precioBase: precio, categoria };
