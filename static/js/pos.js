@@ -62,28 +62,35 @@ document.addEventListener('DOMContentLoaded', () => {
         btnConfirmarIngredientes.addEventListener('click', () => {
             if (!itemPendienteParaCarrito) return;
             
-            let ingredientesNombres = [];
+            let ingredientesSeleccionados = [];
             let total = itemPendienteParaCarrito.precioBase;
             
             ingredientesCheckboxes.forEach(cb => {
                 if (cb.checked) {
-                    total += parseFloat(cb.value);
-                    ingredientesNombres.push(cb.dataset.nombre);
+                    const precioIng = parseFloat(cb.value);
+                    total += precioIng;
+                    ingredientesSeleccionados.push({
+                        nombre: cb.dataset.nombre,
+                        precio: precioIng
+                    });
                 }
             });
 
             let nombreFinal = itemPendienteParaCarrito.nombre;
-            if (ingredientesNombres.length > 0) {
-                nombreFinal += ` (${ingredientesNombres.join(', ')})`;
+            if (ingredientesSeleccionados.length > 0) {
+                nombreFinal += ` (${ingredientesSeleccionados.map(i => i.nombre).join(', ')})`;
             }
 
             // Usamos un ID único si tiene ingredientes para no agruparlo con otro distinto
             let idFinal = itemPendienteParaCarrito.id;
-            if (ingredientesNombres.length > 0) {
+            if (ingredientesSeleccionados.length > 0) {
                 idFinal = idFinal + "_" + Date.now();
             }
 
-            agregarAlCarrito(idFinal, nombreFinal, total, itemPendienteParaCarrito.categoria);
+            agregarAlCarrito(idFinal, nombreFinal, total, itemPendienteParaCarrito.categoria, {
+                precio_base: itemPendienteParaCarrito.precioBase,
+                ingredientes: ingredientesSeleccionados
+            });
             
             ingredientesModal.classList.add('hidden');
             itemPendienteParaCarrito = null;
@@ -184,7 +191,7 @@ window.modificarCantidad = function(id, delta) {
     }
 };
 
-function agregarAlCarrito(id, nombre, precio, categoria) {
+function agregarAlCarrito(id, nombre, precio, categoria, detalleIngredientes = null) {
     const itemExistente = carrito.find(item => item.id === id);
     if (itemExistente) {
         itemExistente.cantidad++;
@@ -196,7 +203,8 @@ function agregarAlCarrito(id, nombre, precio, categoria) {
             precio: precio,
             categoria: categoria,
             cantidad: 1,
-            subtotal: precio
+            subtotal: precio,
+            detalle_ingredientes: detalleIngredientes
         });
     }
     renderizarCarrito();
@@ -313,12 +321,31 @@ function mostrarTicket(factura) {
     factura.productos.forEach(item => {
         const row = document.createElement('div');
         row.className = 'ticket-product-row';
+        
+        // Nombre sin los ingredientes en paréntesis
+        const nombreBase = item.nombre.split(' (')[0];
         row.innerHTML = `
-            <span class="ticket-product-name">${item.nombre}</span>
+            <span class="ticket-product-name">${nombreBase}</span>
             <span class="ticket-product-qty">x${item.cantidad}</span>
             <span class="ticket-product-price">$${item.subtotal.toFixed(2)}</span>
         `;
         productosContainer.appendChild(row);
+
+        // Si tiene ingredientes, mostrarlos debajo
+        if (item.detalle_ingredientes && item.detalle_ingredientes.ingredientes && item.detalle_ingredientes.ingredientes.length > 0) {
+            // Precio base
+            const baseRow = document.createElement('div');
+            baseRow.style.cssText = 'font-size: 0.75rem; color: #6b7280; padding-left: 0.75rem; padding-top: 0.1rem;';
+            baseRow.textContent = `  Base: $${item.detalle_ingredientes.precio_base.toFixed(2)}`;
+            productosContainer.appendChild(baseRow);
+
+            item.detalle_ingredientes.ingredientes.forEach(ing => {
+                const ingRow = document.createElement('div');
+                ingRow.style.cssText = 'display: flex; justify-content: space-between; font-size: 0.75rem; color: #10b981; padding-left: 0.75rem;';
+                ingRow.innerHTML = `<span>  + ${ing.nombre}</span><span>+$${ing.precio.toFixed(2)}</span>`;
+                productosContainer.appendChild(ingRow);
+            });
+        }
     });
 
     // Totales

@@ -250,14 +250,27 @@
                 <h2>Productos</h2>
             </div>
             <div class="tracking-card-body">
-                <ul class="product-list">
-                    {% for item in factura.productos %}
-                    <li>
-                        <span>{{ item.nombre }} x{{ item.cantidad }}</span>
+                {% for item in factura.productos %}
+                <div style="margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px dashed var(--border);">
+                    <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.95rem;">
+                        <span>{{ item.nombre.split(' (')[0] }} x{{ item.cantidad }}</span>
                         <span>${{ "%.2f"|format(item.subtotal) }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
+                    </div>
+                    {% if item.detalle_ingredientes and item.detalle_ingredientes.ingredientes %}
+                    <div style="margin-top: 0.4rem; padding-left: 0.75rem; border-left: 3px solid var(--primary);">
+                        <div style="font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem; font-weight: 600;">
+                            Precio base: ${{ "%.2f"|format(item.detalle_ingredientes.precio_base) }}
+                        </div>
+                        {% for ing in item.detalle_ingredientes.ingredientes %}
+                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text); padding: 0.15rem 0;">
+                            <span>+ {{ ing.nombre }}</span>
+                            <span style="color: var(--success); font-weight: 600;">+${{ "%.2f"|format(ing.precio) }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
             </div>
 
             <!-- Totales -->
