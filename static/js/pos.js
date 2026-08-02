@@ -25,13 +25,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConfirmarIngredientes = document.getElementById('btn-confirmar-ingredientes');
     const btnCerrarIngredientes = document.getElementById('btn-cerrar-ingredientes');
     const inputIngredientesTotal = document.getElementById('modal-ingredientes-total');
-    const ingredientesCheckboxes = document.querySelectorAll('.ingrediente-cb');
 
     window.abrirModalIngredientes = function(id, nombre, precio, categoria) {
         itemPendienteParaCarrito = { id, nombre, precioBase: precio, categoria };
         
-        // Resetear checkboxes
-        ingredientesCheckboxes.forEach(cb => cb.checked = false);
+        // Resetear checkboxes y eliminar los personalizados para la próxima vez
+        document.querySelectorAll('.ingrediente-cb').forEach(cb => {
+            if (cb.closest('.custom-added')) {
+                cb.closest('.ingrediente-option').remove();
+            } else {
+                cb.checked = false;
+            }
+        });
+        document.getElementById('custom-ing-nombre').value = '';
+        document.getElementById('custom-ing-precio').value = '';
+
         actualizarTotalIngredientes();
         
         document.getElementById('modal-ingredientes-title').textContent = `Personalizar ${nombre}`;
@@ -41,15 +49,47 @@ document.addEventListener('DOMContentLoaded', () => {
     function actualizarTotalIngredientes() {
         if (!itemPendienteParaCarrito) return;
         let total = itemPendienteParaCarrito.precioBase;
-        ingredientesCheckboxes.forEach(cb => {
+        document.querySelectorAll('.ingrediente-cb').forEach(cb => {
             if (cb.checked) total += parseFloat(cb.value);
         });
         inputIngredientesTotal.value = `$${total.toFixed(2)}`;
     }
 
-    ingredientesCheckboxes.forEach(cb => {
+    // Eventos a checkboxes iniciales
+    document.querySelectorAll('.ingrediente-cb').forEach(cb => {
         cb.addEventListener('change', actualizarTotalIngredientes);
     });
+
+    // Lógica para agregar ingrediente personalizado
+    const btnAddCustomIng = document.getElementById('btn-add-custom-ing');
+    if (btnAddCustomIng) {
+        btnAddCustomIng.addEventListener('click', () => {
+            const nombreInput = document.getElementById('custom-ing-nombre');
+            const precioInput = document.getElementById('custom-ing-precio');
+            const nombre = nombreInput.value.trim();
+            const precio = parseFloat(precioInput.value);
+
+            if (!nombre || isNaN(precio) || precio < 0) {
+                showToast('Ingresa un nombre y precio válido', true);
+                return;
+            }
+
+            const label = document.createElement('label');
+            label.className = 'ingrediente-option custom-added';
+            label.innerHTML = `
+                <input type="checkbox" class="ingrediente-cb" value="${precio}" data-nombre="${nombre}" checked>
+                <span>${nombre}</span>
+                <span class="ing-precio">+$${precio.toFixed(2)}</span>
+            `;
+            
+            label.querySelector('.ingrediente-cb').addEventListener('change', actualizarTotalIngredientes);
+            document.getElementById('ingredientes-list-container').appendChild(label);
+            
+            nombreInput.value = '';
+            precioInput.value = '';
+            actualizarTotalIngredientes();
+        });
+    }
 
     if (btnCerrarIngredientes) {
         btnCerrarIngredientes.addEventListener('click', () => {
@@ -65,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let ingredientesSeleccionados = [];
             let total = itemPendienteParaCarrito.precioBase;
             
-            ingredientesCheckboxes.forEach(cb => {
+            document.querySelectorAll('.ingrediente-cb').forEach(cb => {
                 if (cb.checked) {
                     const precioIng = parseFloat(cb.value);
                     total += precioIng;

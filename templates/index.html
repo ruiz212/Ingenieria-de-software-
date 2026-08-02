@@ -113,7 +113,7 @@
             <h2 id="modal-ingredientes-title">Personalizar Encargo</h2>
             <p>Selecciona los ingredientes extra para este encargo.</p>
             
-            <div class="ingredientes-list">
+            <div class="ingredientes-list" id="ingredientes-list-container">
                 {% for ing in ingredientes %}
                 <label class="ingrediente-option">
                     <input type="checkbox" class="ingrediente-cb" value="{{ ing.precio }}" data-nombre="{{ ing.nombre }}">
@@ -123,7 +123,16 @@
                 {% endfor %}
             </div>
 
-            <div class="form-group" style="margin-top: 1rem;">
+            <div class="custom-ingrediente" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border);">
+                <label style="font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; display: block;">¿Agregar otro ingrediente personalizado?</label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="text" id="custom-ing-nombre" placeholder="Ej. Almendras" style="flex: 2; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;">
+                    <input type="number" id="custom-ing-precio" placeholder="Precio" min="0" step="0.01" style="flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;">
+                    <button type="button" id="btn-add-custom-ing" style="background: var(--primary-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600;">+</button>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 1.5rem;">
                 <label>Precio Total del Producto:</label>
                 <input type="text" id="modal-ingredientes-total" readonly>
             </div>
