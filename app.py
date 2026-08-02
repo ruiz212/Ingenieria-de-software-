@@ -16,6 +16,12 @@ factura_counter = 0
 facturas_db = {}  # Almacén temporal en memoria para seguimiento
 
 @app.route('/')
+def main_hub():
+    """Pantalla Principal (Hub) del Sistema."""
+    return render_template('main.html')
+
+
+@app.route('/pos')
 def index():
     # Simulamos los productos de la DB para el MVP
     productos = [
