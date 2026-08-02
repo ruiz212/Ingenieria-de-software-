@@ -10,7 +10,11 @@ CREATE TABLE Productos (
 
 CREATE TABLE Facturas (
     ID INT PRIMARY KEY IDENTITY(1,1),
+    NumeroFactura VARCHAR(20) NOT NULL,
+    CodigoSeguimiento VARCHAR(10) UNIQUE NOT NULL,
     Fecha DATETIME DEFAULT GETDATE(),
+    Subtotal DECIMAL(10, 2) NOT NULL,
+    IVA DECIMAL(10, 2) NOT NULL,
     Total DECIMAL(10, 2) NOT NULL,
     TipoVenta VARCHAR(50) DEFAULT 'Contado' -- 'Contado', 'Encargo'
 );
@@ -25,6 +29,7 @@ CREATE TABLE DetalleFacturas (
     ID INT PRIMARY KEY IDENTITY(1,1),
     FacturaID INT NOT NULL,
     ProductoID INT NOT NULL,
+    NombreProducto VARCHAR(200) NOT NULL,
     OpcionesExtra VARCHAR(255) NULL,
     Cantidad INT NOT NULL,
     PrecioUnitario DECIMAL(10, 2) NOT NULL,
@@ -36,10 +41,12 @@ CREATE TABLE DetalleFacturas (
 CREATE TABLE Encargos (
     ID INT PRIMARY KEY IDENTITY(1,1),
     FacturaID INT NOT NULL,
+    NombreCliente VARCHAR(100) NULL,
+    Telefono VARCHAR(20) NULL,
     FechaEntrega DATETIME NOT NULL,
     Adelanto DECIMAL(10, 2) NOT NULL,
     SaldoPendiente DECIMAL(10, 2) NOT NULL,
-    Estado VARCHAR(50) DEFAULT 'Pendiente', -- 'Pendiente', 'Entregado'
+    Estado VARCHAR(50) DEFAULT 'Pendiente', -- 'Pendiente', 'En Proceso', 'Listo', 'Entregado'
     FOREIGN KEY (FacturaID) REFERENCES Facturas(ID)
 );
 

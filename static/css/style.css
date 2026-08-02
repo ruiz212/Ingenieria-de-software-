@@ -192,6 +192,8 @@ h1, h2, h3 { font-family: 'Outfit', sans-serif; }
     width: 90%;
     max-width: 400px;
     box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
 .modal-content h2 { margin-bottom: 0.5rem; color: var(--primary-color); }
@@ -251,10 +253,165 @@ h1, h2, h3 { font-family: 'Outfit', sans-serif; }
 
 .mt-2 { margin-top: 2rem; }
 
-
+/* Ingredientes */
 .ingredientes-list { display: flex; flex-direction: column; gap: 0.75rem; max-height: 200px; overflow-y: auto; margin-bottom: 1rem; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--background); }
 .ingrediente-option { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; background: white; border-radius: 6px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
 .ingrediente-option input[type='checkbox'] { width: 1.2rem; height: 1.2rem; accent-color: var(--primary-color); }
 .ingrediente-option span { flex: 1; }
 .ing-precio { font-weight: bold; color: var(--success); }
 
+/* ===== TICKET / FACTURA ===== */
+.ticket-modal {
+    max-width: 420px;
+    padding: 0;
+}
+
+.ticket-content {
+    padding: 1.5rem;
+    background: white;
+}
+
+.ticket-header {
+    text-align: center;
+    padding-bottom: 0.75rem;
+}
+.ticket-header h2 {
+    font-size: 1.4rem;
+    color: var(--primary-color);
+    margin-bottom: 0.15rem;
+}
+.ticket-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-muted) !important;
+    margin-bottom: 0.1rem !important;
+}
+.ticket-info {
+    font-size: 0.8rem;
+    color: var(--text-muted) !important;
+    margin-bottom: 0 !important;
+}
+
+.ticket-divider {
+    border: none;
+    border-top: 1px dashed var(--border);
+    margin: 0.75rem 0;
+}
+
+.ticket-meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    padding: 0.2rem 0;
+}
+
+.ticket-product-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px dotted var(--border);
+}
+.ticket-product-row:last-child { border-bottom: none; }
+.ticket-product-name { flex: 1; }
+.ticket-product-qty { width: 40px; text-align: center; color: var(--text-muted); }
+.ticket-product-price { width: 80px; text-align: right; font-weight: 500; }
+
+.ticket-total-row {
+    font-size: 1.15rem;
+    padding-top: 0.5rem;
+    margin-top: 0.25rem;
+    border-top: 2px solid var(--text-main);
+}
+
+.ticket-encargo-info h3 {
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+    color: #8b5cf6;
+}
+
+.ticket-qr {
+    text-align: center;
+    padding: 0.75rem 0;
+}
+.ticket-qr img {
+    width: 140px;
+    height: 140px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+}
+.ticket-qr-text {
+    font-size: 0.75rem !important;
+    color: var(--text-muted) !important;
+    margin-top: 0.25rem !important;
+    margin-bottom: 0 !important;
+}
+
+.ticket-footer {
+    text-align: center;
+    padding-top: 0.5rem;
+}
+.ticket-footer p {
+    font-size: 0.85rem !important;
+    color: var(--text-main) !important;
+    margin-bottom: 0.15rem !important;
+    font-weight: 600;
+}
+.ticket-small {
+    font-size: 0.7rem !important;
+    color: var(--text-muted) !important;
+    font-weight: 400 !important;
+}
+
+.ticket-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border);
+    background: var(--background);
+    border-radius: 0 0 12px 12px;
+}
+
+/* ===== WhatsApp Floating Button ===== */
+.whatsapp-float {
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    width: 56px;
+    height: 56px;
+    background: #25D366;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+    z-index: 999;
+    transition: transform 0.2s, box-shadow 0.2s;
+    text-decoration: none;
+}
+.whatsapp-float:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(37, 211, 102, 0.5);
+}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+    body { overflow: visible; height: auto; }
+    .app-header, .pos-layout, .loading-overlay, .toast-container,
+    .whatsapp-float, .no-print, #encargo-modal, #ingredientes-modal {
+        display: none !important;
+    }
+    .modal {
+        position: static;
+        background: none;
+    }
+    .modal-content.ticket-modal {
+        box-shadow: none;
+        max-width: 100%;
+        width: 80mm; /* Ancho estándar de ticket térmico */
+        margin: 0 auto;
+        padding: 0;
+    }
+    .ticket-actions { display: none !important; }
+    .ticket-content { padding: 0.5rem; }
+}

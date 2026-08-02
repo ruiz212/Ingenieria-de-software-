@@ -1,2 +1,4 @@
 Flask==3.0.0
 pyodbc==5.0.1
+qrcode[pil]==8.0
+Pillow==11.0.0

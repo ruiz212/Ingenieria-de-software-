@@ -107,6 +107,9 @@ document.addEventListener('DOMContentLoaded', () => {
             inputTotalModal.value = `$${calcularTotal().toFixed(2)}`;
             inputAdelanto.value = '';
             inputSaldo.value = `$${calcularTotal().toFixed(2)}`;
+            // Limpiar campos de cliente
+            document.getElementById('modal-nombre-cliente').value = '';
+            document.getElementById('modal-telefono-cliente').value = '';
             modal.classList.remove('hidden');
         } else {
             procesarFactura(false);
@@ -131,6 +134,8 @@ document.addEventListener('DOMContentLoaded', () => {
     btnConfirmarEncargo.addEventListener('click', () => {
         const adelanto = parseFloat(inputAdelanto.value);
         const fecha = document.getElementById('modal-fecha').value;
+        const nombreCliente = document.getElementById('modal-nombre-cliente').value.trim();
+        const telefonoCliente = document.getElementById('modal-telefono-cliente').value.trim();
         
         if (isNaN(adelanto) || !fecha) {
             showToast('Por favor, ingresa el adelanto y la fecha de entrega', true);
@@ -141,9 +146,28 @@ document.addEventListener('DOMContentLoaded', () => {
         procesarFactura(true, {
             adelanto: adelanto,
             saldo: calcularTotal() - adelanto,
-            fecha_entrega: fecha
+            fecha_entrega: fecha,
+            nombre_cliente: nombreCliente,
+            telefono: telefonoCliente
         });
     });
+
+    // Lógica del Modal de Ticket
+    const facturaModal = document.getElementById('factura-modal');
+    const btnCerrarTicket = document.getElementById('btn-cerrar-ticket');
+    const btnImprimirTicket = document.getElementById('btn-imprimir-ticket');
+
+    if (btnCerrarTicket) {
+        btnCerrarTicket.addEventListener('click', () => {
+            facturaModal.classList.add('hidden');
+        });
+    }
+
+    if (btnImprimirTicket) {
+        btnImprimirTicket.addEventListener('click', () => {
+            window.print();
+        });
+    }
 });
 
 // Para llamadas globales desde botones en el DOM generado (como btn-qty)
@@ -208,9 +232,9 @@ function renderizarCarrito() {
                 <div class="cart-item-price">$${item.precio.toFixed(2)} x ${item.cantidad}</div>
             </div>
             <div class="cart-item-actions">
-                <button type="button" class="btn-qty" onclick="modificarCantidad(${item.id}, -1)">-</button>
+                <button type="button" class="btn-qty" onclick="modificarCantidad('${item.id}', -1)">-</button>
                 <span>${item.cantidad}</span>
-                <button type="button" class="btn-qty" onclick="modificarCantidad(${item.id}, 1)">+</button>
+                <button type="button" class="btn-qty" onclick="modificarCantidad('${item.id}', 1)">+</button>
             </div>
             <div style="font-weight: 600;">$${item.subtotal.toFixed(2)}</div>
         `;
@@ -226,8 +250,12 @@ function renderizarCarrito() {
     btnFacturar.disabled = false;
 }
 
+function calcularSubtotal() {
+    return carrito.reduce((sum, item) => sum + item.subtotal, 0);
+}
+
 function calcularTotal() {
-    const subtotal = carrito.reduce((sum, item) => sum + item.subtotal, 0);
+    const subtotal = calcularSubtotal();
     const iva = subtotal * 0.15;
     return subtotal + iva;
 }
@@ -236,9 +264,15 @@ async function procesarFactura(esEncargo, encargoDetalles = null) {
     showLoading(true);
 
     try {
+        const subtotal = calcularSubtotal();
+        const iva = subtotal * 0.15;
+        const total = subtotal + iva;
+
         const payload = {
             carrito: carrito,
-            total: calcularTotal(),
+            subtotal: subtotal,
+            iva: iva,
+            total: total,
             es_encargo: esEncargo,
             encargo_detalles: encargoDetalles
         };
@@ -251,6 +285,11 @@ async function procesarFactura(esEncargo, encargoDetalles = null) {
 
         if (!response.ok) throw new Error('Error al facturar');
         
+        const data = await response.json();
+        
+        // Mostrar el ticket de factura
+        mostrarTicket(data.factura);
+        
         showToast('¡Factura registrada exitosamente!');
         carrito = []; 
         renderizarCarrito();
@@ -260,6 +299,50 @@ async function procesarFactura(esEncargo, encargoDetalles = null) {
     } finally {
         showLoading(false);
     }
+}
+
+function mostrarTicket(factura) {
+    // Llenar datos del ticket
+    document.getElementById('ticket-numero').textContent = factura.numero_factura;
+    document.getElementById('ticket-fecha').textContent = factura.fecha;
+    document.getElementById('ticket-hora').textContent = factura.hora;
+    
+    // Productos
+    const productosContainer = document.getElementById('ticket-productos');
+    productosContainer.innerHTML = '';
+    factura.productos.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'ticket-product-row';
+        row.innerHTML = `
+            <span class="ticket-product-name">${item.nombre}</span>
+            <span class="ticket-product-qty">x${item.cantidad}</span>
+            <span class="ticket-product-price">$${item.subtotal.toFixed(2)}</span>
+        `;
+        productosContainer.appendChild(row);
+    });
+
+    // Totales
+    document.getElementById('ticket-subtotal').textContent = `$${factura.subtotal.toFixed(2)}`;
+    document.getElementById('ticket-iva').textContent = `$${factura.iva.toFixed(2)}`;
+    document.getElementById('ticket-total').textContent = `$${factura.total.toFixed(2)}`;
+
+    // Sección de encargo
+    const encargoSection = document.getElementById('ticket-encargo-section');
+    if (factura.es_encargo && factura.encargo_detalles) {
+        encargoSection.classList.remove('hidden');
+        document.getElementById('ticket-cliente').textContent = factura.encargo_detalles.nombre_cliente || 'N/A';
+        document.getElementById('ticket-adelanto').textContent = `$${factura.encargo_detalles.adelanto.toFixed(2)}`;
+        document.getElementById('ticket-saldo').textContent = `$${factura.encargo_detalles.saldo.toFixed(2)}`;
+        document.getElementById('ticket-fecha-entrega').textContent = factura.encargo_detalles.fecha_entrega;
+    } else {
+        encargoSection.classList.add('hidden');
+    }
+
+    // QR
+    document.getElementById('ticket-qr-img').src = factura.qr_image;
+
+    // Mostrar modal
+    document.getElementById('factura-modal').classList.remove('hidden');
 }
 
 function showLoading(show) {
