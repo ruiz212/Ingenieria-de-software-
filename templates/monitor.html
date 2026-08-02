@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Producción | Panadería Amada</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body style="background: var(--background);">
+
+    <header class="monitor-header">
+        <h1>🧑‍🍳 Monitor de Producción</h1>
+        <a href="/" style="text-decoration: none; color: var(--text); font-weight: 600;">← Volver al POS</a>
+    </header>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <div class="monitor-grid">
+        {% for encargo in encargos %}
+        <div class="order-card" id="card-{{ encargo.codigo_seguimiento }}">
+            <div class="order-header">
+                <span class="order-invoice">{{ encargo.numero_factura }}</span>
+                <span class="order-date">{{ encargo.fecha }} {{ encargo.hora }}</span>
+            </div>
+            
+            <div class="order-customer">
+                <strong>{{ encargo.encargo_detalles.nombre_cliente }}</strong>
+                <span>Tel: {{ encargo.encargo_detalles.telefono }}</span><br>
+                <span style="color: var(--danger); font-weight: 600;">Entrega: {{ encargo.encargo_detalles.fecha_entrega }}</span>
+            </div>
+
+            <div class="order-products">
+                <ul>
+                    {% for item in encargo.productos %}
+                    <li>
+                        <div style="font-weight: 600;">{{ item.nombre.split(' (')[0] }} x{{ item.cantidad }}</div>
+                        {% if item.detalle_ingredientes and item.detalle_ingredientes.ingredientes %}
+                        <div style="font-size: 0.8rem; color: var(--muted); padding-left: 10px; margin-top: 5px;">
+                            {% for ing in item.detalle_ingredientes.ingredientes %}
+                            <div>+ {{ ing.nombre }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="order-status-actions">
+                <label for="status-{{ encargo.codigo_seguimiento }}">Estado Actual:</label>
+                <select class="status-select" 
+                        id="status-{{ encargo.codigo_seguimiento }}" 
+                        data-codigo="{{ encargo.codigo_seguimiento }}" 
+                        data-status="{{ encargo.encargo_detalles.estado | default('Pendiente') }}"
+                        onchange="cambiarEstado('{{ encargo.codigo_seguimiento }}', this.value, this)">
+                    
+                    {% set estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado'] %}
+                    {% set estado_actual = encargo.encargo_detalles.estado | default('Pendiente') %}
+                    {% for estado in estados %}
+                        <option value="{{ estado }}" {% if estado_actual == estado %}selected{% endif %}>
+                            {{ estado }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        {% else %}
+        <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--muted);">
+            <h2>No hay encargos activos</h2>
+            <p>Los pasteles y pedidos que registres en el POS aparecerán aquí.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script>
+        // Actualizar color del select al cargar
+        document.querySelectorAll('.status-select').forEach(select => {
+            select.setAttribute('data-status', select.value);
+        });
+
+        async function cambiarEstado(codigo, nuevoEstado, selectElement) {
+            try {
+                const response = await fetch(`/api/seguimiento/${codigo}/estado`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ estado: nuevoEstado })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showToast(`Estado actualizado a: ${nuevoEstado}`);
+                    selectElement.setAttribute('data-status', nuevoEstado);
+                } else {
+                    showToast(data.error || 'Error al actualizar', true);
+                    // Revertir color/valor si falló
+                    selectElement.value = selectElement.getAttribute('data-status');
+                }
+            } catch (error) {
+                console.error(error);
+                showToast('Error de conexión', true);
+            }
+        }
+
+        function showToast(message, isError = false) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${isError ? 'error' : ''}`;
+            toast.textContent = message;
+            if (isError) toast.style.backgroundColor = 'var(--danger)';
+            
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

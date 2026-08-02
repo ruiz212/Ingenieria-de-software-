@@ -141,5 +141,40 @@ def seguimiento(codigo):
     return render_template('seguimiento.html', factura=factura, codigo=codigo)
 
 
+@app.route('/monitor')
+def monitor_pedidos():
+    """Panel interno para que la panadería vea y actualice los pedidos."""
+    # Filtrar solo las facturas que son encargos
+    encargos = [f for f in facturas_db.values() if f.get('es_encargo')]
+    return render_template('monitor.html', encargos=encargos)
+
+
+@app.route('/api/seguimiento/<codigo>/estado', methods=['PUT'])
+def actualizar_estado(codigo):
+    """Actualiza el estado de un encargo."""
+    data = request.get_json()
+    nuevo_estado = data.get('estado')
+    
+    if codigo not in facturas_db:
+        return jsonify({'error': 'Encargo no encontrado'}), 404
+        
+    factura = facturas_db[codigo]
+    if not factura.get('es_encargo') or not factura.get('encargo_detalles'):
+        return jsonify({'error': 'La factura no es un encargo'}), 400
+        
+    # Validar estados permitidos
+    estados_validos = ['Pendiente', 'En Proceso', 'Listo', 'Entregado']
+    if nuevo_estado not in estados_validos:
+        return jsonify({'error': 'Estado inválido'}), 400
+        
+    factura['encargo_detalles']['estado'] = nuevo_estado
+    
+    return jsonify({
+        'status': 'success',
+        'mensaje': 'Estado actualizado',
+        'nuevo_estado': nuevo_estado
+    }), 200
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
