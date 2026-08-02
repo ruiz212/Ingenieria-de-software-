@@ -95,6 +95,15 @@
                 <label>Saldo Pendiente:</label>
                 <input type="text" id="modal-saldo" readonly>
             </div>
+            <div class="form-group" style="background: var(--background); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                <label for="modal-efectivo-encargo">Efectivo Recibido (C$):</label>
+                <input type="number" id="modal-efectivo-encargo" min="0" step="0.01" placeholder="Ej. 1000">
+                
+                <label style="margin-top: 10px;">Cambio (Vuelto):</label>
+                <input type="text" id="modal-cambio-encargo" readonly style="color: var(--success); font-weight: bold;">
+                
+                <div id="desglose-cambio-encargo" style="margin-top: 10px; font-size: 0.85rem; color: var(--text);"></div>
+            </div>
             <div class="form-group">
                 <label for="modal-fecha">Fecha de Entrega:</label>
                 <input type="date" id="modal-fecha" required>
@@ -103,6 +112,38 @@
             <div class="modal-actions">
                 <button type="button" class="btn-cancel" id="btn-cerrar-modal">Cancelar</button>
                 <button type="button" class="btn-confirm" id="btn-confirmar-encargo">Confirmar y Facturar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Cobro Normal -->
+    <div id="pago-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Cobro de Venta</h2>
+            <p>Ingrese el monto recibido para calcular el vuelto.</p>
+            
+            <div class="form-group">
+                <label>Total a Cobrar:</label>
+                <input type="text" id="pago-total" readonly style="font-size: 1.2rem; font-weight: bold; color: var(--primary-color);">
+            </div>
+            
+            <div class="form-group">
+                <label for="pago-efectivo">Efectivo Recibido (C$):</label>
+                <input type="number" id="pago-efectivo" min="0" step="0.01" placeholder="Ej. 500" required style="font-size: 1.2rem;">
+            </div>
+            
+            <div class="form-group">
+                <label>Cambio (Vuelto):</label>
+                <input type="text" id="pago-cambio" readonly style="font-size: 1.2rem; font-weight: bold; color: var(--success);">
+            </div>
+            
+            <div id="desglose-cambio-normal" style="margin-top: 10px; font-size: 0.9rem; color: var(--text); background: var(--background); padding: 1rem; border-radius: 8px; min-height: 50px;">
+                Ingrese efectivo para ver el desglose del cambio...
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" id="btn-cerrar-pago">Cancelar</button>
+                <button type="button" class="btn-confirm" id="btn-confirmar-pago">Confirmar y Facturar</button>
             </div>
         </div>
     </div>

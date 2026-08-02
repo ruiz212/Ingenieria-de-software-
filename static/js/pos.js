@@ -154,14 +154,37 @@ document.addEventListener('DOMContentLoaded', () => {
             inputTotalModal.value = `$${calcularTotal().toFixed(2)}`;
             inputAdelanto.value = '';
             inputSaldo.value = `$${calcularTotal().toFixed(2)}`;
+            document.getElementById('modal-efectivo-encargo').value = '';
+            document.getElementById('modal-cambio-encargo').value = '';
+            document.getElementById('desglose-cambio-encargo').innerHTML = '';
             // Limpiar campos de cliente
             document.getElementById('modal-nombre-cliente').value = '';
             document.getElementById('modal-telefono-cliente').value = '';
             modal.classList.remove('hidden');
         } else {
-            procesarFactura(false);
+            // Abrir Modal de Pago Normal
+            const pagoModal = document.getElementById('pago-modal');
+            document.getElementById('pago-total').value = `$${calcularTotal().toFixed(2)}`;
+            document.getElementById('pago-efectivo').value = '';
+            document.getElementById('pago-cambio').value = '';
+            document.getElementById('desglose-cambio-normal').innerHTML = 'Ingrese efectivo para ver el desglose del cambio...';
+            pagoModal.classList.remove('hidden');
         }
     });
+
+    function actualizarCambioEncargo() {
+        const adelanto = parseFloat(inputAdelanto.value) || 0;
+        const efectivo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
+        const cambio = efectivo - adelanto;
+        
+        if (efectivo >= adelanto && adelanto > 0) {
+            document.getElementById('modal-cambio-encargo').value = `C$${cambio.toFixed(2)}`;
+            document.getElementById('desglose-cambio-encargo').innerHTML = calcularDesgloseCambio(cambio);
+        } else {
+            document.getElementById('modal-cambio-encargo').value = '';
+            document.getElementById('desglose-cambio-encargo').innerHTML = '';
+        }
+    }
 
     inputAdelanto.addEventListener('input', (e) => {
         const adelanto = parseFloat(e.target.value) || 0;
@@ -175,7 +198,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             inputSaldo.style.color = 'var(--text)';
         }
+        actualizarCambioEncargo();
     });
+
+    document.getElementById('modal-efectivo-encargo').addEventListener('input', actualizarCambioEncargo);
 
     function cerrarModal() {
         modal.classList.add('hidden');
@@ -202,6 +228,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        const efectivo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
+        if (efectivo < adelanto && adelanto > 0) {
+            showToast('El efectivo recibido es menor al adelanto', true);
+            return;
+        }
+        
         cerrarModal();
         procesarFactura(true, {
             adelanto: adelanto,
@@ -210,6 +242,41 @@ document.addEventListener('DOMContentLoaded', () => {
             nombre_cliente: nombreCliente,
             telefono: telefonoCliente
         });
+    });
+
+    // Lógica del Modal de Pago Normal
+    const pagoModal = document.getElementById('pago-modal');
+    const inputPagoEfectivo = document.getElementById('pago-efectivo');
+    
+    document.getElementById('btn-cerrar-pago').addEventListener('click', () => {
+        pagoModal.classList.add('hidden');
+    });
+
+    inputPagoEfectivo.addEventListener('input', (e) => {
+        const efectivo = parseFloat(e.target.value) || 0;
+        const total = calcularTotal();
+        const cambio = efectivo - total;
+        
+        if (efectivo >= total) {
+            document.getElementById('pago-cambio').value = `C$${cambio.toFixed(2)}`;
+            document.getElementById('desglose-cambio-normal').innerHTML = calcularDesgloseCambio(cambio);
+        } else {
+            document.getElementById('pago-cambio').value = '';
+            document.getElementById('desglose-cambio-normal').innerHTML = 'Efectivo insuficiente...';
+        }
+    });
+
+    document.getElementById('btn-confirmar-pago').addEventListener('click', () => {
+        const efectivo = parseFloat(inputPagoEfectivo.value) || 0;
+        const total = calcularTotal();
+        
+        if (efectivo < total) {
+            showToast('El efectivo recibido es menor al total a pagar', true);
+            return;
+        }
+        
+        pagoModal.classList.add('hidden');
+        procesarFactura(false);
     });
 
     // Lógica del Modal de Ticket
@@ -356,12 +423,50 @@ async function procesarFactura(esEncargo, encargoDetalles = null) {
         renderizarCarrito();
     } catch (error) {
         console.error(error);
-        showToast('Error de conexión al servidor', true);
+        showToast('❌ Error de conexión con el servidor', true);
     } finally {
         showLoading(false);
     }
 }
 
+// Algoritmo Greedy para calcular el vuelto en Córdoba Nicaragüense
+function calcularDesgloseCambio(montoCambio) {
+    if (montoCambio < 0) return "Monto insuficiente.";
+    if (montoCambio === 0) return "✅ Pago exacto, no hay cambio.";
+    
+    const denominaciones = [
+        { valor: 1000, tipo: 'billete' },
+        { valor: 500, tipo: 'billete' },
+        { valor: 200, tipo: 'billete' },
+        { valor: 100, tipo: 'billete' },
+        { valor: 50, tipo: 'billete' },
+        { valor: 20, tipo: 'billete' },
+        { valor: 10, tipo: 'billete' },
+        { valor: 5, tipo: 'moneda' },
+        { valor: 1, tipo: 'moneda' },
+        { valor: 0.50, tipo: 'moneda' },
+        { valor: 0.25, tipo: 'moneda' },
+        { valor: 0.10, tipo: 'moneda' }
+    ];
+    
+    let restante = Math.round(montoCambio * 100);
+    let resultado = [];
+    
+    for (let denom of denominaciones) {
+        let valorCentavos = Math.round(denom.valor * 100);
+        if (restante >= valorCentavos) {
+            let cantidad = Math.floor(restante / valorCentavos);
+            restante -= cantidad * valorCentavos;
+            
+            let denominacionStr = denom.valor < 1 ? `${denom.valor * 100} centavos` : `C$${denom.valor}`;
+            resultado.push(`<strong>${cantidad}</strong> ${denom.tipo}(s) de ${denominacionStr}`);
+        }
+    }
+    
+    if (resultado.length === 0) return "✅ Pago exacto, no hay cambio.";
+    
+    return "<strong>Entregar:</strong><br>" + resultado.join('<br>');
+}
 function mostrarTicket(factura) {
     // Llenar datos del ticket
     document.getElementById('ticket-numero').textContent = factura.numero_factura;
