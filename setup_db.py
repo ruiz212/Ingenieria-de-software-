@@ -17,7 +17,7 @@ def try_connect_and_setup():
             print(f"Trying to connect to {server}...")
             # Connect to master to create DB
             conn_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE=master;Trusted_Connection=yes;"
-            conn = pyodbc.connect(conn_str, autocommit=True, timeout=3)
+            conn = pyodbc.connect(conn_str, autocommit=True, timeout=30)
             cursor = conn.cursor()
             
             # Check if DB exists
@@ -42,16 +42,10 @@ def try_connect_and_setup():
             # Split batches by GO (if any) or just execute
             # In our case, the script doesn't have GO, it's just raw SQL.
             try:
-                # Basic check if tables exist to avoid crashing
-                cursor_db.execute("SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='Productos'")
-                if not cursor_db.fetchone():
-                    # The script contains multiple statements, pyodbc execute might fail on some if we don't split, 
-                    # but simple CREATE TABLE statements often work together or we can execute them one by one.
-                    # Since schema.sql has no GO, let's just run it:
-                    cursor_db.execute(sql_script)
-                    print("Schema created successfully!")
-                else:
-                    print("Tables already exist. Skipping schema creation.")
+                # The script contains DROP TABLE IF EXISTS and CREATE statements
+                # Since schema.sql has no GO, let's just run it:
+                cursor_db.execute(sql_script)
+                print("Schema updated successfully!")
             except Exception as e:
                 print("Error executing schema:", e)
                 # Fallback: try splitting by statements (rudimentary)
