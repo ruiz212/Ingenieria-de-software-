@@ -1,127 +1,102 @@
-# Ingenieria-de-software-
-## Distribución de Ramas y Estructuración de Versiones
+# UNIVERSIDAD NACIONAL DE INGENIERÍA
+**Áreas de Conocimiento:** Tecnología de la Información y Comunicación  
+**Asignatura:** Ingeniería de Software I  
+**PROYECTO CORTE 1: UNIDAD I - TEORÍAS Y PRÁCTICAS**  
 
-> [!WARNING]
-> **Para el Equipo de Desarrollo:** Este proyecto utiliza Git para el control de versiones alineado con nuestros Sprints (SCRUM). Sigan esta estructura estrictamente para evitar conflictos:
-> 
-> * **`main` (Producción):** Contiene únicamente versiones estables, probadas y listas para entregar a la panadería. **No hacer commits directos aquí.**
-> * **`develop` (Integración):** Rama central de desarrollo. Todo código nuevo que se finalice en un Sprint debe integrarse aquí primero.
-> * **`sprint-X-feature` (Desarrollo):** Para cada nueva tarea o épica (ej. `sprint-1-pos-async`), crea una rama con este formato a partir de `develop`. Al finalizar, envía un Pull Request hacia `develop`.
-
-# 📋 Planificación SCRUM — Proyecto Panadería Amada Calero Leiva
-
-> [!IMPORTANT]
-> Este documento es la **hoja de ruta maestra** del proyecto. Todo el equipo debe leerlo antes de comenzar a programar. Cualquier cambio en el alcance debe ser aprobado por el Product Owner.
+**Nombre:** [Tus Nombres] **Apellidos:** [Tus Apellidos] **Carnet:** [00000]  
+**Carrera:** Ingeniería de Sistemas | **Grupo:** [000-SIS-S] | **Grupo de trabajo:** 1 | **Fecha:** [DD-MM-YYYY]  
 
 ---
-
-## 1. Definición de Roles SCRUM
-
-| Rol | Persona | Responsabilidad |
-|-----|---------|-----------------|
-| **Product Owner** | Amada Calero Leiva (representada por un miembro del equipo) | Valida que cada función resuelva un problema real del negocio. Prioriza el backlog. |
-| **Scrum Master** | Anderson | Elimina bloqueos técnicos, facilita ceremonias, protege al equipo de interrupciones. |
-| **Equipo de Desarrollo** | Erick, Rodrigo | Diseño de BD (SQL Server), API (Flask/Python), Frontend (HTML/CSS/JS). |
-
----
-
-## 2. Product Backlog (Épicas del Sistema)
-
-Ordenadas por **prioridad de negocio** (de mayor a menor valor para la panadería):
-
-| # | Épica | Valor de Negocio | Sprint Estimado |
-|---|-------|-------------------|-----------------|
-| 1 | **Punto de Venta (POS)** — Venta de mostrador, facturación, encargos con ingredientes | 🔴 Crítico | Sprint 1 |
-| 2 | **Autenticación y Roles de Usuario** — Login, permisos (Dependienta vs. Gerente) | 🔴 Crítico | Sprint 2 |
-| 3 | **Control de Inventario** — Materia prima, rendimiento por lote, alertas de stock bajo | 🟠 Alto | Sprint 3 |
-| 4 | **Monitor de Producción** — Sincronización Mostrador ↔ Horno, alertas de reposición | 🟡 Medio | Sprint 4 |
-| 5 | **Dashboard Gerencial** — Reportes de ventas, cierres de caja, gráficas de rendimiento | 🟢 Deseado | Sprint 5 |
-
----
-
-## 3. Desglose por Sprints (2 semanas cada uno)
-
----
-
-### 🏃 Sprint 1 — "Núcleo del POS y Facturación"
-**Objetivo:** Construir un Punto de Venta funcional donde la dependienta pueda vender productos de mostrador, registrar encargos personalizados (pasteles con ingredientes), y generar una factura con IVA. Todo sin que la pantalla se congele.
-
-**Rama Git:** `sprint-1-pos-async` (desde `develop`)
-
-| ID | Historia de Usuario | Tareas Técnicas | Criterio de Aceptación |
-|----|---------------------|-----------------|------------------------|
-| US-01 | Como dependienta, quiero ver un panel con los productos del mostrador para seleccionarlos rápidamente. | Maquetar interfaz HTML/CSS con tarjetas de productos (bolillos, pan pizza, milanesas). | La interfaz es responsiva y los botones son fáciles de tocar en pantalla táctil. |
-| US-02 | Como dependienta, quiero que al registrar una venta la pantalla no se bloquee. | Programar evento con `Fetch API` para enviar el JSON en segundo plano. Mostrar spinner de carga. | La pantalla muestra un indicador de carga pero permite seguir interactuando. |
-| US-03 | Como sistema, requiero recibir los datos de venta y almacenarlos de forma segura. | Crear endpoint `/api/factura` en Flask que reciba el JSON y lo guarde en SQL Server. | La BD refleja la transacción y la API responde con 200 OK. |
-| US-04 | Como sistema, requiero una base de datos estable para iniciar operaciones. | Diseñar y ejecutar script SQL con tablas `Productos`, `Facturas`, `DetalleFacturas`, `Ingredientes`, `Encargos`. | Las tablas tienen PKs, FKs y normalización correcta. |
-| US-05 | Como dependienta, quiero agregar productos al carrito y ver el subtotal, IVA (15%) y total en tiempo real. | Implementar lógica de carrito en JS con cálculo dinámico de IVA. | Al agregar/quitar productos, los montos se recalculan instantáneamente. |
-| US-06 | Como dependienta, quiero seleccionar ingredientes extra al registrar un encargo (pastel). | Crear modal de personalización con checkboxes de ingredientes y recálculo de precio en vivo. | Al seleccionar ingredientes, el precio se suma al base y se refleja en el carrito con nombre descriptivo. |
-| US-07 | Como dependienta, quiero registrar un adelanto parcial cuando el cliente hace un encargo. | Crear modal de encargo con campos: Adelanto, Saldo Pendiente (calculado), Fecha de Entrega. | El sistema calcula correctamente el saldo y almacena la fecha de entrega. |
 
 > [!NOTE]
-> **Estado actual:** Las historias US-01 a US-07 ya están implementadas en la rama `sprint-1-pos-async`. Falta la conexión real a SQL Server (actualmente usa datos simulados en Python).
+> **OBJETIVO GENERAL DE LA ASIGNATURA:** Desarrollar las fases de análisis y diseño del proceso de desarrollo de software, utilizando el Proceso Unificado de Rational (RUP), basado en el Lenguaje de Modelación Unificado (UML), con ética en la eficacia y eficiencia del producto y creación del software.
 
 ---
 
-### 🏃 Sprint 2 — "Autenticación, Roles y Conexión Real a BD"
-**Objetivo:** Que cada usuario del sistema tenga un login propio, que las acciones estén restringidas según su rol, y que todas las transacciones se guarden en SQL Server real.
+# 📚 PARTE 1: Documentación de la Unidad I (Fundamentos)
 
-**Rama Git:** `sprint-2-auth-db` (desde `develop`)
+## 1. Título del Proyecto
+**Sistema Integral de Gestión de Ventas, Producción y Contabilidad Privada para "Panadería Amada"**
 
-| ID | Historia de Usuario | Tareas Técnicas | Criterio de Aceptación |
-|----|---------------------|-----------------|------------------------|
-| US-08 | Como gerente, quiero que cada empleado tenga su propio usuario y contraseña. | Crear tabla `Usuarios` (ID, Nombre, Email, PasswordHash, Rol). Crear página de Login. | El sistema permite iniciar sesión con credenciales válidas y rechaza las inválidas. |
-| US-09 | Como gerente, quiero que la dependienta solo pueda acceder al POS y yo pueda ver todo. | Implementar middleware de autorización en Flask (`@login_required`, verificación de rol). | La dependienta ve solo el POS. El gerente ve POS + Inventario + Dashboard. |
-| US-10 | Como sistema, necesito conectarme a SQL Server real para persistir las transacciones. | Configurar `pyodbc` con connection string en `config.py`. Reemplazar datos simulados por queries reales. | Al facturar, el registro aparece en la tabla `Facturas` de SQL Server. Al recargar, los productos se cargan desde la BD. |
-| US-11 | Como dependienta, quiero que al facturar se genere un número de factura único y visible. | Generar número correlativo (ej. `FAC-0001`) al insertar en BD. Mostrarlo en el ticket/resumen después de facturar. | Cada factura tiene un número único, visible tras el procesamiento. |
-| US-12 | Como gerente, quiero que el sistema registre qué usuario hizo cada venta. | Agregar columna `UsuarioID` a tabla `Facturas`. Asociar la sesión activa al registro. | Cada factura queda asociada al usuario que la registró. |
+## 2. Planteamiento del Problema (Enfoque Interdisciplinario)
+La "Panadería Amada" carece de un sistema informático, gestionando sus operaciones (pedidos, caja, inventario) mediante cuadernos físicos y uso informal de WhatsApp. Esto provoca vulnerabilidad de la información confidencial, demoras y falta de control.
 
----
+* **Integración con Contabilidad:** La gerencia necesita registrar estrictamente el arqueo diario ("Venta Neta"), controlar los pagos mixtos (efectivo vs. transferencias), registrar facturas formales con RUC, cobrar anticipos del 50% contra entrega, y manejar cuentas privadas de egresos (vales de empleados y pago a proveedores). Al estar en papel, el cuadre de turnos es ineficiente y propenso al robo o error humano.
+* **Integración con Estadística:** No existen datos precisos para proyectar el rendimiento de la materia prima (ej. cuántos bolillos se producen matemáticamente por cada saco de harina) ni estadísticas de ventas que permitan rankear los productos más demandados. Además, se requiere categorizar probabilísticamente a los clientes (nuevos, frecuentes, VIP) basándose en su frecuencia de compra.
 
-### 🏃 Sprint 3 — "Control de Inventario y Materia Prima"
-**Objetivo:** Que la gerente pueda controlar cuánta materia prima tiene, cuánto rinde cada lote de producción, y recibir alertas cuando algo esté por acabarse.
+## 3. Prototipo y Módulos del Sistema
+El sistema se dividirá en módulos interconectados, respetando la estructura operativa de la empresa:
 
-**Rama Git:** `sprint-3-inventario` (desde `develop`)
+* **Módulo de Ventas (Mercadotecnia y POS):** Ventas de mostrador, cotizador de pasteles (incluyendo pasteles ficticios al 70%), catálogo online responsivo y generación de enlaces de pedido para WhatsApp.
+* **Módulo de Finanzas y Contabilidad:** Control de apertura/cierre de turnos (Arqueo), registro de "Venta Neta", vales de empleados, flujo de ingresos y egresos, y generación de Backups (respaldos de seguridad).
+* **Módulo de Producción:** Monitor en tiempo real para sincronizar mostrador y horno, y control de stock de materia prima.
+* **Creación de Base de Datos:** Esquema centralizado en SQL Server para unificar los módulos garantizando integridad referencial.
 
-| ID | Historia de Usuario | Tareas Técnicas | Criterio de Aceptación |
-|----|---------------------|-----------------|------------------------|
-| US-13 | Como gerente, quiero registrar la materia prima que compro (harina, huevos, azúcar, etc.). | Crear tabla `MateriaPrima` (ID, Nombre, Unidad, CantidadActual, StockMinimo, PrecioUnitario). Crear formulario de registro. | La gerente puede agregar, editar y ver la lista de materias primas con sus cantidades actuales. |
-| US-14 | Como gerente, quiero que el sistema me avise cuando una materia prima esté por debajo de su stock mínimo. | Implementar consulta que compare `CantidadActual < StockMinimo`. Mostrar alerta visual en el dashboard. | Cuando la harina baja de su mínimo, aparece una alerta roja en la pantalla de inventario. |
-| US-15 | Como gerente, quiero registrar la producción de un lote (ej. "Hoy se hicieron 200 bolillos con 25kg de harina"). | Crear tabla `Lotes` (ID, ProductoID, Cantidad, Fecha, MateriaPrimaUsada). Crear formulario de registro de producción. | Al registrar un lote, se descuenta automáticamente la materia prima usada del inventario. |
-| US-16 | Como gerente, quiero ver cuánto rinde cada kilogramo de materia prima. | Calcular rendimiento: `Unidades Producidas / Kg Usados`. Mostrar en una tabla de reportes. | La pantalla de rendimiento muestra por producto cuántas unidades salen por kg de harina. |
+### Jerarquía de Permisos de Usuario (RBAC)
+Para proteger la privacidad exigida por la dueña, el sistema se rige por permisos estrictos:
+1. **Superadministrador (Desarrolladores):** Control total de la base de datos, configuraciones del servidor y mantenimientos técnicos.
+2. **Administrador (Doña Amada - Gerente):** Acceso total al negocio. Único perfil autorizado para entrar al Módulo de Contabilidad, ver reportes de flujo de caja y crear/eliminar usuarios.
+3. **Usuario Estándar (Dependientas):** Tareas diarias limitadas. Solo pueden usar el Punto de Venta (POS) y realizar el "Arqueo de Caja" de su turno. No ven reportes globales.
+4. **Usuario Restringido / Invitado (Panaderos y Clientes):** Panaderos solo ven la pantalla del Monitor. Clientes solo acceden al Catálogo Web para ver precios.
 
----
+## 4. Análisis de Metodologías y Modelos
+Basado en los apuntes de la clase (Briano_compilacion_apuntes), el desarrollo se rige por:
 
-### 🏃 Sprint 4 — "Monitor de Producción (Mostrador ↔ Horno)"
-**Objetivo:** Que los panaderos en el horno sepan qué productos se están agotando en el mostrador, y que la dependienta sepa qué está saliendo del horno.
-
-**Rama Git:** `sprint-4-produccion` (desde `develop`)
-
-| ID | Historia de Usuario | Tareas Técnicas | Criterio de Aceptación |
-|----|---------------------|-----------------|------------------------|
-| US-17 | Como dependienta, quiero notificar al horno que un producto se está agotando en el mostrador. | Crear botón "Solicitar reposición" en el POS que envíe una alerta a la pantalla del horno. | Al presionar el botón, aparece una notificación en tiempo real en la pantalla del panadero. |
-| US-18 | Como panadero, quiero ver en una pantalla qué productos necesitan reposición. | Crear vista `/monitor` que muestre las solicitudes de reposición ordenadas por urgencia. | La pantalla del horno muestra las solicitudes pendientes con hora y producto. |
-| US-19 | Como panadero, quiero marcar un producto como "listo" cuando sale del horno. | Agregar botón "Listo" en el monitor que actualice el estado de la solicitud. | Al marcar como listo, la dependienta recibe una notificación de que el producto ya está disponible. |
-| US-20 | Como gerente, quiero ver un historial de las solicitudes de reposición del día. | Crear tabla `Solicitudes` (ID, ProductoID, FechaHora, Estado). Crear vista de historial. | La gerente puede ver cuántas veces se solicitó reposición de cada producto en un rango de fechas. |
+* **Metodologías Seleccionadas:** **Metodologías Ágiles (SCRUM) y Desarrollo Web.** Se descartan las *metodologías robustas o tradicionales* porque el cliente solicitó revisión continua ("vendríamos a enseñarle los avances semana a semana y usted nos dice cámbienle esto"). SCRUM permite esa flexibilidad para alterar diseños y reglas sobre la marcha.
+* **Modelos Seleccionados:** **Modelo de Desarrollo Evolutivo (Iterativo y Prototipos).** Se descarta el *Modelo de Cascada* porque los requerimientos evolucionarán. Presentaremos prototipos de interfaz (validando la paleta Marfil, Chocolate, Dorado) y liberaremos versiones funcionales progresivas (Incrementales).
 
 ---
 
-### 🏃 Sprint 5 — "Dashboard Gerencial y Cierres de Caja"
-**Objetivo:** Que la gerente tenga visibilidad total del rendimiento del negocio con gráficas, reportes y cierre de caja diario.
+# 🚀 PARTE 2: Planificación SCRUM y Estructura Técnica
 
-**Rama Git:** `sprint-5-dashboard` (desde `develop`)
+> [!WARNING]
+> **Para el Equipo de Desarrollo:** Este proyecto utiliza Git para el control de versiones alineado con nuestros Sprints.
+> * **`main` (Producción):** Solo versiones estables. **No hacer commits directos aquí.**
+> * **`develop` (Integración):** Rama central. Todo código de un Sprint finalizado entra aquí.
+> * **`sprint-X-feature`:** Rama temporal para desarrollar (ej. `sprint-1-pos`).
 
-| ID | Historia de Usuario | Tareas Técnicas | Criterio de Aceptación |
-|----|---------------------|-----------------|------------------------|
-| US-21 | Como gerente, quiero ver las ventas totales del día, semana y mes. | Crear vista `/dashboard` con consultas agregadas por período. Renderizar con gráficas (Chart.js). | El dashboard muestra gráfica de barras con ventas diarias y un resumen con totales. |
-| US-22 | Como gerente, quiero hacer un cierre de caja al final del día. | Crear endpoint `/api/cierre-caja` que sume todas las facturas del día. Crear tabla `CierresCaja`. | Al hacer cierre, el sistema muestra: Total Vendido, Total Facturas, Encargos Pendientes, Efectivo Esperado. |
-| US-23 | Como gerente, quiero ver cuáles son los productos más vendidos. | Consulta SQL con `GROUP BY ProductoID ORDER BY SUM(Cantidad) DESC`. Mostrar en tabla y gráfica. | El dashboard muestra un ranking de los 10 productos más vendidos del período seleccionado. |
-| US-24 | Como gerente, quiero ver el estado de los encargos pendientes. | Crear vista de encargos con filtros por estado (Pendiente, En Proceso, Entregado). | La gerente puede ver todos los encargos, su saldo pendiente y fecha de entrega. |
-| US-25 | Como gerente, quiero exportar los reportes a PDF o Excel. | Implementar exportación con `reportlab` (PDF) o `openpyxl` (Excel). | Al presionar "Exportar", se descarga un archivo con los datos del reporte actual. |
+## 1. Roles SCRUM
+| Rol | Persona | Responsabilidad |
+|-----|---------|-----------------|
+| **Product Owner** | Amada Calero (repr. por un alumno) | Valida que cada función resuelva un problema real del negocio. |
+| **Scrum Master** | Anderson | Facilita ceremonias, protege al equipo de bloqueos. |
+| **Equipo de Desarrollo** | Erick, Rodrigo | Diseño de BD (SQL Server), API (Flask), Frontend. |
 
----
+## 2. Product Backlog (Prioridad de Negocio)
+| # | Épica | Prioridad | Sprint |
+|---|-------|-----------|--------|
+| 1 | **POS, Anticipos 50/50 y Gestión de Pagos** | 🔴 Crítico | Sprint 1 |
+| 2 | **Seguridad, Autenticación y Conexión SQL** | 🔴 Crítico | Sprint 2 |
+| 3 | **Cierres de Caja, Arqueos y Venta Neta** | 🔴 Crítico | Sprint 3 |
+| 4 | **Catálogo Online y CRM de Clientes (WhatsApp)** | 🟠 Alto | Sprint 4 |
+| 5 | **Contabilidad Privada, Vales y Backups BD** | 🟠 Alto | Sprint 5 |
+| 6 | **Monitor de Producción e Inventario** | 🟡 Medio | Sprint 6 |
 
-## 4. Estructura de Ramas Git (Flujo de Trabajo)
+## 3. Desglose por Sprints (Modelo Iterativo/Incremental)
+
+### 🏃 Sprint 1 — "POS y Lógica de Negocio (Anticipos)"
+* **Objetivo:** Construir el POS funcional para mostrador, cobrar encargos exigiendo el 50% de anticipo, calcular pasteles ficticios (70%) y elegir el método de pago.
+* **Rama:** `sprint-1-pos`
+
+### 🏃 Sprint 2 — "Seguridad y Roles de Usuario"
+* **Objetivo:** Restringir el sistema (Login). La dependienta no debe ver la contabilidad. Conexión real a SQL Server para guardar las facturas. Diferenciar si se imprime con o sin RUC.
+* **Rama:** `sprint-2-auth-sql`
+* *(Hito: Lanzamiento Release v1.0 a Main)*
+
+### 🏃 Sprint 3 — "Arqueos y Control de Turnos"
+* **Objetivo:** Digitalizar el proceso de turnos. La dependienta declara la "Venta Neta", separa efectivo de transferencias y la gerente lo aprueba al final del día.
+* **Rama:** `sprint-3-caja`
+
+### 🏃 Sprint 4 — "CRM y Catálogo Web"
+* **Objetivo:** Crear la tabla Clientes para identificar fidelidad (CRM). Lanzar el catálogo online móvil (`/catalogo`) donde los clientes armen su pedido y envíen la orden pre-formateada por WhatsApp.
+* **Rama:** `sprint-4-crm-web`
+
+### 🏃 Sprint 5 — "Contabilidad Privada y Seguridad de Datos"
+* **Objetivo:** Módulo oculto para la Gerente. Registrar egresos, vales de empleados y generar un Script de automatización de **Backups** nocturnos de SQL Server.
+* **Rama:** `sprint-5-admin-backups`
+* *(Hito: Lanzamiento Release v2.0 a Main)*
+
+## 4. Distribución de Ramas (Git Flow)
 
 ```mermaid
 gitGraph
@@ -129,115 +104,51 @@ gitGraph
     branch develop
     checkout develop
     commit id: "Setup inicial"
-    branch sprint-1-pos-async
-    checkout sprint-1-pos-async
-    commit id: "US-01 a US-07"
+    branch sprint-1-pos
+    checkout sprint-1-pos
+    commit id: "Termina POS"
     checkout develop
-    merge sprint-1-pos-async id: "PR Sprint 1"
-    branch sprint-2-auth-db
-    checkout sprint-2-auth-db
-    commit id: "US-08 a US-12"
+    merge sprint-1-pos id: "PR Sprint 1"
+    branch sprint-2-auth-sql
+    checkout sprint-2-auth-sql
+    commit id: "Roles y SQL"
     checkout develop
-    merge sprint-2-auth-db id: "PR Sprint 2"
+    merge sprint-2-auth-sql id: "PR Sprint 2"
     checkout main
     merge develop id: "Release v1.0"
     checkout develop
-    branch sprint-3-inventario
-    checkout sprint-3-inventario
-    commit id: "US-13 a US-16"
+    branch sprint-3-caja
+    checkout sprint-3-caja
+    commit id: "Arqueo de turnos"
     checkout develop
-    merge sprint-3-inventario id: "PR Sprint 3"
-    branch sprint-4-produccion
-    checkout sprint-4-produccion
-    commit id: "US-17 a US-20"
-    checkout develop
-    merge sprint-4-produccion id: "PR Sprint 4"
-    branch sprint-5-dashboard
-    checkout sprint-5-dashboard
-    commit id: "US-21 a US-25"
-    checkout develop
-    merge sprint-5-dashboard id: "PR Sprint 5"
-    checkout main
-    merge develop id: "Release v2.0"
+    merge sprint-3-caja id: "PR Sprint 3"
 ```
 
-### Reglas del Flujo
+## 5. Ceremonias SCRUM y "Definition of Done"
+* **Ceremonias:** Daily Stand-up (15m diarios en Discord), Sprint Planning, Sprint Review (demo a Doña Amada), Sprint Retrospective.
+* **Definition of Done (DoD):** El código compila, cumple la paleta de colores (Marfil, Chocolate, Dorado), fue probado por un usuario "Estándar" para comprobar que no evade la seguridad, el Pull Request fue aprobado y no hay errores de consola.
 
-| Acción | Comando Git |
-|--------|-------------|
-| Crear rama de Sprint | `git checkout develop` → `git checkout -b sprint-X-feature` |
-| Subir tu trabajo diario | `git add .` → `git commit -m "feat: descripción"` → `git push origin sprint-X-feature` |
-| Integrar Sprint terminado | Crear **Pull Request** en GitHub de `sprint-X` → `develop`. Requiere revisión de al menos 1 compañero. |
-| Liberar a producción | Crear **Pull Request** de `develop` → `main`. Requiere aprobación del Scrum Master. |
-
----
-
-## 5. Ceremonias SCRUM
-
-| Ceremonia | Frecuencia | Duración | Canal | Qué se hace |
-|-----------|-----------|----------|-------|-------------|
-| **Daily Stand-up** | Diaria (L-V) | 15 min | Discord / WhatsApp | Cada uno responde: ¿Qué hice ayer? ¿Qué haré hoy? ¿Tengo algún bloqueo? |
-| **Sprint Planning** | Inicio de cada Sprint | 1 hora | Presencial o Zoom | Se revisan las historias del Sprint, se asignan tareas y se estiman tiempos. |
-| **Sprint Review** | Final de cada Sprint | 30 min | Presencial | Se hace una **demo en vivo** del software funcionando. El Product Owner valida. |
-| **Sprint Retrospective** | Después de la Review | 30 min | Presencial o Zoom | ¿Qué salió bien? ¿Qué salió mal? ¿Qué podemos mejorar para el próximo Sprint? |
-
----
-
-## 6. Definición de "Hecho" (Definition of Done)
-
-Una historia de usuario se considera **terminada** cuando cumple TODOS estos puntos:
-
-- ✅ El código está en su rama de Sprint y compila sin errores.
-- ✅ Cumple todos los criterios de aceptación de la historia.
-- ✅ Fue probado manualmente por al menos un compañero del equipo.
-- ✅ No tiene errores de consola (ni en el navegador ni en Flask).
-- ✅ Fue subido a GitHub con un commit descriptivo.
-- ✅ El Pull Request fue revisado y aprobado.
-
----
-
-## 7. Arquitectura Técnica del Sistema
-
-```
+## 6. Arquitectura Técnica
+```text
 ┌─────────────────────────────────────────────────────────┐
-│                    NAVEGADOR WEB                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │
-│  │   POS    │  │ Monitor  │  │Inventario│  │Dashboard│ │
-│  │(Sprint 1)│  │(Sprint 4)│  │(Sprint 3)│  │(Sprint 5)│ │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬────┘ │
-│       │              │              │              │      │
-│       └──────────────┴──────────────┴──────────────┘      │
-│                    Fetch API (JSON)                        │
+│                    NAVEGADOR WEB                        │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐  │
+│  │   POS    │  │ Catálogo │  │  Cajas   │  │Contable │  │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬────┘  │
+│       └─────────────┴─────────────┴─────────────┘       │
+│                    Fetch API (JSON)                     │
 └──────────────────────────┬──────────────────────────────┘
-                           │ HTTP
+                           │ HTTP / Autenticado (Roles)
 ┌──────────────────────────┴──────────────────────────────┐
-│                   SERVIDOR FLASK                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │
-│  │/api/venta│  │/api/stock│  │/api/lotes│  │/api/dash│ │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬────┘ │
-│       │              │              │              │      │
-│       └──────────────┴──────────────┴──────────────┘      │
-│                     pyodbc (SQL)                          │
+│                   SERVIDOR FLASK (Python)               │
+│               pyodbc (Seguridad Anti-SQLi)              │
 └──────────────────────────┬──────────────────────────────┘
                            │ TCP/IP
 ┌──────────────────────────┴──────────────────────────────┐
-│                    SQL SERVER                             │
-│  Productos │ Facturas │ Inventario │ Usuarios │ Lotes    │
+│                    SQL SERVER                           │
+│  Productos | Usuarios | Facturas | Turnos | Backups     │
 └─────────────────────────────────────────────────────────┘
 ```
 
----
-
-## 8. Cronograma General (10 semanas)
-
-| Semana | Sprint | Entregable |
-|--------|--------|------------|
-| 1-2 | Sprint 1 | POS funcional con facturación, encargos e IVA |
-| 3-4 | Sprint 2 | Login, roles, conexión real a SQL Server |
-| 5-6 | Sprint 3 | Inventario de materia prima y alertas de stock |
-| 7-8 | Sprint 4 | Monitor de producción Mostrador ↔ Horno |
-| 9-10 | Sprint 5 | Dashboard gerencial, cierres de caja, reportes |
-
 > [!TIP]
-> **Recomendación:** Al finalizar el Sprint 2, hacer un **Release v1.0** a `main` (merge de `develop` → `main`). Esto le da a la panadería una versión usable mientras se siguen construyendo las demás funciones.
-
+> **Próximos Pasos para la Clase:** Este documento cubre la totalidad del "Corte 1" e instaura la base metodológica. Para los siguientes cortes, sobre esta misma estructura agregaremos los diagramas UML, casos de uso formales (RUP) y métricas de calidad de software requeridas en las unidades II y III.
