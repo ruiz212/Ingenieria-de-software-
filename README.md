@@ -3,8 +3,8 @@
 **Asignatura:** Ingeniería de Software I  
 **PROYECTO CORTE 1: UNIDAD I - TEORÍAS Y PRÁCTICAS**  
 
-**Nombre:** [Tus Nombres] **Apellidos:** [Tus Apellidos] **Carnet:** [00000]  
-**Carrera:** Ingeniería de Sistemas | **Grupo:** [000-SIS-S] | **Grupo de trabajo:** 1 | **Fecha:** [DD-MM-YYYY]  
+
+
 
 ---
 
