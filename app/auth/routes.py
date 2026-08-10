@@ -2,9 +2,9 @@
 # Rutas de autenticación: Login y Logout
 
 from flask import render_template, request, redirect, url_for, flash, current_app
-from flask_login import login_user, login_required, logout_user, current_user
-from werkzeug.security import check_password_hash, generate_password_hash
-from werkzeug.utils import secure_filename
+from flask_login import login_user, login_required, logout_user, current_user  # type: ignore
+from werkzeug.security import check_password_hash, generate_password_hash  # type: ignore
+from werkzeug.utils import secure_filename  # type: ignore
 import os
 
 from app.auth import auth_bp

@@ -1,7 +1,7 @@
 # app/models.py
 # Modelos de datos del sistema
 
-from flask_login import UserMixin
+from flask_login import UserMixin  # type: ignore
 from app.db import get_db_connection
 from app.extensions import login_manager
 
