@@ -1,5 +1,6 @@
 import pyodbc
 import os
+# pyrefly: ignore [missing-import]
 from werkzeug.security import generate_password_hash
 
 def try_connect_and_setup():
@@ -11,7 +12,7 @@ def try_connect_and_setup():
     driver = drivers[-1] # Usually the most recent ODBC driver
     print(f"Using driver: {driver}")
     
-    servers = [r'localhost\SQLDEV']
+    servers = [r'DESKTOP-A45EBFM']
     
     for server in servers:
         try:
