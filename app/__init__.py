@@ -28,10 +28,12 @@ def create_app(config_class=Config):
     from app.hub import hub_bp
     from app.pos import pos_bp
     from app.monitor import monitor_bp
+    from app.admin import admin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(hub_bp)
     app.register_blueprint(pos_bp)
     app.register_blueprint(monitor_bp)
+    app.register_blueprint(admin_bp)
 
     return app

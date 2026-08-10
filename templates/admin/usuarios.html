@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Usuarios | Panadería Amada</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .admin-layout { padding: 2rem; max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
+        
+        .panel { 
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px);
+            border: 1px solid var(--border); padding: 2rem; border-radius: var(--radius-lg); 
+            box-shadow: var(--shadow-md); margin-bottom: 2rem;
+            animation: slideUpFade 0.4s ease forwards;
+        }
+        
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .panel-header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 2px dashed var(--border); 
+        }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 1rem; color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+        td { padding: 1rem; border-bottom: 1px dashed var(--border); vertical-align: middle; transition: background 0.2s; }
+        tr:hover td { background: var(--background); }
+        
+        .badge-active { background: var(--success-bg); color: var(--success); padding: 0.35rem 0.75rem; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-inactive { background: var(--danger-bg); color: var(--danger); padding: 0.35rem 0.75rem; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(239, 68, 68, 0.3); }
+        
+        .role-badge { background: var(--primary-light); color: var(--primary-hover); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.8rem; font-weight: 600; }
+    </style>
+</head>
+<body>
+    
+    <div class="ambient-bg">
+        <div class="ambient-shape shape-1"></div>
+        <div class="ambient-shape shape-2"></div>
+    </div>
+
+    {% include 'admin/navbar.html' %}
+
+    <main class="admin-layout">
+        <div class="panel">
+            <div class="panel-header">
+                <h2>Equipo de Trabajo</h2>
+                <button class="btn btn-primary" onclick="abrirModal()">+ Nuevo Usuario</button>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nombre Completo</th>
+                        <th>Usuario (Login)</th>
+                        <th>Rol</th>
+                        <th>Estado</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in usuarios %}
+                    <tr>
+                        <td style="font-weight: 600; color: var(--secondary);">{{ u.nombre }}</td>
+                        <td>{{ u.username }}</td>
+                        <td><span class="role-badge">{{ u.rol }}</span></td>
+                        <td>
+                            {% if u.activo %}
+                                <span class="badge-active">Activo</span>
+                            {% else %}
+                                <span class="badge-inactive">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if u.id != user.id %}
+                            <button class="btn btn-outline" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="toggleUsuario({{ u.id }})">
+                                {% if u.activo %}Desactivar{% else %}Activar{% endif %}
+                            </button>
+                            {% else %}
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">Usuario Actual</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Modal Nuevo Usuario -->
+    <div id="modal-nuevo-usuario" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 500px;">
+            <h2>Agregar Usuario</h2>
+            <p class="subtitle">Crear un nuevo acceso al sistema.</p>
+            
+            <div class="form-group">
+                <label>Nombre Completo</label>
+                <input type="text" id="nu-nombre" class="form-control" placeholder="Ej. Juan Pérez" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Nombre de Usuario (Login)</label>
+                <input type="text" id="nu-username" class="form-control" placeholder="Ej. juanp" required>
+            </div>
+
+            <div class="form-group">
+                <label>Contraseña</label>
+                <input type="password" id="nu-password" class="form-control" placeholder="Mínimo 6 caracteres" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Rol del Sistema</label>
+                <select id="nu-rol" class="form-select" required>
+                    <option value="" disabled selected>Seleccione...</option>
+                    {% for r in roles %}
+                        <option value="{{ r.id }}">{{ r.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarUsuario()">Crear Usuario</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script>
+        function abrirModal() {
+            document.getElementById('modal-nuevo-usuario').classList.remove('hidden');
+        }
+
+        function cerrarModal() {
+            document.getElementById('modal-nuevo-usuario').classList.add('hidden');
+            document.getElementById('nu-nombre').value = '';
+            document.getElementById('nu-username').value = '';
+            document.getElementById('nu-password').value = '';
+            document.getElementById('nu-rol').value = '';
+        }
+
+        async function guardarUsuario() {
+            const nombre = document.getElementById('nu-nombre').value.trim();
+            const username = document.getElementById('nu-username').value.trim();
+            const password = document.getElementById('nu-password').value;
+            const rol_id = document.getElementById('nu-rol').value;
+
+            if (!nombre || !username || !password || !rol_id) {
+                showToast('Por favor completa todos los campos', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch('/admin/api/usuarios', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nombre, username, password, rol_id })
+                });
+
+                if (res.ok) {
+                    location.reload();
+                } else {
+                    const data = await res.json();
+                    showToast(data.error || 'Error al guardar usuario', 'error');
+                }
+            } catch (err) {
+                showToast('Error de conexión', 'error');
+            }
+        }
+
+        async function toggleUsuario(id) {
+            try {
+                const res = await fetch(`/admin/api/usuarios/${id}/toggle`, {
+                    method: 'POST'
+                });
+                if (res.ok) {
+                    location.reload();
+                } else {
+                    const data = await res.json();
+                    showToast(data.error || 'Error al cambiar estado', 'error');
+                }
+            } catch (err) {
+                showToast('Error de conexión', 'error');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 400);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

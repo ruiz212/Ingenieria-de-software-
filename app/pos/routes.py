@@ -11,10 +11,12 @@ from app.pos import pos_bp
 from app.db import get_db_connection, obtener_o_crear_turno
 from app.extensions import csrf
 from app.utils.qr import generar_qr_base64
+from app.auth.decorators import roles_required
 
 
 @pos_bp.route('/pos')
 @login_required
+@roles_required('Estandar', 'Admin', 'SuperAdmin')
 def index():
     """Carga productos, categorías e ingredientes desde la BD."""
     conn = get_db_connection()
@@ -26,7 +28,7 @@ def index():
 
     # Obtener productos activos con su categoría
     cursor.execute(
-        "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.PrecioBase, p.EsFicticio "
+        "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.PrecioBase, p.EsFicticio, p.PorcentajeDescuento "
         "FROM Productos p "
         "JOIN Categorias c ON p.CategoriaID = c.ID "
         "WHERE p.Activo = 1 "
@@ -34,7 +36,7 @@ def index():
     )
     productos = [
         {'id': row.ID, 'nombre': row.Nombre, 'categoria': row.Categoria,
-         'precio': float(row.PrecioBase), 'es_ficticio': row.EsFicticio}
+         'precio': float(row.PrecioBase), 'es_ficticio': row.EsFicticio, 'descuento': float(row.PorcentajeDescuento)}
         for row in cursor.fetchall()
     ]
 
@@ -87,12 +89,34 @@ def registrar_factura():
         numero_factura = f"FAC-{siguiente_num:04d}"
         codigo_seguimiento = uuid.uuid4().hex[:8].upper()
 
-        # 3. Insertar la factura
+        # 3. Determinar ClienteID y guardar datos del cliente si es encargo
+        cliente_id = 1 # Cliente General por defecto
+        
+        if es_encargo and datos_encargo:
+            nombre_cli = datos_encargo.get('nombre_cliente', '').strip()
+            telefono_cli = datos_encargo.get('telefono', '').strip()
+            
+            if nombre_cli:
+                # Intentar buscar el cliente por telefono
+                if telefono_cli:
+                    cursor.execute("SELECT ID FROM Clientes WHERE Telefono = ?", telefono_cli)
+                    row_cli = cursor.fetchone()
+                    if row_cli:
+                        cliente_id = row_cli.ID
+                    else:
+                        cursor.execute("INSERT INTO Clientes (Nombre, Telefono, NivelConfianzaID) OUTPUT INSERTED.ID VALUES (?, ?, 1)", nombre_cli, telefono_cli)
+                        cliente_id = cursor.fetchone()[0]
+                else:
+                    # Crear nuevo cliente si no hay telefono para buscar
+                    cursor.execute("INSERT INTO Clientes (Nombre, Telefono, NivelConfianzaID) OUTPUT INSERTED.ID VALUES (?, NULL, 1)", nombre_cli)
+                    cliente_id = cursor.fetchone()[0]
+
+        # 4. Insertar la factura
         cursor.execute(
             "INSERT INTO Facturas (NumeroFactura, CodigoSeguimiento, UsuarioID, ClienteID, TurnoID, Subtotal, IVA, Total, EsEncargo) "
             "OUTPUT INSERTED.ID "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            numero_factura, codigo_seguimiento, current_user.id, 1, turno_id,
+            numero_factura, codigo_seguimiento, current_user.id, cliente_id, turno_id,
             subtotal, iva, total, 1 if es_encargo else 0
         )
         factura_id = cursor.fetchone()[0]

@@ -7,6 +7,7 @@ from flask_login import login_required, current_user
 from app.monitor import monitor_bp
 from app.db import get_db_connection
 from app.extensions import csrf
+from app.auth.decorators import roles_required
 
 
 # ============================================================
@@ -20,9 +21,11 @@ def seguimiento(codigo):
     cursor = conn.cursor()
     cursor.execute(
         "SELECT f.NumeroFactura, f.FechaHora, f.Total, f.Subtotal, f.IVA, "
-        "       e.Estado, e.FechaEntrega, e.NotasCliente "
+        "       e.Estado, e.FechaEntrega, e.NotasCliente, "
+        "       c.Nombre AS NombreCliente "
         "FROM Facturas f "
         "JOIN Encargos e ON e.FacturaID = f.ID "
+        "LEFT JOIN Clientes c ON f.ClienteID = c.ID "
         "WHERE f.CodigoSeguimiento = ?", codigo
     )
     row = cursor.fetchone()
@@ -30,6 +33,14 @@ def seguimiento(codigo):
     if not row:
         conn.close()
         return render_template('seguimiento.html', factura=None, codigo=codigo)
+
+    # Obtener el adelanto (suma de pagos realizados hasta el momento)
+    cursor.execute(
+        "SELECT ISNULL(SUM(Monto), 0) FROM Pagos "
+        "WHERE FacturaID = (SELECT ID FROM Facturas WHERE CodigoSeguimiento = ?)", codigo
+    )
+    adelanto = float(cursor.fetchone()[0])
+    saldo = float(row.Total) - adelanto
 
     # Obtener productos del encargo
     cursor.execute(
@@ -58,7 +69,10 @@ def seguimiento(codigo):
         'encargo_detalles': {
             'estado': row.Estado,
             'fecha_entrega': row.FechaEntrega.strftime('%d/%m/%Y') if row.FechaEntrega else '',
-            'notas': row.NotasCliente or ''
+            'notas': row.NotasCliente or '',
+            'nombre_cliente': row.NombreCliente or 'N/A',
+            'adelanto': adelanto,
+            'saldo': saldo
         }
     }
     return render_template('seguimiento.html', factura=factura, codigo=codigo)
@@ -70,6 +84,7 @@ def seguimiento(codigo):
 
 @monitor_bp.route('/monitor')
 @login_required
+@roles_required('Invitado', 'Admin', 'SuperAdmin')
 def monitor_pedidos():
     """Panel interno para que la panadería vea y actualice los pedidos."""
     conn = get_db_connection()
@@ -77,7 +92,7 @@ def monitor_pedidos():
     cursor.execute(
         "SELECT f.ID, f.NumeroFactura, f.CodigoSeguimiento, f.FechaHora, f.Total, "
         "       e.Estado, e.FechaEntrega, e.NotasCliente, "
-        "       c.Nombre AS ClienteNombre "
+        "       c.Nombre AS ClienteNombre, c.Telefono AS ClienteTelefono "
         "FROM Facturas f "
         "JOIN Encargos e ON e.FacturaID = f.ID "
         "LEFT JOIN Clientes c ON f.ClienteID = c.ID "
@@ -96,7 +111,8 @@ def monitor_pedidos():
                 'estado': row.Estado,
                 'fecha_entrega': row.FechaEntrega.strftime('%d/%m/%Y') if row.FechaEntrega else '',
                 'notas': row.NotasCliente or '',
-                'nombre_cliente': row.ClienteNombre or 'Cliente General'
+                'nombre_cliente': row.ClienteNombre or 'Cliente General',
+                'telefono': row.ClienteTelefono or 'N/A'
             }
         })
     conn.close()

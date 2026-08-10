@@ -1,5 +1,6 @@
 import pyodbc
 import os
+from werkzeug.security import generate_password_hash
 
 def try_connect_and_setup():
     drivers = [driver for driver in pyodbc.drivers() if 'SQL Server' in driver or 'ODBC Driver' in driver]
@@ -40,10 +41,15 @@ def try_connect_and_setup():
                 sql_script = f.read()
             
             try:
+                # Generar un hash real para la contraseña 'password123'
+                default_hash = generate_password_hash('password123')
+
                 # Split batches by GO
                 batches = sql_script.split('\nGO')
                 for batch in batches:
                     if batch.strip():
+                        if 'hashed_pwd_aqui' in batch:
+                            batch = batch.replace('hashed_pwd_aqui', default_hash)
                         cursor_db.execute(batch)
                 print("Schema updated successfully!")
             except Exception as e:

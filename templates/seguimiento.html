@@ -4,179 +4,247 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Seguimiento de Encargo - Panadería Amada</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
-        :root {
-            --primary: #d97706;
-            --primary-light: #fef3c7;
-            --bg: #f8fafc;
-            --card: #ffffff;
-            --text: #1f2937;
-            --muted: #6b7280;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --info: #3b82f6;
-            --border: #e5e7eb;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg);
-            color: var(--text);
+            background: var(--background);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
+
         .tracking-header {
-            background: linear-gradient(135deg, var(--primary), #92400e);
+            background: var(--primary-color);
             color: white;
-            padding: 2rem 1.5rem;
+            padding: 3rem 1.5rem 5rem;
             text-align: center;
-        }
-        .tracking-header h1 {
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.8rem;
-            margin-bottom: 0.25rem;
-        }
-        .tracking-header p { opacity: 0.85; font-size: 0.95rem; }
-        .tracking-container {
-            max-width: 500px;
-            margin: -2rem auto 2rem;
-            padding: 0 1rem;
-        }
-        .tracking-card {
-            background: var(--card);
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            position: relative;
             overflow: hidden;
         }
+
+        .tracking-header::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(circle at top right, rgba(255,255,255,0.15), transparent);
+        }
+
+        .tracking-header h1 {
+            color: white;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .tracking-header p { 
+            opacity: 0.9; 
+            font-size: 1rem; 
+            font-weight: 500;
+            position: relative;
+            z-index: 1;
+        }
+
+        .tracking-container {
+            max-width: 600px;
+            width: 100%;
+            margin: -3rem auto 2rem;
+            padding: 0 1.5rem;
+            flex: 1;
+        }
+
+        .tracking-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .tracking-card-header {
-            background: var(--primary-light);
-            padding: 1.25rem 1.5rem;
+            background: #faf8f5;
+            padding: 1.5rem;
             border-bottom: 1px solid var(--border);
+            text-align: center;
         }
+
         .tracking-card-header h2 {
-            font-family: 'Outfit', sans-serif;
-            color: var(--primary);
-            font-size: 1.1rem;
+            font-size: 1.25rem;
+            margin: 0;
         }
-        .tracking-card-body { padding: 1.5rem; }
+
+        .tracking-card-body { 
+            padding: 1.5rem; 
+        }
+
         .info-row {
             display: flex;
             justify-content: space-between;
-            padding: 0.6rem 0;
+            padding: 0.75rem 0;
             border-bottom: 1px dashed var(--border);
             font-size: 0.95rem;
         }
         .info-row:last-child { border-bottom: none; }
-        .info-label { color: var(--muted); }
-        .info-value { font-weight: 600; text-align: right; max-width: 60%; }
+        
+        .info-label { color: var(--text-muted); font-weight: 500; }
+        .info-value { font-weight: 600; text-align: right; color: var(--secondary); max-width: 60%; }
 
-        /* Timeline de Estado */
+        /* Timeline de Estado Premium */
         .status-timeline {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            padding: 1.5rem;
-            gap: 0.25rem;
+            padding: 2rem 1.5rem;
             position: relative;
+            background: white;
+            border-bottom: 1px solid var(--border);
         }
+        
         .status-timeline::before {
             content: '';
             position: absolute;
-            top: 2.3rem;
-            left: 3rem;
-            right: 3rem;
-            height: 3px;
+            top: 3.25rem;
+            left: 3.5rem;
+            right: 3.5rem;
+            height: 4px;
             background: var(--border);
             z-index: 0;
+            border-radius: 2px;
         }
+
         .status-step {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.75rem;
             z-index: 1;
             flex: 1;
         }
+
         .status-dot {
-            width: 28px;
-            height: 28px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
-            background: var(--border);
+            background: var(--card-bg);
+            border: 4px solid var(--border);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.75rem;
-            color: white;
-            font-weight: bold;
-            transition: all 0.3s;
+            font-size: 1rem;
+            color: var(--text-muted);
+            font-weight: 800;
+            transition: all var(--transition-smooth);
+            z-index: 2;
         }
+
         .status-dot.active {
-            background: var(--success);
-            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: white;
+            box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.15);
         }
+
         .status-dot.current {
-            background: var(--warning);
-            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+            background: white;
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.2);
             animation: pulse 2s infinite;
         }
+
         @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2); }
-            50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.1); }
+            0%, 100% { box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.2); }
+            50% { box-shadow: 0 0 0 10px rgba(217, 119, 6, 0.1); }
         }
+
         .status-label {
-            font-size: 0.7rem;
+            font-size: 0.8rem;
             text-align: center;
-            color: var(--muted);
-            font-weight: 500;
+            color: var(--text-muted);
+            font-weight: 600;
             line-height: 1.2;
         }
-        .status-label.active-label { color: var(--success); font-weight: 700; }
-        .status-label.current-label { color: var(--warning); font-weight: 700; }
+        .status-label.active-label { color: var(--primary-color); font-weight: 700; }
+        .status-label.current-label { color: var(--secondary); font-weight: 800; }
 
-        /* Products list */
-        .product-list { list-style: none; padding: 0; }
-        .product-list li {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.5rem 0;
+        /* Productos */
+        .product-item {
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
             border-bottom: 1px dashed var(--border);
-            font-size: 0.9rem;
         }
-        .product-list li:last-child { border-bottom: none; }
+        .product-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .product-main {
+            display: flex; 
+            justify-content: space-between; 
+            font-weight: 700; 
+            font-size: 1rem;
+            color: var(--secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .product-addons {
+            margin-top: 0.5rem; 
+            padding-left: 1rem; 
+            border-left: 3px solid var(--primary-light);
+        }
+
+        .addon-row {
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 0.85rem; 
+            color: var(--text-main); 
+            padding: 0.2rem 0;
+        }
+
+        .saldo-section {
+            margin-top: 1.5rem; 
+            text-align: center;
+            background: #faf8f5;
+            padding: 1.5rem;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+        }
 
         .saldo-badge {
             display: inline-block;
-            background: #fef2f2;
+            background: white;
             color: var(--danger);
-            padding: 0.4rem 1rem;
-            border-radius: 20px;
-            font-weight: 700;
-            font-size: 1.1rem;
-            margin-top: 0.5rem;
+            padding: 0.5rem 1.5rem;
+            border-radius: var(--radius-full);
+            font-weight: 800;
+            font-size: 1.4rem;
+            margin-top: 0.75rem;
+            border: 2px solid var(--danger-bg);
+            font-family: 'Outfit', sans-serif;
         }
+        
         .adelanto-badge {
             display: inline-block;
-            background: #f0fdf4;
+            background: var(--success-bg);
             color: var(--success);
             padding: 0.3rem 0.75rem;
-            border-radius: 20px;
-            font-weight: 600;
+            border-radius: var(--radius-full);
+            font-weight: 700;
             font-size: 0.95rem;
         }
 
-        .not-found {
-            text-align: center;
-            padding: 3rem 1.5rem;
-        }
-        .not-found h2 { color: var(--danger); margin-bottom: 0.5rem; }
-        .not-found p { color: var(--muted); }
-
         .tracking-footer {
             text-align: center;
-            padding: 1rem;
-            color: var(--muted);
-            font-size: 0.8rem;
+            padding: 2rem 1.5rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
         }
 
         .whatsapp-link {
@@ -185,29 +253,37 @@
             gap: 0.5rem;
             background: #25D366;
             color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 30px;
+            padding: 0.85rem 1.75rem;
+            border-radius: var(--radius-full);
             text-decoration: none;
-            font-weight: 600;
+            font-weight: 700;
             margin-top: 1rem;
-            transition: transform 0.2s;
+            transition: all var(--transition-smooth);
+            box-shadow: 0 4px 10px rgba(37, 211, 102, 0.3);
         }
-        .whatsapp-link:hover { transform: scale(1.05); }
+        
+        .whatsapp-link:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(37, 211, 102, 0.4); 
+        }
+
+        .not-found {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+        .not-found h2 { color: var(--danger); margin-bottom: 0.75rem; font-size: 1.5rem; }
     </style>
 </head>
 <body>
     <div class="tracking-header">
         <h1>🥖 Panadería Amada</h1>
-        <p>Seguimiento de tu pedido</p>
+        <p>Seguimiento de tu pedido en tiempo real</p>
     </div>
 
     <div class="tracking-container">
         {% if factura %}
         <div class="tracking-card">
-            <div class="tracking-card-header">
-                <h2>Factura {{ factura.numero_factura }}</h2>
-            </div>
-
+            
             {% if factura.es_encargo %}
             <!-- Timeline de estado -->
             {% set estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado'] %}
@@ -217,7 +293,7 @@
                 {% for estado in estados %}
                 <div class="status-step">
                     <div class="status-dot {% if loop.index0 < idx_actual %}active{% elif loop.index0 == idx_actual %}current{% endif %}">
-                        {% if loop.index0 < idx_actual %}✓{% else %}{{ loop.index }}{% endif %}
+                        {% if loop.index0 < idx_actual %}✓{% elif loop.index0 == idx_actual %}•{% else %}{{ loop.index }}{% endif %}
                     </div>
                     <span class="status-label {% if loop.index0 < idx_actual %}active-label{% elif loop.index0 == idx_actual %}current-label{% endif %}">
                         {{ estado }}
@@ -227,9 +303,12 @@
             </div>
             {% endif %}
 
+            <div class="tracking-card-header">
+                <h2>Factura: {{ factura.numero_factura }}</h2>
+            </div>
             <div class="tracking-card-body">
                 <div class="info-row">
-                    <span class="info-label">Fecha:</span>
+                    <span class="info-label">Fecha del Pedido:</span>
                     <span class="info-value">{{ factura.fecha }} - {{ factura.hora }}</span>
                 </div>
 
@@ -238,33 +317,33 @@
                     <span class="info-label">Cliente:</span>
                     <span class="info-value">{{ factura.encargo_detalles.get('nombre_cliente', 'N/A') }}</span>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">Fecha Entrega:</span>
-                    <span class="info-value">{{ factura.encargo_detalles.fecha_entrega }}</span>
+                <div class="info-row" style="background: var(--danger-bg); padding: 0.75rem; border-radius: var(--radius-sm); border: none; margin-top: 0.5rem;">
+                    <span class="info-label" style="color: var(--danger);">Fecha de Entrega:</span>
+                    <span class="info-value" style="color: var(--danger);">{{ factura.encargo_detalles.fecha_entrega }}</span>
                 </div>
                 {% endif %}
             </div>
 
             <!-- Productos -->
-            <div class="tracking-card-header">
-                <h2>Productos</h2>
+            <div class="tracking-card-header" style="background: white; border-top: 1px solid var(--border);">
+                <h2>Resumen de Productos</h2>
             </div>
-            <div class="tracking-card-body">
+            <div class="tracking-card-body" style="background: #faf8f5;">
                 {% for item in factura.productos %}
-                <div style="margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px dashed var(--border);">
-                    <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.95rem;">
-                        <span>{{ item.nombre.split(' (')[0] }} x{{ item.cantidad }}</span>
-                        <span>${{ "%.2f"|format(item.subtotal) }}</span>
+                <div class="product-item">
+                    <div class="product-main">
+                        <span>{{ item.nombre.split(' (')[0] }} <span style="color: var(--text-muted); font-weight: 500;">x{{ item.cantidad }}</span></span>
+                        <span>C${{ "%.2f"|format(item.subtotal) }}</span>
                     </div>
                     {% if item.detalle_ingredientes and item.detalle_ingredientes.ingredientes %}
-                    <div style="margin-top: 0.4rem; padding-left: 0.75rem; border-left: 3px solid var(--primary);">
-                        <div style="font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem; font-weight: 600;">
-                            Precio base: ${{ "%.2f"|format(item.detalle_ingredientes.precio_base) }}
+                    <div class="product-addons">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem; font-weight: 600;">
+                            Base: C${{ "%.2f"|format(item.detalle_ingredientes.precio_base) }}
                         </div>
                         {% for ing in item.detalle_ingredientes.ingredientes %}
-                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text); padding: 0.15rem 0;">
+                        <div class="addon-row">
                             <span>+ {{ ing.nombre }}</span>
-                            <span style="color: var(--success); font-weight: 600;">+${{ "%.2f"|format(ing.precio) }}</span>
+                            <span style="color: var(--primary-color); font-weight: 700;">+C${{ "%.2f"|format(ing.precio) }}</span>
                         </div>
                         {% endfor %}
                     </div>
@@ -274,32 +353,29 @@
             </div>
 
             <!-- Totales -->
-            <div class="tracking-card-header">
-                <h2>Resumen</h2>
-            </div>
-            <div class="tracking-card-body">
+            <div class="tracking-card-body" style="border-top: 1px dashed var(--border);">
                 <div class="info-row">
                     <span class="info-label">Subtotal:</span>
-                    <span class="info-value">${{ "%.2f"|format(factura.subtotal) }}</span>
+                    <span class="info-value">C${{ "%.2f"|format(factura.subtotal) }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">IVA (15%):</span>
-                    <span class="info-value">${{ "%.2f"|format(factura.iva) }}</span>
+                    <span class="info-value">C${{ "%.2f"|format(factura.iva) }}</span>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">Total:</span>
-                    <span class="info-value" style="font-size: 1.2rem; color: var(--primary);">${{ "%.2f"|format(factura.total) }}</span>
+                <div class="info-row" style="margin-top: 0.5rem; padding-top: 1rem; border-top: 2px solid var(--border);">
+                    <span class="info-label" style="font-size: 1.1rem; color: var(--secondary); font-weight: 700;">Total a Pagar:</span>
+                    <span class="info-value" style="font-size: 1.4rem; color: var(--secondary); font-family: 'Outfit', sans-serif;">C${{ "%.2f"|format(factura.total) }}</span>
                 </div>
 
                 {% if factura.es_encargo and factura.encargo_detalles %}
-                <div style="margin-top: 1rem; text-align: center;">
-                    <div class="info-row">
+                <div class="saldo-section">
+                    <div class="info-row" style="border: none; padding: 0;">
                         <span class="info-label">Adelanto Pagado:</span>
-                        <span class="adelanto-badge">${{ "%.2f"|format(factura.encargo_detalles.adelanto) }}</span>
+                        <span class="adelanto-badge">C${{ "%.2f"|format(factura.encargo_detalles.adelanto) }}</span>
                     </div>
-                    <div style="margin-top: 0.75rem;">
-                        <span class="info-label">Saldo Pendiente:</span>
-                        <div class="saldo-badge">${{ "%.2f"|format(factura.encargo_detalles.saldo) }}</div>
+                    <div style="margin-top: 1rem;">
+                        <span class="info-label" style="display: block; text-align: center;">Saldo Pendiente</span>
+                        <div class="saldo-badge">C${{ "%.2f"|format(factura.encargo_detalles.saldo) }}</div>
                     </div>
                 </div>
                 {% endif %}
@@ -307,7 +383,8 @@
         </div>
 
         <div class="tracking-footer">
-            <p>¿Tienes preguntas sobre tu pedido?</p>
+            <p style="margin-bottom: 0.5rem; font-weight: 600; color: var(--secondary);">¿Tienes preguntas sobre tu pedido?</p>
+            <p>Comunícate directamente con nosotros y te ayudaremos con gusto.</p>
             <a href="https://wa.me/50400000000?text=Hola%2C%20consulto%20sobre%20mi%20factura%20{{ factura.numero_factura }}" target="_blank" class="whatsapp-link">
                 💬 Contactar por WhatsApp
             </a>
@@ -317,10 +394,10 @@
         <div class="tracking-card">
             <div class="not-found">
                 <h2>❌ Encargo no encontrado</h2>
-                <p>El código <strong>{{ codigo }}</strong> no corresponde a ninguna factura registrada.</p>
-                <p style="margin-top: 1rem;">Verifica el código QR o contacta a la panadería.</p>
+                <p style="color: var(--text-muted); margin-bottom: 2rem;">El código <strong>{{ codigo }}</strong> no corresponde a ninguna factura registrada en nuestro sistema.</p>
+                <p>Verifica el código QR o contacta a la panadería.</p>
                 <a href="https://wa.me/50400000000?text=Hola%2C%20no%20puedo%20ver%20mi%20encargo%20con%20código%20{{ codigo }}" target="_blank" class="whatsapp-link">
-                    💬 Contactar por WhatsApp
+                    💬 Contactar Soporte
                 </a>
             </div>
         </div>

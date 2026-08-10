@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Catálogo | Panadería Amada</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* Ambient background shapes for premium feel */
+        .ambient-shape { position: absolute; border-radius: 50%; filter: blur(80px); z-index: -1; opacity: 0.6; }
+        .shape-1 { width: 400px; height: 400px; background-color: rgba(212, 175, 55, 0.25); top: -100px; left: -100px; animation: float 10s ease-in-out infinite alternate; }
+        .shape-2 { width: 500px; height: 500px; background-color: rgba(78, 44, 29, 0.15); bottom: 10%; right: -100px; animation: float 15s ease-in-out infinite alternate-reverse; }
+        .shape-3 { width: 300px; height: 300px; background-color: rgba(16, 185, 129, 0.1); top: 40%; left: 20%; animation: float 12s ease-in-out infinite alternate; }
+        @keyframes float { 0% { transform: translateY(0) scale(1); } 100% { transform: translateY(40px) scale(1.05); } }
+        @keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
+
+        body { background: linear-gradient(135deg, var(--background) 0%, #F5F5DC 100%); position: relative; z-index: 0; overflow-x: hidden; overflow-y: auto; }
+        
+        .app-header { background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 10px 30px rgba(78, 44, 29, 0.05); z-index: 10; position: sticky; top: 0; }
+        
+        .btn-return { background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.9) 100%); color: var(--secondary); border: 1px solid rgba(255,255,255,0.9); padding: 0.75rem 1.5rem; border-radius: 12px; font-weight: 600; text-decoration: none; box-shadow: 0 4px 15px rgba(78, 44, 29, 0.08); transition: all 0.3s ease; backdrop-filter: blur(10px); }
+        .btn-return:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(78, 44, 29, 0.12); color: var(--primary-color); }
+
+        .admin-layout { padding: 2rem; max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
+        
+        .panel { 
+            background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.8); padding: 1.8rem; border-radius: 16px; box-shadow: 0 12px 24px rgba(78, 44, 29, 0.06); margin-bottom: 2rem;
+            opacity: 0; transform: translateY(20px); animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        
+        .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 2px solid rgba(62, 39, 35, 0.1); padding-bottom: 1rem; }
+        .btn-new { background: linear-gradient(135deg, var(--primary-color), var(--primary-hover)); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3); transition: all 0.3s; }
+        .btn-new:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(212, 175, 55, 0.4); }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 1rem; color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; border-bottom: 1px solid rgba(62, 39, 35, 0.1); }
+        td { padding: 1rem; border-bottom: 1px dashed rgba(62, 39, 35, 0.1); vertical-align: middle; transition: background 0.2s; }
+        tr:hover td { background: rgba(255,255,255,0.5); }
+        .badge-active { background: rgba(16, 185, 129, 0.15); color: #065f46; padding: 0.35rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-inactive { background: rgba(239, 68, 68, 0.15); color: #991b1b; padding: 0.35rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .btn-toggle { background: rgba(255,255,255,0.8); border: 1px solid var(--border); padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--secondary); transition: all 0.2s; }
+        .btn-toggle:hover { background: white; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        
+        /* Los estilos del modal (modal-overlay, modal-content) ahora vienen de style.css */
+        .modal-content { max-width: 500px !important; }
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--secondary); }
+        .form-group input, .form-group select { width: 100%; padding: 0.75rem; border: 1px solid rgba(62, 39, 35, 0.2); border-radius: 10px; background: rgba(255,255,255,0.8); transition: border-color 0.2s; font-family: inherit; }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--primary-color); background: white; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem; }
+    </style>
+</head>
+<body>
+    
+    <div class="ambient-shape shape-1"></div>
+    <div class="ambient-shape shape-2"></div>
+    <div class="ambient-shape shape-3"></div>
+
+    {% include 'admin/navbar.html' %}
+
+    <main class="admin-layout">
+        <div class="panel">
+            <div class="panel-header">
+                <h2 style="color: var(--primary-color);">Productos y Pasteles</h2>
+                <button class="btn-new" onclick="abrirModal()">+ Nuevo Producto</button>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Categoría</th>
+                        <th>Precio (C$)</th>
+                        <th>Descuento</th>
+                        <th>Estado</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in productos %}
+                    <tr>
+                        <td>#{{ p.id }}</td>
+                        <td style="font-weight: 500;">{{ p.nombre }}</td>
+                        <td>{{ p.categoria }}</td>
+                        <td style="font-weight: 600;">C${{ "%.2f"|format(p.precio) }}</td>
+                        <td>
+                            {% if p.descuento > 0 %}
+                            <span style="color: var(--danger); font-weight: 700;">-{{ "%.0f"|format(p.descuento) }}%</span>
+                            {% else %}
+                            <span style="color: var(--text-muted);">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if p.activo %}
+                                <span class="badge-active">Activo</span>
+                            {% else %}
+                                <span class="badge-inactive">Inactivo (Oculto)</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn-toggle" onclick="toggleProducto({{ p.id }})">
+                                {% if p.activo %}Desactivar{% else %}Activar{% endif %}
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <div id="modal-nuevo-producto" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 1.5rem; color: var(--primary-color);">Agregar Producto</h2>
+            
+            <div class="form-group">
+                <label>Nombre del Producto</label>
+                <input type="text" id="np-nombre" placeholder="Ej. Tarta de Fresa" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Categoría</label>
+                <select id="np-categoria" required>
+                    <option value="" disabled selected>Seleccione...</option>
+                    {% for c in categorias %}
+                        <option value="{{ c.id }}">{{ c.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div style="display: flex; gap: 1rem;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Precio Base (C$)</label>
+                    <input type="number" id="np-precio" step="0.01" min="0" placeholder="Ej. 120.00" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Descuento (%)</label>
+                    <input type="number" id="np-descuento" step="1" min="0" max="100" placeholder="Ej. 10" value="0">
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button onclick="cerrarModal()" class="btn-toggle" style="background: transparent; border: none; font-weight: 500; cursor: pointer;">Cancelar</button>
+                <button onclick="guardarProducto()" class="btn-new">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenedor para notificaciones -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script>
+        function abrirModal() {
+            document.getElementById('modal-nuevo-producto').classList.remove('hidden');
+        }
+
+        function cerrarModal() {
+            document.getElementById('modal-nuevo-producto').classList.add('hidden');
+            document.getElementById('np-nombre').value = '';
+            document.getElementById('np-precio').value = '';
+            document.getElementById('np-categoria').value = '';
+            document.getElementById('np-descuento').value = '0';
+        }
+
+        async function guardarProducto() {
+            const nombre = document.getElementById('np-nombre').value.trim();
+            const precio = document.getElementById('np-precio').value;
+            const categoria_id = document.getElementById('np-categoria').value;
+            const descuento = document.getElementById('np-descuento').value || 0;
+
+            if (!nombre || !precio || !categoria_id) {
+                alert('Por favor completa todos los campos requeridos.');
+                return;
+            }
+
+            try {
+                const res = await fetch('/admin/api/productos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nombre, precio, categoria_id, descuento })
+                });
+
+                if (res.ok) {
+                    location.reload();
+                } else {
+                    alert('Error al guardar producto');
+                }
+            } catch (err) {
+                alert('Error de conexión');
+            }
+        }
+
+        async function toggleProducto(id) {
+            try {
+                const res = await fetch(`/admin/api/productos/${id}/toggle`, {
+                    method: 'POST'
+                });
+                if (res.ok) {
+                    location.reload();
+                } else {
+                    alert('Error al cambiar estado');
+                }
+            } catch (err) {
+                alert('Error de conexión');
+            }
+        }
+    </script>
+</body>
+</html>

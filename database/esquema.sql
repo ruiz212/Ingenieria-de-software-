@@ -111,6 +111,7 @@ CREATE TABLE Productos (
     CategoriaID INT NOT NULL,
     PrecioBase DECIMAL(10, 2) NOT NULL,
     EsFicticio BIT NOT NULL DEFAULT 0,
+    PorcentajeDescuento DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
     ImagenUrl VARCHAR(255) NULL,
     Activo BIT NOT NULL DEFAULT 1,
     CreadoEn DATETIME NOT NULL DEFAULT GETDATE(),

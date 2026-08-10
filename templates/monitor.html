@@ -5,19 +5,183 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitor de Producción | Panadería Amada</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body style="background: var(--background);">
+    <style>
+        .monitor-layout {
+            padding: 2.5rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1.5rem;
+            position: relative;
+            z-index: 1;
+        }
 
-    <header class="monitor-header">
-        <h1>🧑‍🍳 Monitor de Producción</h1>
-        <a href="/" style="text-decoration: none; color: var(--text); font-weight: 600;">← Volver al POS</a>
+        .kanban-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            transition: all var(--transition-smooth);
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        .kanban-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
+            border-color: #d1c7b8;
+        }
+
+        /* Indicador visual en borde superior dependiendo del estado */
+        .kanban-card[data-estado="Pendiente"] { border-top: 4px solid var(--danger); }
+        .kanban-card[data-estado="En Proceso"] { border-top: 4px solid var(--warning); }
+        .kanban-card[data-estado="Listo"] { border-top: 4px solid var(--success); }
+        .kanban-card[data-estado="Entregado"] { border-top: 4px solid var(--info); }
+
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px dashed var(--border);
+        }
+
+        .order-invoice { 
+            font-weight: 800; 
+            color: var(--secondary); 
+            font-size: 1.1rem;
+            font-family: 'Outfit', sans-serif;
+        }
+        
+        .order-date { 
+            font-size: 0.8rem; 
+            color: var(--text-muted); 
+            font-weight: 500;
+        }
+
+        .order-customer { 
+            margin-bottom: 1.25rem; 
+            background: #faf8f5;
+            padding: 1rem;
+            border-radius: var(--radius-sm);
+        }
+
+        .order-customer strong { 
+            display: block; 
+            color: var(--secondary); 
+            font-size: 1rem; 
+            margin-bottom: 0.25rem;
+        }
+
+        .order-customer span { 
+            font-size: 0.85rem; 
+            color: var(--text-muted); 
+            display: block;
+        }
+
+        .delivery-date {
+            margin-top: 0.5rem;
+            display: inline-block;
+            background: var(--danger-bg);
+            color: var(--danger);
+            padding: 0.25rem 0.75rem;
+            border-radius: var(--radius-full);
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .order-products {
+            flex-grow: 1;
+            margin-bottom: 1.5rem;
+        }
+
+        .order-products ul { 
+            list-style: none; 
+            font-size: 0.95rem; 
+        }
+
+        .order-products li { 
+            padding: 0.5rem 0; 
+            border-bottom: 1px solid var(--border); 
+            color: var(--text-main); 
+        }
+
+        .order-products li:last-child { border-bottom: none; }
+
+        .product-name {
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .product-addons {
+            font-size: 0.85rem; 
+            color: var(--text-muted); 
+            padding-left: 0.5rem; 
+            margin-top: 0.25rem;
+            border-left: 2px solid var(--primary-color);
+        }
+
+        .status-select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            font-size: 0.95rem;
+            outline: none;
+            cursor: pointer;
+            background: var(--background);
+            color: var(--secondary);
+            transition: all var(--transition-fast);
+        }
+
+        .status-select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 4px var(--ring);
+        }
+        
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 4rem;
+            background: white;
+            border-radius: var(--radius-lg);
+            border: 1px dashed #d1c7b8;
+        }
+
+        .empty-state h2 {
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-bg">
+        <div class="ambient-shape shape-1"></div>
+        <div class="ambient-shape shape-2"></div>
+    </div>
+
+    <header class="app-header">
+        <div>
+            <a href="/" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 0.75rem;">
+                <span style="font-size: 1.8rem;">🧑‍🍳</span>
+                <h1 style="margin: 0;">Monitor de Producción</h1>
+            </a>
+            <div style="color: var(--text-muted); font-weight: 500; margin-top: 0.25rem; font-size: 0.9rem;">
+                Usuario: {{ user.nombre_completo }}
+            </div>
+        </div>
+        <a href="/logout" class="btn btn-outline" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">Cerrar Sesión</a>
     </header>
 
     <div class="toast-container" id="toast-container"></div>
 
-    <div class="monitor-grid">
+    <main class="monitor-layout">
         {% for encargo in encargos %}
-        <div class="order-card" id="card-{{ encargo.codigo_seguimiento }}">
+        <div class="kanban-card" id="card-{{ encargo.codigo_seguimiento }}" data-estado="{{ encargo.encargo_detalles.estado | default('Pendiente') }}">
             <div class="order-header">
                 <span class="order-invoice">{{ encargo.numero_factura }}</span>
                 <span class="order-date">{{ encargo.fecha }} {{ encargo.hora }}</span>
@@ -25,17 +189,20 @@
             
             <div class="order-customer">
                 <strong>{{ encargo.encargo_detalles.nombre_cliente }}</strong>
-                <span>Tel: {{ encargo.encargo_detalles.telefono }}</span><br>
-                <span style="color: var(--danger); font-weight: 600;">Entrega: {{ encargo.encargo_detalles.fecha_entrega }}</span>
+                <span>Tel: {{ encargo.encargo_detalles.telefono }}</span>
+                <span class="delivery-date">Entrega: {{ encargo.encargo_detalles.fecha_entrega }}</span>
             </div>
 
             <div class="order-products">
                 <ul>
                     {% for item in encargo.productos %}
                     <li>
-                        <div style="font-weight: 600;">{{ item.nombre.split(' (')[0] }} x{{ item.cantidad }}</div>
+                        <div class="product-name">
+                            <span>{{ item.nombre.split(' (')[0] }}</span>
+                            <span style="font-weight: 800; color: var(--primary-color);">x{{ item.cantidad }}</span>
+                        </div>
                         {% if item.detalle_ingredientes and item.detalle_ingredientes.ingredientes %}
-                        <div style="font-size: 0.8rem; color: var(--muted); padding-left: 10px; margin-top: 5px;">
+                        <div class="product-addons">
                             {% for ing in item.detalle_ingredientes.ingredientes %}
                             <div>+ {{ ing.nombre }}</div>
                             {% endfor %}
@@ -47,12 +214,11 @@
             </div>
 
             <div class="order-status-actions">
-                <label for="status-{{ encargo.codigo_seguimiento }}">Estado Actual:</label>
-                <select class="status-select" 
+                <label for="status-{{ encargo.codigo_seguimiento }}" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem; font-weight: 600;">Estado Actual</label>
+                <select class="status-select form-select" 
                         id="status-{{ encargo.codigo_seguimiento }}" 
                         data-codigo="{{ encargo.codigo_seguimiento }}" 
-                        data-status="{{ encargo.encargo_detalles.estado | default('Pendiente') }}"
-                        onchange="cambiarEstado('{{ encargo.codigo_seguimiento }}', this.value, this)">
+                        onchange="cambiarEstado('{{ encargo.codigo_seguimiento }}', this.value, this, this.closest('.kanban-card'))">
                     
                     {% set estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado'] %}
                     {% set estado_actual = encargo.encargo_detalles.estado | default('Pendiente') %}
@@ -65,21 +231,20 @@
             </div>
         </div>
         {% else %}
-        <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--muted);">
+        <div class="empty-state">
             <h2>No hay encargos activos</h2>
-            <p>Los pasteles y pedidos que registres en el POS aparecerán aquí.</p>
+            <p style="color: var(--text-muted);">Los pedidos que registres aparecerán aquí automáticamente.</p>
         </div>
         {% endfor %}
-    </div>
+    </main>
 
     <script>
-        // Actualizar color del select al cargar
-        document.querySelectorAll('.status-select').forEach(select => {
-            select.setAttribute('data-status', select.value);
-        });
-
-        async function cambiarEstado(codigo, nuevoEstado, selectElement) {
+        async function cambiarEstado(codigo, nuevoEstado, selectElement, cardElement) {
+            const estadoAnterior = cardElement.getAttribute('data-estado');
             try {
+                // Actualizar visualmente primero
+                cardElement.setAttribute('data-estado', nuevoEstado);
+
                 const response = await fetch(`/api/seguimiento/${codigo}/estado`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -89,30 +254,37 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showToast(`Estado actualizado a: ${nuevoEstado}`);
-                    selectElement.setAttribute('data-status', nuevoEstado);
+                    showToast(`Estado actualizado a: ${nuevoEstado}`, 'success');
                 } else {
-                    showToast(data.error || 'Error al actualizar', true);
-                    // Revertir color/valor si falló
-                    selectElement.value = selectElement.getAttribute('data-status');
+                    showToast(data.error || 'Error al actualizar', 'error');
+                    // Revertir si falló
+                    selectElement.value = estadoAnterior;
+                    cardElement.setAttribute('data-estado', estadoAnterior);
                 }
             } catch (error) {
                 console.error(error);
-                showToast('Error de conexión', true);
+                showToast('Error de conexión', 'error');
+                selectElement.value = estadoAnterior;
+                cardElement.setAttribute('data-estado', estadoAnterior);
             }
         }
 
-        function showToast(message, isError = false) {
+        function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
-            toast.className = `toast ${isError ? 'error' : ''}`;
-            toast.textContent = message;
-            if (isError) toast.style.backgroundColor = 'var(--danger)';
+            toast.className = `toast ${type}`;
+            
+            // Icon
+            const icon = type === 'success' 
+                ? '<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
+                : '<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            
+            toast.innerHTML = `${icon} <span>${message}</span>`;
             
             container.appendChild(toast);
             setTimeout(() => {
                 toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 300);
+                setTimeout(() => toast.remove(), 400);
             }, 3000);
         }
     </script>

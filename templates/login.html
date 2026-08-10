@@ -4,247 +4,155 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panadería Amada | Inicio de Sesión</title>
-    <!-- Google Fonts: Outfit for modern look -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
-        :root {
-            --color-ivory: #FFFFF0;
-            --color-ivory-dark: #F5F5DC;
-            --color-chocolate: #4E2C1D;
-            --color-chocolate-light: #6E422C;
-            --color-gold: #D4AF37;
-            --color-gold-hover: #F2CA3D;
-            --color-error: #D9534F;
-        }
-
         body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Outfit', sans-serif;
-            background: linear-gradient(135deg, var(--color-ivory) 0%, var(--color-ivory-dark) 100%);
             height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
-            position: relative;
+            background: transparent; /* Overridden by ambient-bg */
         }
 
-        /* Ambient background shapes for premium feel */
-        .ambient-shape {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(80px);
-            z-index: 0;
-            opacity: 0.6;
-        }
-        .shape-1 {
-            width: 400px;
-            height: 400px;
-            background-color: rgba(212, 175, 55, 0.2); /* Gold */
-            top: -100px;
-            left: -100px;
-            animation: float 10s ease-in-out infinite alternate;
-        }
-        .shape-2 {
-            width: 500px;
-            height: 500px;
-            background-color: rgba(78, 44, 29, 0.15); /* Chocolate */
-            bottom: -150px;
-            right: -100px;
-            animation: float 15s ease-in-out infinite alternate-reverse;
+        .login-wrapper {
+            width: 100%;
+            max-width: 420px;
+            padding: 2rem;
+            z-index: 10;
         }
 
-        @keyframes float {
-            0% { transform: translateY(0) scale(1); }
-            100% { transform: translateY(30px) scale(1.05); }
-        }
-
-        /* Glassmorphism Container */
-        .login-container {
-            position: relative;
-            z-index: 1;
-            background: rgba(255, 255, 255, 0.4);
+        .login-card {
+            background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            border-radius: 24px;
-            padding: 3rem;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 20px 40px rgba(78, 44, 29, 0.1);
-            animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-            opacity: 0;
-            transform: translateY(20px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            border-radius: var(--radius-lg);
+            padding: 3rem 2.5rem;
+            box-shadow: var(--shadow-lg), 0 0 40px rgba(217, 119, 6, 0.1);
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        @keyframes fadeIn {
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         .logo-area {
             text-align: center;
-            margin-bottom: 2rem;
-        }
-
-        .logo-area h1 {
-            color: var(--color-chocolate);
-            margin: 0;
-            font-size: 2.5rem;
-            font-weight: 700;
-            letter-spacing: -1px;
-        }
-
-        .logo-area p {
-            color: var(--color-chocolate-light);
-            margin: 5px 0 0 0;
-            font-size: 1rem;
-            font-weight: 300;
+            margin-bottom: 2.5rem;
         }
 
         .logo-icon {
             font-size: 3rem;
             margin-bottom: 0.5rem;
-            color: var(--color-gold);
-            text-shadow: 0 4px 10px rgba(212, 175, 55, 0.3);
+            display: inline-block;
+            animation: floatLogo 6s ease-in-out infinite;
         }
 
-        /* Form elements */
-        .input-group {
-            margin-bottom: 1.5rem;
-            position: relative;
+        @keyframes floatLogo {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
         }
 
-        .input-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--color-chocolate);
-            font-size: 0.9rem;
-            font-weight: 600;
+        .logo-area h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.25rem;
+            color: var(--secondary);
+            font-weight: 800;
         }
 
-        .input-group input {
+        .logo-area p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .btn-login {
             width: 100%;
-            box-sizing: border-box;
-            padding: 1rem;
-            border-radius: 12px;
-            border: 2px solid rgba(255, 255, 255, 0.8);
-            background: rgba(255, 255, 255, 0.6);
-            font-family: 'Outfit', sans-serif;
+            padding: 0.85rem;
             font-size: 1rem;
-            color: var(--color-chocolate);
-            transition: all 0.3s ease;
+            margin-top: 1rem;
+            letter-spacing: 0.02em;
         }
 
-        .input-group input:focus {
-            outline: none;
-            border-color: var(--color-gold);
-            background: rgba(255, 255, 255, 0.9);
-            box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.2);
-        }
-
-        .login-btn {
-            width: 100%;
-            padding: 1rem;
-            border: none;
-            border-radius: 12px;
-            background: linear-gradient(135deg, var(--color-gold) 0%, #b8962d 100%);
-            color: var(--color-chocolate);
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.1rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 8px 20px rgba(212, 175, 55, 0.4);
-        }
-
-        .login-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 25px rgba(212, 175, 55, 0.5);
-            background: linear-gradient(135deg, var(--color-gold-hover) 0%, var(--color-gold) 100%);
-        }
-
-        .login-btn:active {
-            transform: translateY(1px);
-        }
-
-        /* Flash Messages */
         .flash-messages {
             margin-bottom: 1.5rem;
             list-style: none;
             padding: 0;
-            text-align: center;
+            animation: fadeIn 0.3s ease;
         }
 
         .flash-message {
-            background: rgba(217, 83, 79, 0.1);
-            color: var(--color-error);
-            padding: 0.8rem;
-            border-radius: 8px;
-            border: 1px solid rgba(217, 83, 79, 0.2);
+            background: var(--danger-bg);
+            color: var(--danger);
+            padding: 0.85rem 1rem;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(239, 68, 68, 0.2);
             font-size: 0.9rem;
+            font-weight: 500;
             margin-bottom: 0.5rem;
-            animation: shake 0.5s;
-        }
-
-        .flash-message.warning {
-            background: rgba(212, 175, 55, 0.1);
-            color: var(--color-chocolate);
-            border-color: rgba(212, 175, 55, 0.3);
-        }
-
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            20%, 60% { transform: translateX(-5px); }
-            40%, 80% { transform: translateX(5px); }
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .footer {
             margin-top: 2rem;
             text-align: center;
-            font-size: 0.8rem;
-            color: var(--color-chocolate-light);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
         }
     </style>
 </head>
 <body>
-    <div class="ambient-shape shape-1"></div>
-    <div class="ambient-shape shape-2"></div>
+    <!-- Premium Ambient Background -->
+    <div class="ambient-bg">
+        <div class="ambient-shape shape-1"></div>
+        <div class="ambient-shape shape-2"></div>
+    </div>
 
-    <div class="login-container">
-        <div class="logo-area">
-            <div class="logo-icon">🥐</div>
-            <h1>Amada</h1>
-            <p>Sistema de Gestión Profesional</p>
-        </div>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <ul class="flash-messages">
-                {% for category, message in messages %}
-                    <li class="flash-message {{ category }}">{{ message }}</li>
-                {% endfor %}
-                </ul>
-            {% endif %}
-        {% endwith %}
-
-        <form method="POST" action="/login">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="input-group">
-                <label for="username">Usuario</label>
-                <input type="text" id="username" name="username" required autocomplete="username" placeholder="ej. amada">
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="logo-area">
+                <div class="logo-icon">🥐</div>
+                <h1>Panadería Amada</h1>
+                <p>Acceso al panel de administración</p>
             </div>
 
-            <div class="input-group">
-                <label for="password">Contraseña</label>
-                <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <ul class="flash-messages">
+                    {% for category, message in messages %}
+                        <li class="flash-message">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            {{ message }}
+                        </li>
+                    {% endfor %}
+                    </ul>
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="/login">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="form-group">
+                    <label for="username">Usuario</label>
+                    <input type="text" id="username" name="username" class="form-control" required autocomplete="username" placeholder="ej. amada">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" name="password" class="form-control" required autocomplete="current-password" placeholder="••••••••">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-login">Iniciar Sesión</button>
+            </form>
+
+            <div class="footer">
+                &copy; 2026 Panadería Amada.
             </div>
-
-            <button type="submit" class="login-btn">Acceder al Sistema</button>
-        </form>
-
-        <div class="footer">
-            &copy; 2026 Panadería Amada. Acceso Restringido.
         </div>
     </div>
 </body>

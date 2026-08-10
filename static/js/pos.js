@@ -11,10 +11,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const id = card.dataset.id;
             const nombre = card.dataset.nombre;
-            const precio = parseFloat(card.dataset.precio);
+            let precio = parseFloat(card.dataset.precio);
             const categoria = card.dataset.categoria;
+            const descuento = parseFloat(card.dataset.descuento) || 0;
 
-            if (categoria === 'Encargo') {
+            if (descuento > 0) {
+                precio = precio - (precio * descuento / 100);
+            }
+
+            if (categoria === 'Reposteria') {
                 abrirModalIngredientes(id, nombre, precio, categoria);
             } else {
                 agregarAlCarrito(id, nombre, precio, categoria);
@@ -69,8 +74,14 @@ document.addEventListener('DOMContentLoaded', () => {
             baseEncargoModal.classList.add('hidden');
             const id = option.dataset.id;
             const nombre = option.dataset.nombre;
-            const precio = parseFloat(option.dataset.precio);
+            let precio = parseFloat(option.dataset.precio);
             const categoria = option.dataset.categoria;
+            const descuento = parseFloat(option.dataset.descuento) || 0;
+
+            if (descuento > 0) {
+                precio = precio - (precio * descuento / 100);
+            }
+
             abrirModalIngredientes(id, nombre, precio, categoria);
         });
     });
@@ -205,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputTotalModal = document.getElementById('modal-total');
 
     btnFacturar.addEventListener('click', () => {
-        const tieneEncargos = carrito.some(item => item.categoria === 'Encargo');
+        const tieneEncargos = carrito.some(item => item.categoria === 'Reposteria');
         
         if (tieneEncargos) {
             inputTotalModal.value = `$${calcularTotal().toFixed(2)}`;

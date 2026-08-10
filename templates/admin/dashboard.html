@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Financiero | Panadería Amada</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .admin-layout { 
+            padding: 2rem; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+        }
+
+        .metrics-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); 
+            gap: 1.5rem; 
+            margin-bottom: 2rem; 
+        }
+
+        .metric-card { 
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 1.5rem; 
+            border-radius: 8px; 
+            box-shadow: var(--shadow-sm); 
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metric-title { 
+            color: var(--text-muted); 
+            font-size: 0.875rem; 
+            font-weight: 500; 
+            margin-bottom: 0.5rem; 
+        }
+
+        .metric-value { 
+            font-size: 2rem; 
+            font-weight: 700; 
+            color: var(--secondary); 
+            letter-spacing: -0.025em;
+        }
+
+        .panels-grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 1.5rem; 
+        }
+
+        .panel { 
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 1.5rem; 
+            border-radius: 8px; 
+            box-shadow: var(--shadow-sm);
+        }
+
+        .panel h3 { 
+            margin-bottom: 1.25rem; 
+            color: var(--secondary); 
+            font-size: 1.1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .top-product-row { 
+            display: flex; 
+            justify-content: space-between; 
+            padding: 0.75rem 0; 
+            border-bottom: 1px solid var(--border); 
+            font-size: 0.9rem;
+        }
+        .top-product-row:last-child { border-bottom: none; }
+        
+        .turno-row { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding: 1rem; 
+            background: #f9fafb; 
+            border-radius: 6px; 
+            margin-bottom: 0.75rem; 
+            border: 1px solid var(--border);
+        }
+
+        .status-badge { 
+            background: #d1fae5; 
+            color: #065f46; 
+            padding: 0.25rem 0.6rem; 
+            border-radius: 4px; 
+            font-size: 0.75rem; 
+            font-weight: 600; 
+            border: 1px solid #a7f3d0;
+        }
+        
+        .btn-return {
+            background: white;
+            color: var(--text-main); 
+            border: 1px solid var(--border); 
+            padding: 0.5rem 1rem; 
+            border-radius: 6px; 
+            font-weight: 500; 
+            font-size: 0.875rem;
+            text-decoration: none;
+            box-shadow: var(--shadow-sm);
+            transition: background 0.15s;
+        }
+        .btn-return:hover {
+            background: #f9fafb;
+        }
+    </style>
+</head>
+<body>
+    {% include 'admin/navbar.html' %}
+
+    <main class="admin-layout">
+        <div style="margin-bottom: 2rem;">
+            <h2 style="color: var(--secondary); font-size: 1.5rem;">Dashboard Financiero</h2>
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem;">Métricas en tiempo real y estado de las cajas.</p>
+        </div>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-title">Ingresos Brutos</div>
+                <div class="metric-value">C${{ "%.2f"|format(metricas.ventas_hoy) }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Ticket Promedio</div>
+                <div class="metric-value">C${{ "%.2f"|format(metricas.ticket_promedio) }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Tasa de Completitud</div>
+                <div class="metric-value" style="color: var(--success);">{{ metricas.tasa_completitud }}%</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; font-weight: 500;">{{ metricas.encargos_pendientes }} pendientes</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Cajas Activas</div>
+                <div class="metric-value">{{ metricas.turnos_activos|length }}</div>
+            </div>
+        </div>
+
+        <div class="panels-grid">
+            <div class="panel">
+                <h3>Productos Más Vendidos</h3>
+                {% if metricas.top_productos %}
+                    {% for p in metricas.top_productos %}
+                    <div class="top-product-row">
+                        <span style="font-weight: 500; color: var(--text-main);">{{ loop.index }}. {{ p.nombre }}</span>
+                        <span style="color: var(--text-muted); font-weight: 600;">{{ p.cantidad }} vendidos</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: 2rem;">No hay ventas registradas hoy aún.</p>
+                {% endif %}
+            </div>
+
+            <div class="panel">
+                <h3>Ventas por Categoría</h3>
+                {% if metricas.ventas_categoria %}
+                    {% for c in metricas.ventas_categoria %}
+                    <div class="top-product-row">
+                        <span style="font-weight: 500; color: var(--text-main);">{{ c.categoria }}</span>
+                        <span style="color: var(--text-main); font-weight: 600;">C${{ "%.2f"|format(c.total) }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: 2rem;">No hay datos de categorías.</p>
+                {% endif %}
+            </div>
+
+            <div class="panel" style="grid-column: 1 / -1;">
+                <h3>Arqueos y Turnos de Caja</h3>
+                {% if metricas.turnos_activos %}
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+                        {% for t in metricas.turnos_activos %}
+                        <div class="turno-row">
+                            <div>
+                                <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">{{ t.usuario }}</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Abierto a las {{ t.apertura }}</div>
+                            </div>
+                            <span class="status-badge">Caja Abierta</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem; text-align: left;">* Los arqueos se generarán automáticamente cuando las cajeras cierren su turno.</p>
+                {% else %}
+                    <p style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: 2rem;">No hay cajas abiertas en este momento.</p>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</body>
+</html>
