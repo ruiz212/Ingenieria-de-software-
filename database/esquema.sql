@@ -93,7 +93,13 @@ GO
 CREATE TABLE Clientes (
     ID INT PRIMARY KEY IDENTITY(1,1),
     Nombre VARCHAR(100) NOT NULL,
+    Apellidos VARCHAR(100) NULL,
     Telefono VARCHAR(20) NULL,
+    PasswordHash VARCHAR(255) NULL,
+    Genero VARCHAR(20) NULL,
+    FechaNacimiento DATE NULL,
+    RutaFotoPerfil VARCHAR(255) NULL,
+    EsInvitado BIT NOT NULL DEFAULT 1,
     NivelConfianzaID INT NOT NULL,
     TotalCompras INT NOT NULL DEFAULT 0,
     CreadoEn DATETIME NOT NULL DEFAULT GETDATE(),
@@ -305,6 +311,7 @@ CREATE INDEX IX_DetalleFacturas_FacturaID ON DetalleFacturas(FacturaID);
 CREATE INDEX IX_Pagos_FacturaID ON Pagos(FacturaID);
 CREATE INDEX IX_Encargos_Estado ON Encargos(Estado);
 CREATE INDEX IX_TurnosCaja_UsuarioID ON TurnosCaja(UsuarioID);
+CREATE UNIQUE NONCLUSTERED INDEX UQ_Clientes_Telefono ON Clientes(Telefono) WHERE Telefono IS NOT NULL;
 GO
 
 -- ============================================================
@@ -380,8 +387,8 @@ INSERT INTO Ingredientes (Nombre, PrecioAdicional) VALUES
 GO
 
 -- Cliente generico de mostrador
-INSERT INTO Clientes (Nombre, Telefono, NivelConfianzaID, TotalCompras) VALUES
-('Cliente General (Mostrador)', NULL, 1, 0);
+INSERT INTO Clientes (Nombre, Telefono, NivelConfianzaID, TotalCompras, EsInvitado) VALUES
+('Cliente General (Mostrador)', NULL, 1, 0, 1);
 GO
 
 PRINT '============================================================';
