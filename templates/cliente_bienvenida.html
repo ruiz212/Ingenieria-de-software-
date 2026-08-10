@@ -176,14 +176,12 @@
                 {% endif %}
             {% endwith %}
 
-            <a href="{{ url_for('auth.cliente_login') }}" class="btn-action btn-primary">Iniciar Sesión</a>
+            <a href="{{ url_for('auth.login') }}" class="btn-action btn-primary">Iniciar Sesión</a>
             <a href="{{ url_for('auth.cliente_registro') }}" class="btn-action btn-outline">Registrarse</a>
             <a href="{{ url_for('auth.cliente_invitado') }}" class="btn-action btn-ghost">Continuar como Invitado</a>
 
             <div class="footer">
                 &copy; 2026 Panadería Amada.
-                <br><br>
-                <a href="{{ url_for('auth.login') }}" style="color: var(--text-muted); font-size: 0.8rem; text-decoration: none;">Acceso Empleados</a>
             </div>
         </div>
     </div>

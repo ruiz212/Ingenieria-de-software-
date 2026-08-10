@@ -1,11 +1,14 @@
 # app/auth/routes.py
 # Rutas de autenticación: Login y Logout
 
-from flask import render_template, request, redirect, url_for, flash, current_app
+from flask import render_template, request, redirect, url_for, flash, current_app, session, jsonify
 from flask_login import login_user, login_required, logout_user, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 import os
+import random
+from app.extensions import csrf
+from twilio.rest import Client
 
 from app.auth import auth_bp
 from app.models import User, Cliente
@@ -19,17 +22,24 @@ def login():
         return redirect(url_for('hub.main_hub'))
 
     if request.method == 'POST':
-        username = request.form.get('username')
+        identificador = request.form.get('identificador')
         password = request.form.get('password')
 
-        user, password_hash = User.get_by_username(username)
-
+        # 1. Intentar como Administrador / Empleado
+        user, password_hash = User.get_by_username(identificador)
         if user and check_password_hash(password_hash, password):
             login_user(user, remember=True)
             next_page = request.args.get('next')
             return redirect(next_page or url_for('hub.main_hub'))
-        else:
-            flash("Usuario o contraseña incorrectos", "error")
+
+        # 2. Intentar como Cliente
+        cliente, password_hash_cli = Cliente.get_by_telefono(identificador)
+        if cliente and password_hash_cli and check_password_hash(password_hash_cli, password):
+            login_user(cliente, remember=True)
+            return redirect('/pos')
+
+        # Si ninguno coincide
+        flash("Usuario/Teléfono o contraseña incorrectos", "error")
 
     return render_template('login.html')
 
@@ -53,29 +63,11 @@ def cliente_bienvenida():
         return redirect(url_for('hub.main_hub'))
     return render_template('cliente_bienvenida.html')
 
-@auth_bp.route('/cliente/login', methods=['GET', 'POST'])
-def cliente_login():
-    """Pantalla de inicio de sesión para clientes."""
-    if current_user.is_authenticated:
-        return redirect('/pos')
 
-    if request.method == 'POST':
-        telefono = request.form.get('telefono')
-        password = request.form.get('password')
-
-        cliente, password_hash = Cliente.get_by_telefono(telefono)
-        
-        if cliente and password_hash and check_password_hash(password_hash, password):
-            login_user(cliente, remember=True)
-            return redirect('/pos')
-        else:
-            flash("Teléfono o contraseña incorrectos", "error")
-
-    return render_template('cliente_login.html')
 
 @auth_bp.route('/cliente/registro', methods=['GET', 'POST'])
 def cliente_registro():
-    """Formulario de registro para nuevos clientes."""
+    """Formulario de registro para nuevos clientes (multi-paso con SMS)."""
     if current_user.is_authenticated:
         return redirect('/pos')
 
@@ -86,6 +78,11 @@ def cliente_registro():
         password = request.form.get('password')
         genero = request.form.get('genero')
         fecha_nacimiento = request.form.get('fecha_nacimiento')
+        
+        # Validar que el teléfono fue verificado por SMS
+        if not session.get('telefono_verificado') or session.get('sms_phone') != telefono:
+            flash("Debes verificar tu número de teléfono por SMS antes de registrarte.", "error")
+            return redirect(url_for('auth.cliente_registro'))
         
         foto = request.files.get('foto')
         ruta_foto = None
@@ -122,6 +119,11 @@ def cliente_registro():
         conn.commit()
         conn.close()
         
+        # Limpiar sesión tras registro exitoso
+        session.pop('sms_code', None)
+        session.pop('sms_phone', None)
+        session.pop('telefono_verificado', None)
+
         # Iniciar sesión automáticamente
         cliente_nuevo, _ = Cliente.get_by_telefono(telefono)
         if cliente_nuevo:
@@ -130,6 +132,77 @@ def cliente_registro():
         return redirect(url_for('auth.cliente_inicio_exitoso'))
         
     return render_template('cliente_registro.html')
+
+# ============================================================
+# API DE VERIFICACIÓN SMS
+# ============================================================
+
+@auth_bp.route('/api/enviar_codigo_sms', methods=['POST'])
+@csrf.exempt
+def enviar_codigo_sms():
+    data = request.json
+    telefono = data.get('telefono')
+    
+    if not telefono:
+        return jsonify({'error': 'El teléfono es requerido'}), 400
+        
+    existente, _ = Cliente.get_by_telefono(telefono)
+    if existente:
+        return jsonify({'error': 'Este teléfono ya está registrado'}), 400
+        
+    # Generar código de 6 dígitos
+    codigo = str(random.randint(100000, 999999))
+    session['sms_code'] = codigo
+    session['sms_phone'] = telefono
+    session['telefono_verificado'] = False
+    
+    try:
+        account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+        auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+        
+        if not account_sid or not auth_token:
+            print("⚠️ ADVERTENCIA: Credenciales de Twilio no encontradas. Ejecutando en modo simulado.")
+            print(f"\n[{'='*40}]\n SIMULACIÓN API SMS \n Enviar a: {telefono} \n Código: {codigo} \n[{'='*40}]\n")
+            return jsonify({
+                'mensaje': 'Código enviado exitosamente',
+                'dev_codigo': codigo
+            })
+            
+        client = Client(account_sid, auth_token)
+        
+        # Enviar el SMS real a través de Twilio
+        message = client.messages.create(
+            to=telefono,
+            from_="+17372212163",
+            body=f"Tu código de verificación para Panadería Amada es: {codigo}"
+        )
+        print(f"✅ Twilio SMS enviado con SID: {message.sid}")
+        
+        return jsonify({'mensaje': 'Código enviado exitosamente'})
+        
+    except Exception as e:
+        print(f"❌ Error al enviar SMS con Twilio: {str(e)}")
+        return jsonify({'error': f'No se pudo enviar el SMS. Verifica que el número sea correcto y tenga formato internacional (ej. +505...). Detalle: {str(e)}'}), 500
+
+@auth_bp.route('/api/verificar_codigo_sms', methods=['POST'])
+@csrf.exempt
+def verificar_codigo_sms():
+    data = request.json
+    codigo_ingresado = data.get('codigo')
+    telefono = data.get('telefono')
+    
+    codigo_guardado = session.get('sms_code')
+    telefono_guardado = session.get('sms_phone')
+    
+    if not codigo_ingresado or not codigo_guardado:
+        return jsonify({'error': 'No hay código pendiente de verificación'}), 400
+        
+    if str(codigo_ingresado) == str(codigo_guardado) and str(telefono) == str(telefono_guardado):
+        session['telefono_verificado'] = True
+        return jsonify({'mensaje': 'Teléfono verificado correctamente'})
+    else:
+        return jsonify({'error': 'El código es incorrecto'}), 400
+
 
 @auth_bp.route('/cliente/inicio_exitoso')
 @login_required

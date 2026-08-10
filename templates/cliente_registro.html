@@ -27,7 +27,7 @@
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.9);
             border-radius: var(--radius-lg);
-            padding: 3rem;
+            padding: 2.5rem;
             box-shadow: var(--shadow-lg), 0 0 40px rgba(217, 119, 6, 0.1);
             animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
@@ -55,6 +55,74 @@
             font-weight: 500;
         }
         
+        /* Progress Bar */
+        .progress-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            position: relative;
+        }
+        
+        .progress-container::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: rgba(0,0,0,0.1);
+            transform: translateY(-50%);
+            z-index: 1;
+        }
+        
+        .progress-line {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            height: 3px;
+            background: var(--primary);
+            transform: translateY(-50%);
+            z-index: 1;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .step-indicator {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background: white;
+            border: 3px solid rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: var(--text-muted);
+            z-index: 2;
+            transition: all 0.3s ease;
+        }
+
+        .step-indicator.active {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .step-indicator.completed {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+        
+        /* Form Steps */
+        .form-step {
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+        
+        .form-step.active {
+            display: block;
+        }
+
         .form-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -65,13 +133,29 @@
             grid-column: span 2;
         }
 
-        .btn-login {
-            width: 100%;
+        .btn-controls {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .btn-controls button {
+            flex: 1;
             padding: 0.85rem;
             font-size: 1rem;
-            margin-top: 1.5rem;
-            letter-spacing: 0.02em;
-            grid-column: span 2;
+            font-weight: 600;
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-color);
+            border-radius: var(--radius-md);
+        }
+        
+        .btn-outline:hover {
+            background: rgba(0,0,0,0.05);
         }
 
         .btn-back {
@@ -93,7 +177,6 @@
             margin-bottom: 1.5rem;
             list-style: none;
             padding: 0;
-            animation: fadeIn 0.3s ease;
         }
 
         .flash-message {
@@ -110,16 +193,40 @@
             gap: 0.5rem;
         }
         
+        .sms-section {
+            background: rgba(217, 119, 6, 0.05);
+            border: 1px solid rgba(217, 119, 6, 0.2);
+            padding: 1.5rem;
+            border-radius: var(--radius-md);
+            margin-top: 1rem;
+        }
+        
+        .code-inputs {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            margin-top: 1rem;
+        }
+        
+        .code-input {
+            width: 45px;
+            height: 50px;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+        }
+        
+        .code-input:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.2);
+        }
+
         @media (max-width: 600px) {
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
-            .form-group.full-width {
-                grid-column: span 1;
-            }
-            .btn-login {
-                grid-column: span 1;
-            }
+            .form-grid { grid-template-columns: 1fr; }
+            .form-group.full-width { grid-column: span 1; }
         }
     </style>
 </head>
@@ -133,7 +240,14 @@
         <div class="login-card">
             <div class="logo-area">
                 <h1>Panadería Amada</h1>
-                <p>Crea tu cuenta de cliente</p>
+                <p id="step-title">Crea tu cuenta de cliente</p>
+            </div>
+            
+            <div class="progress-container">
+                <div class="progress-line" id="progress-line"></div>
+                <div class="step-indicator active" id="indicator-1">1</div>
+                <div class="step-indicator" id="indicator-2">2</div>
+                <div class="step-indicator" id="indicator-3">3</div>
             </div>
 
             {% with messages = get_flashed_messages(with_categories=true) %}
@@ -149,57 +263,263 @@
                 {% endif %}
             {% endwith %}
 
-            <form method="POST" action="{{ url_for('auth.cliente_registro') }}" enctype="multipart/form-data">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <form id="registroForm" method="POST" action="{{ url_for('auth.cliente_registro') }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token() }}">
                 
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="nombre">Nombres</label>
-                        <input type="text" id="nombre" name="nombre" class="form-control" required placeholder="Tus nombres">
+                <!-- PASO 1: Info Personal -->
+                <div class="form-step active" id="step-1">
+                    <h3 style="margin-bottom: 1rem; color: var(--text-color); font-size: 1.1rem;">Información Básica</h3>
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <label for="nombre">Nombres</label>
+                            <input type="text" id="nombre" name="nombre" class="form-control" required placeholder="Tus nombres">
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="apellidos">Apellidos</label>
+                            <input type="text" id="apellidos" name="apellidos" class="form-control" required placeholder="Tus apellidos">
+                        </div>
+                    </div>
+                    <div class="btn-controls" style="justify-content: flex-end;">
+                        <button type="button" class="btn btn-primary" onclick="nextStep(2)">Continuar</button>
+                    </div>
+                </div>
+
+                <!-- PASO 2: Detalles -->
+                <div class="form-step" id="step-2">
+                    <h3 style="margin-bottom: 1rem; color: var(--text-color); font-size: 1.1rem;">Detalles Personales</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="genero">Género</label>
+                            <select id="genero" name="genero" class="form-control" required>
+                                <option value="" disabled selected>Selecciona una opción</option>
+                                <option value="Masculino">Masculino</option>
+                                <option value="Femenino">Femenino</option>
+                                <option value="Otro">Otro</option>
+                                <option value="Prefiero no decirlo">Prefiero no decirlo</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="fecha_nacimiento">Fecha de Nacimiento</label>
+                            <input type="date" id="fecha_nacimiento" name="fecha_nacimiento" class="form-control" required>
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="foto">Foto de Perfil (Opcional)</label>
+                            <input type="file" id="foto" name="foto" class="form-control" accept="image/*">
+                        </div>
+                    </div>
+                    <div class="btn-controls">
+                        <button type="button" class="btn btn-outline" onclick="prevStep(1)">Atrás</button>
+                        <button type="button" class="btn btn-primary" onclick="nextStep(3)">Continuar</button>
+                    </div>
+                </div>
+
+                <!-- PASO 3: Verificación SMS -->
+                <div class="form-step" id="step-3">
+                    <h3 style="margin-bottom: 1rem; color: var(--text-color); font-size: 1.1rem;">Seguridad y Verificación</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="telefono">Teléfono Celular</label>
+                            <input type="tel" id="telefono" name="telefono" class="form-control" required placeholder="Ej: 88888888">
+                        </div>
+                        <div class="form-group">
+                            <label for="password">Contraseña</label>
+                            <input type="password" id="password" name="password" class="form-control" required placeholder="Crea una contraseña">
+                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="apellidos">Apellidos</label>
-                        <input type="text" id="apellidos" name="apellidos" class="form-control" required placeholder="Tus apellidos">
+                    <div class="form-group full-width" style="margin-top: 1rem;">
+                        <button type="button" id="btn-send-sms" class="btn btn-outline" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="sendSms()">
+                            Enviar Código SMS
+                        </button>
+                    </div>
+                    
+                    <div class="sms-section" id="sms-section" style="display: none;">
+                        <p style="text-align: center; font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                            Hemos enviado un código de 6 dígitos a tu teléfono.
+                        </p>
+                        <div class="code-inputs">
+                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 1)">
+                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 2)">
+                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 3)">
+                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 4)">
+                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 5)">
+                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 6)">
+                        </div>
+                        <p id="sms-error" style="color: var(--danger); font-size: 0.85rem; text-align: center; margin-top: 0.5rem; display: none;">Código incorrecto.</p>
+                        
+                        <button type="button" id="btn-verify-sms" class="btn btn-primary" style="width: 100%; margin-top: 1rem;" onclick="verifySms()">
+                            Verificar Código
+                        </button>
                     </div>
 
-                    <div class="form-group">
-                        <label for="telefono">Teléfono</label>
-                        <input type="tel" id="telefono" name="telefono" class="form-control" required placeholder="Ej: 88888888">
+                    <div class="btn-controls">
+                        <button type="button" class="btn btn-outline" onclick="prevStep(2)">Atrás</button>
+                        <button type="submit" id="btn-submit" class="btn btn-primary" disabled style="opacity: 0.5; cursor: not-allowed;">Registrar Cuenta</button>
                     </div>
-
-                    <div class="form-group">
-                        <label for="password">Contraseña</label>
-                        <input type="password" id="password" name="password" class="form-control" required placeholder="Crea una contraseña">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="genero">Género</label>
-                        <select id="genero" name="genero" class="form-control" required>
-                            <option value="" disabled selected>Selecciona una opción</option>
-                            <option value="Masculino">Masculino</option>
-                            <option value="Femenino">Femenino</option>
-                            <option value="Otro">Otro</option>
-                            <option value="Prefiero no decirlo">Prefiero no decirlo</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="fecha_nacimiento">Fecha de Nacimiento</label>
-                        <input type="date" id="fecha_nacimiento" name="fecha_nacimiento" class="form-control" required>
-                    </div>
-
-                    <div class="form-group full-width">
-                        <label for="foto">Foto de Perfil (Opcional)</label>
-                        <input type="file" id="foto" name="foto" class="form-control" accept="image/*">
-                    </div>
-
-                    <button type="submit" class="btn btn-primary btn-login">Registrar Cuenta</button>
                 </div>
             </form>
             
             <a href="{{ url_for('auth.cliente_bienvenida') }}" class="btn-back">← Volver al inicio</a>
         </div>
     </div>
+
+    <script>
+        let currentStep = 1;
+        
+        function updateProgress() {
+            const lineWidth = (currentStep - 1) * 50; 
+            document.getElementById('progress-line').style.width = lineWidth + '%';
+            
+            for (let i = 1; i <= 3; i++) {
+                const ind = document.getElementById('indicator-' + i);
+                if (i < currentStep) {
+                    ind.className = 'step-indicator completed';
+                    ind.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+                } else if (i === currentStep) {
+                    ind.className = 'step-indicator active';
+                    ind.innerHTML = i;
+                } else {
+                    ind.className = 'step-indicator';
+                    ind.innerHTML = i;
+                }
+            }
+            
+            const titles = {
+                1: "Información Básica",
+                2: "Detalles",
+                3: "Seguridad y Verificación"
+            };
+            document.getElementById('step-title').innerText = titles[currentStep];
+        }
+
+        function validateStep(step) {
+            let isValid = true;
+            const stepEl = document.getElementById('step-' + step);
+            const requiredInputs = stepEl.querySelectorAll('input[required], select[required]');
+            
+            requiredInputs.forEach(input => {
+                if (!input.value.trim()) {
+                    isValid = false;
+                    input.style.borderColor = 'var(--danger)';
+                } else {
+                    input.style.borderColor = 'var(--border)';
+                }
+            });
+            return isValid;
+        }
+
+        function nextStep(step) {
+            if (validateStep(currentStep)) {
+                document.getElementById('step-' + currentStep).classList.remove('active');
+                currentStep = step;
+                document.getElementById('step-' + currentStep).classList.add('active');
+                updateProgress();
+            }
+        }
+
+        function prevStep(step) {
+            document.getElementById('step-' + currentStep).classList.remove('active');
+            currentStep = step;
+            document.getElementById('step-' + currentStep).classList.add('active');
+            updateProgress();
+        }
+
+        function moveToNext(input, event, index) {
+            if (event.key === 'Backspace' && input.value.length === 0) {
+                const prev = input.previousElementSibling;
+                if (prev) prev.focus();
+                return;
+            }
+            if (input.value.length === 1) {
+                const next = input.nextElementSibling;
+                if (next) next.focus();
+            }
+        }
+
+        async function sendSms() {
+            if (!validateStep(3)) {
+                return;
+            }
+
+            const telefono = document.getElementById('telefono').value;
+            const csrf = document.getElementById('csrf_token').value;
+            const btn = document.getElementById('btn-send-sms');
+            
+            btn.innerText = "Enviando...";
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/enviar_codigo_sms', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                    body: JSON.stringify({ telefono })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    btn.innerText = "Código Enviado ✓";
+                    document.getElementById('sms-section').style.display = 'block';
+                    document.querySelector('.code-input').focus();
+                    
+                    // Solo para desarrollo: Mostrar el código simulado al usuario
+                    if (data.dev_codigo) {
+                        setTimeout(() => alert("🔧 MODO DE PRUEBA\nTu código SMS simulado es: " + data.dev_codigo), 500);
+                    }
+                } else {
+                    alert(data.error || "Error al enviar SMS");
+                    btn.innerText = "Reintentar";
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                alert("Error de conexión");
+                btn.innerText = "Reintentar";
+                btn.disabled = false;
+            }
+        }
+
+        async function verifySms() {
+            const inputs = document.querySelectorAll('.code-input');
+            let codigo = '';
+            inputs.forEach(input => codigo += input.value);
+            
+            if (codigo.length < 6) {
+                document.getElementById('sms-error').innerText = "Ingresa los 6 dígitos";
+                document.getElementById('sms-error').style.display = 'block';
+                return;
+            }
+
+            const telefono = document.getElementById('telefono').value;
+            const csrf = document.getElementById('csrf_token').value;
+            const btn = document.getElementById('btn-verify-sms');
+            
+            btn.innerText = "Verificando...";
+            
+            try {
+                const res = await fetch('/api/verificar_codigo_sms', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                    body: JSON.stringify({ codigo, telefono })
+                });
+                
+                if (res.ok) {
+                    document.getElementById('sms-section').innerHTML = '<div style="color: #047857; text-align: center; padding: 1rem; font-weight: bold; background: #d1fae5; border-radius: 8px;">✓ Teléfono Verificado</div>';
+                    const submitBtn = document.getElementById('btn-submit');
+                    submitBtn.disabled = false;
+                    submitBtn.style.opacity = '1';
+                    submitBtn.style.cursor = 'pointer';
+                } else {
+                    const data = await res.json();
+                    document.getElementById('sms-error').innerText = data.error || "Código incorrecto";
+                    document.getElementById('sms-error').style.display = 'block';
+                    btn.innerText = "Verificar Código";
+                }
+            } catch (err) {
+                document.getElementById('sms-error').innerText = "Error de conexión";
+                document.getElementById('sms-error').style.display = 'block';
+                btn.innerText = "Verificar Código";
+            }
+        }
+    </script>
 </body>
 </html>
