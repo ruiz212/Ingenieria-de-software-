@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panadería Amada | Inicio de Sesión</title>
+    <!-- Google Fonts: Outfit for modern look -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-ivory: #FFFFF0;
+            --color-ivory-dark: #F5F5DC;
+            --color-chocolate: #4E2C1D;
+            --color-chocolate-light: #6E422C;
+            --color-gold: #D4AF37;
+            --color-gold-hover: #F2CA3D;
+            --color-error: #D9534F;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, var(--color-ivory) 0%, var(--color-ivory-dark) 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Ambient background shapes for premium feel */
+        .ambient-shape {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: 0;
+            opacity: 0.6;
+        }
+        .shape-1 {
+            width: 400px;
+            height: 400px;
+            background-color: rgba(212, 175, 55, 0.2); /* Gold */
+            top: -100px;
+            left: -100px;
+            animation: float 10s ease-in-out infinite alternate;
+        }
+        .shape-2 {
+            width: 500px;
+            height: 500px;
+            background-color: rgba(78, 44, 29, 0.15); /* Chocolate */
+            bottom: -150px;
+            right: -100px;
+            animation: float 15s ease-in-out infinite alternate-reverse;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0) scale(1); }
+            100% { transform: translateY(30px) scale(1.05); }
+        }
+
+        /* Glassmorphism Container */
+        .login-container {
+            position: relative;
+            z-index: 1;
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 24px;
+            padding: 3rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(78, 44, 29, 0.1);
+            animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo-area {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo-area h1 {
+            color: var(--color-chocolate);
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+
+        .logo-area p {
+            color: var(--color-chocolate-light);
+            margin: 5px 0 0 0;
+            font-size: 1rem;
+            font-weight: 300;
+        }
+
+        .logo-icon {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            color: var(--color-gold);
+            text-shadow: 0 4px 10px rgba(212, 175, 55, 0.3);
+        }
+
+        /* Form elements */
+        .input-group {
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--color-chocolate);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .input-group input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 1rem;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.6);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            color: var(--color-chocolate);
+            transition: all 0.3s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--color-gold);
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.2);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--color-gold) 0%, #b8962d 100%);
+            color: var(--color-chocolate);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 20px rgba(212, 175, 55, 0.4);
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 25px rgba(212, 175, 55, 0.5);
+            background: linear-gradient(135deg, var(--color-gold-hover) 0%, var(--color-gold) 100%);
+        }
+
+        .login-btn:active {
+            transform: translateY(1px);
+        }
+
+        /* Flash Messages */
+        .flash-messages {
+            margin-bottom: 1.5rem;
+            list-style: none;
+            padding: 0;
+            text-align: center;
+        }
+
+        .flash-message {
+            background: rgba(217, 83, 79, 0.1);
+            color: var(--color-error);
+            padding: 0.8rem;
+            border-radius: 8px;
+            border: 1px solid rgba(217, 83, 79, 0.2);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            animation: shake 0.5s;
+        }
+
+        .flash-message.warning {
+            background: rgba(212, 175, 55, 0.1);
+            color: var(--color-chocolate);
+            border-color: rgba(212, 175, 55, 0.3);
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+
+        .footer {
+            margin-top: 2rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--color-chocolate-light);
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-shape shape-1"></div>
+    <div class="ambient-shape shape-2"></div>
+
+    <div class="login-container">
+        <div class="logo-area">
+            <div class="logo-icon">🥐</div>
+            <h1>Amada</h1>
+            <p>Sistema de Gestión Profesional</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flash-messages">
+                {% for category, message in messages %}
+                    <li class="flash-message {{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/login">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="input-group">
+                <label for="username">Usuario</label>
+                <input type="text" id="username" name="username" required autocomplete="username" placeholder="ej. amada">
+            </div>
+
+            <div class="input-group">
+                <label for="password">Contraseña</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+            </div>
+
+            <button type="submit" class="login-btn">Acceder al Sistema</button>
+        </form>
+
+        <div class="footer">
+            &copy; 2026 Panadería Amada. Acceso Restringido.
+        </div>
+    </div>
+</body>
+</html>

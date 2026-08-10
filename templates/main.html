@@ -10,9 +10,16 @@
 <body style="background-color: var(--background); display: flex; flex-direction: column; min-height: 100vh;">
 
     <!-- Hub Header -->
-    <header style="background: white; padding: 2rem; box-shadow: var(--shadow); text-align: center;">
-        <h1 style="color: var(--primary-color); font-size: 2rem; margin-bottom: 0.5rem;">🥖 Panadería Amada</h1>
-        <p style="color: var(--muted); font-size: 1.1rem;">Seleccione un módulo para comenzar</p>
+    <header style="background: white; padding: 2rem; box-shadow: var(--shadow); display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h1 style="color: var(--primary-color); font-size: 2rem; margin-bottom: 0.5rem;">🥖 Panadería Amada</h1>
+            <p style="color: var(--muted); font-size: 1.1rem;">Seleccione un módulo para comenzar</p>
+        </div>
+        <div style="text-align: right;">
+            <p style="margin: 0; font-weight: 600; color: #333;">{{ user.nombre_completo }}</p>
+            <p style="margin: 0.25rem 0 0.5rem 0; font-size: 0.85rem; color: var(--muted);">{{ user.rol_nombre or 'Usuario' }}</p>
+            <a href="/logout" style="display: inline-block; padding: 0.5rem 1.2rem; background: #ef4444; color: white; text-decoration: none; border-radius: 8px; font-size: 0.85rem; font-weight: 500; transition: background 0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">Cerrar Sesión</a>
+        </div>
     </header>
 
     <!-- Hub Grid -->
@@ -53,7 +60,7 @@
     </main>
 
     <footer style="text-align: center; padding: 1.5rem; color: var(--muted); font-size: 0.9rem;">
-        &copy; 2024 Panadería Amada Calero Leiva. Todos los derechos reservados.
+        &copy; 2026 Panadería Amada Calero Leiva. Todos los derechos reservados.
     </footer>
 
 </body>

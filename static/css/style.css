@@ -136,6 +136,7 @@ h1, h2, h3 { font-family: 'Outfit', sans-serif; }
     box-shadow: -5px 0 15px rgba(0,0,0,0.05);
     min-width: 350px;
     max-width: 450px;
+    min-height: 0; /* Necesario para que el hijo flex pueda hacer scroll */
 }
 
 .invoice-panel h2 { margin-bottom: 1rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }
@@ -144,6 +145,16 @@ h1, h2, h3 { font-family: 'Outfit', sans-serif; }
     flex: 1;
     overflow-y: auto;
     margin-bottom: 1rem;
+    padding-right: 0.5rem;
+    min-height: 0;
+}
+
+.cart-items::-webkit-scrollbar {
+    width: 6px;
+}
+.cart-items::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 4px;
 }
 
 .empty-cart { text-align: center; color: var(--text-muted); margin-top: 2rem; }

@@ -13,7 +13,7 @@
             <a href="/" style="text-decoration: none; color: inherit;">
                 <h1>Panadería Amada 🥖</h1>
             </a>
-            <div class="user-info">Caja: Activa | Usuario: Dependienta</div>
+            <div class="user-info">Caja: Activa | Usuario: {{ user.nombre_completo }}</div>
         </div>
         <button id="btn-nuevo-encargo" style="background: var(--primary-color); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; font-size: 1rem; cursor: pointer; box-shadow: 0 4px 6px rgba(217, 119, 6, 0.3);">+ Nuevo Encargo Especial</button>
     </header>
@@ -22,9 +22,9 @@
         <!-- Panel Izquierdo: Menú de Categorías -->
         <aside class="category-sidebar">
             <button class="category-btn active" data-filter="Todos">Todos</button>
-            <button class="category-btn" data-filter="Pan Dulce">Pan Dulce</button>
-            <button class="category-btn" data-filter="Pan Salado">Pan Salado</button>
-            <button class="category-btn" data-filter="Bebidas">Bebidas</button>
+            {% for cat in categorias %}
+            <button class="category-btn" data-filter="{{ cat.nombre }}">{{ cat.nombre }}</button>
+            {% endfor %}
         </aside>
 
         <!-- Centro: Catálogo de Productos -->

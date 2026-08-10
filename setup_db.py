@@ -10,13 +10,13 @@ def try_connect_and_setup():
     driver = drivers[-1] # Usually the most recent ODBC driver
     print(f"Using driver: {driver}")
     
-    servers = ['localhost', '.\\SQLEXPRESS', '(localdb)\\MSSQLLocalDB']
+    servers = [r'localhost\SQLDEV']
     
     for server in servers:
         try:
             print(f"Trying to connect to {server}...")
             # Connect to master to create DB
-            conn_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE=master;Trusted_Connection=yes;"
+            conn_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE=master;Trusted_Connection=yes;Encrypt=yes;TrustServerCertificate=yes;"
             conn = pyodbc.connect(conn_str, autocommit=True, timeout=30)
             cursor = conn.cursor()
             
@@ -31,7 +31,7 @@ def try_connect_and_setup():
             conn.close()
             
             # Now connect to PanaderiaDB and run schema
-            conn_db_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE=PanaderiaDB;Trusted_Connection=yes;"
+            conn_db_str = f"DRIVER={{{driver}}};SERVER={server};DATABASE=PanaderiaDB;Trusted_Connection=yes;Encrypt=yes;TrustServerCertificate=yes;"
             print(f"Connected to PanaderiaDB at {server}. Creating schema...")
             conn_db = pyodbc.connect(conn_db_str, autocommit=True)
             cursor_db = conn_db.cursor()
@@ -39,17 +39,15 @@ def try_connect_and_setup():
             with open('database/esquema.sql', 'r', encoding='utf-8') as f:
                 sql_script = f.read()
             
-            # Split batches by GO (if any) or just execute
-            # In our case, the script doesn't have GO, it's just raw SQL.
             try:
-                # The script contains DROP TABLE IF EXISTS and CREATE statements
-                # Since schema.sql has no GO, let's just run it:
-                cursor_db.execute(sql_script)
+                # Split batches by GO
+                batches = sql_script.split('\nGO')
+                for batch in batches:
+                    if batch.strip():
+                        cursor_db.execute(batch)
                 print("Schema updated successfully!")
             except Exception as e:
                 print("Error executing schema:", e)
-                # Fallback: try splitting by statements (rudimentary)
-                pass
                 
             conn_db.close()
             print(f"SUCCESS: Set Config.SQL_SERVER_CONNECTION_STRING to: {conn_db_str}")
