@@ -53,6 +53,7 @@
 
             <!-- Catálogo de Productos -->
             <div class="catalog-panel">
+                <h2 id="current-category-title" style="margin-bottom: 1rem; color: var(--text-dark);">Mostrador - Todos</h2>
                 <div class="products-grid">
                     {% for producto in productos if producto.categoria != 'Reposteria' %}
                     <article class="product-card filterable-product" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre }}" data-precio="{{ producto.precio }}" data-categoria="{{ producto.categoria }}" data-descuento="{{ producto.descuento }}">

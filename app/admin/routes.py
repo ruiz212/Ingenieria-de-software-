@@ -109,13 +109,13 @@ def catalogo():
 
     # Obtener productos
     cursor.execute(
-        "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.PrecioBase, p.Activo, p.EsFicticio, p.PorcentajeDescuento "
+        "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.CategoriaID, p.PrecioBase, p.Activo, p.EsFicticio, p.PorcentajeDescuento "
         "FROM Productos p "
         "JOIN Categorias c ON p.CategoriaID = c.ID "
         "ORDER BY c.Nombre, p.Nombre"
     )
     productos = [
-        {'id': row.ID, 'nombre': row.Nombre, 'categoria': row.Categoria,
+        {'id': row.ID, 'nombre': row.Nombre, 'categoria': row.Categoria, 'categoria_id': row.CategoriaID,
          'precio': float(row.PrecioBase), 'activo': bool(row.Activo), 
          'es_ficticio': bool(row.EsFicticio), 'descuento': float(row.PorcentajeDescuento)}
         for row in cursor.fetchall()
@@ -171,6 +171,36 @@ def toggle_producto(producto_id):
         )
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Estado actualizado'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+@admin_bp.route('/api/productos/<int:producto_id>/editar', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def editar_producto(producto_id):
+    """API para editar un producto existente."""
+    datos = request.json
+    nombre = datos.get('nombre')
+    precio = datos.get('precio')
+    categoria_id = datos.get('categoria_id')
+    descuento = datos.get('descuento', 0.0)
+
+    if not nombre or not precio or not categoria_id:
+        return jsonify({'error': 'Faltan datos requeridos'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE Productos SET Nombre = ?, PrecioBase = ?, CategoriaID = ?, PorcentajeDescuento = ? WHERE ID = ?",
+            nombre, float(precio), int(categoria_id), float(descuento), producto_id
+        )
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': 'Producto actualizado con éxito'})
     except Exception as e:
         conn.rollback()
         return jsonify({'error': str(e)}), 500
@@ -300,17 +330,44 @@ def contabilidad():
     cursor.execute("SELECT ID, NombreCompleto FROM Usuarios WHERE Activo = 1 ORDER BY NombreCompleto")
     empleados = [{'id': row.ID, 'nombre': row.NombreCompleto} for row in cursor.fetchall()]
 
-    # Totales para tarjetas (solo no descontados para vales, y total del mes para egresos)
-    cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE MONTH(Fecha) = MONTH(GETDATE())")
-    total_egresos_mes = float(cursor.fetchone()[0])
+    # Totales del MES actual
+    # 1. Ingresos (Ventas)
+    cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE MONTH(FechaHora) = MONTH(GETDATE()) AND YEAR(FechaHora) = YEAR(GETDATE())")
+    ingresos_mes = float(cursor.fetchone()[0])
+    
+    # 2. Compras de Materia Prima
+    cursor.execute("SELECT ISNULL(SUM(CostoTotal), 0) FROM ComprasMateriaPrima WHERE MONTH(Fecha) = MONTH(GETDATE()) AND YEAR(Fecha) = YEAR(GETDATE())")
+    compras_mes = float(cursor.fetchone()[0])
 
+    # 3. Egresos Privados
+    cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE MONTH(Fecha) = MONTH(GETDATE()) AND YEAR(Fecha) = YEAR(GETDATE())")
+    egresos_mes = float(cursor.fetchone()[0])
+
+    # Totales del DIA actual
+    cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE CONVERT(date, FechaHora) = CONVERT(date, GETDATE())")
+    ingresos_hoy = float(cursor.fetchone()[0])
+
+    cursor.execute("SELECT ISNULL(SUM(CostoTotal), 0) FROM ComprasMateriaPrima WHERE CONVERT(date, Fecha) = CONVERT(date, GETDATE())")
+    compras_hoy = float(cursor.fetchone()[0])
+    
+    cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE CONVERT(date, Fecha) = CONVERT(date, GETDATE())")
+    egresos_hoy = float(cursor.fetchone()[0])
+
+    # Vales Pendientes
     cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM ValesEmpleados WHERE Descontado = 0")
     total_vales_pendientes = float(cursor.fetchone()[0])
 
     conn.close()
 
     metricas = {
-        'total_egresos_mes': total_egresos_mes,
+        'ingresos_mes': ingresos_mes,
+        'compras_mes': compras_mes,
+        'egresos_mes': egresos_mes,
+        'balance_mes': ingresos_mes - compras_mes - egresos_mes,
+        'ingresos_hoy': ingresos_hoy,
+        'compras_hoy': compras_hoy,
+        'egresos_hoy': egresos_hoy,
+        'balance_hoy': ingresos_hoy - compras_hoy - egresos_hoy,
         'total_vales_pendientes': total_vales_pendientes
     }
 

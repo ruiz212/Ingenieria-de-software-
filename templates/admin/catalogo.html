@@ -72,6 +72,9 @@
                                 <button class="btn btn-outline btn-sm" onclick="toggleProducto({{ p.id }})">
                                     {% if p.activo %}Desactivar{% else %}Activar{% endif %}
                                 </button>
+                                <button class="btn btn-primary btn-sm" onclick="abrirModalEditar({{ p.id }}, '{{ p.nombre|replace("'", "\\'") }}', {{ p.categoria_id }}, {{ p.precio }}, {{ p.descuento }})">
+                                    Editar
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -84,8 +87,9 @@
     <!-- Modal Nuevo Producto -->
     <div id="modal-nuevo-producto" class="modal-overlay hidden">
         <div class="modal-content" style="max-width: 520px;">
-            <h2>Agregar Producto</h2>
-            <p class="subtitle">Crea un nuevo producto para tu catálogo de venta.</p>
+            <h2 id="modal-title">Agregar Producto</h2>
+            <p class="subtitle" id="modal-subtitle">Crea un nuevo producto para tu catálogo de venta.</p>
+            <input type="hidden" id="np-id" value="">
 
             <div class="form-group">
                 <label for="np-nombre">Nombre del Producto</label>
@@ -125,11 +129,26 @@
 
     <script>
         function abrirModal() {
+            document.getElementById('modal-title').textContent = 'Agregar Producto';
+            document.getElementById('modal-subtitle').textContent = 'Crea un nuevo producto para tu catálogo de venta.';
+            document.getElementById('np-id').value = '';
+            document.getElementById('modal-nuevo-producto').classList.remove('hidden');
+        }
+
+        function abrirModalEditar(id, nombre, categoriaId, precio, descuento) {
+            document.getElementById('modal-title').textContent = 'Editar Producto';
+            document.getElementById('modal-subtitle').textContent = 'Modifica los detalles del producto seleccionado.';
+            document.getElementById('np-id').value = id;
+            document.getElementById('np-nombre').value = nombre;
+            document.getElementById('np-categoria').value = categoriaId;
+            document.getElementById('np-precio').value = precio;
+            document.getElementById('np-descuento').value = descuento;
             document.getElementById('modal-nuevo-producto').classList.remove('hidden');
         }
 
         function cerrarModal() {
             document.getElementById('modal-nuevo-producto').classList.add('hidden');
+            document.getElementById('np-id').value = '';
             document.getElementById('np-nombre').value = '';
             document.getElementById('np-precio').value = '';
             document.getElementById('np-categoria').value = '';
@@ -158,32 +177,43 @@
             }, 3000);
         }
 
-        async function guardarProducto() {
-            const nombre = document.getElementById('np-nombre').value.trim();
+         function guardarProducto() {
+            const id = document.getElementById('np-id').value;
+            const nombre = document.getElementById('np-nombre').value;
             const precio = document.getElementById('np-precio').value;
             const categoria_id = document.getElementById('np-categoria').value;
-            const descuento = document.getElementById('np-descuento').value || 0;
+            const descuento = document.getElementById('np-descuento').value;
 
             if (!nombre || !precio || !categoria_id) {
-                showToast('Por favor completa todos los campos requeridos.', 'error');
+                showToast('Por favor completa los campos requeridos', 'error');
                 return;
             }
 
-            try {
-                const res = await fetch('/admin/api/productos', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nombre, precio, categoria_id, descuento })
-                });
+            const url = id ? `/admin/api/productos/${id}/editar` : '/admin/api/productos';
 
-                if (res.ok) {
-                    location.reload();
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    nombre, precio, categoria_id, descuento
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast(data.mensaje, 'success');
+                    setTimeout(() => window.location.reload(), 1000);
                 } else {
-                    showToast('Error al guardar producto', 'error');
+                    showToast(data.error || 'Error desconocido', 'error');
                 }
-            } catch (err) {
+            })
+            .catch(err => {
+                console.error(err);
                 showToast('Error de conexión', 'error');
-            }
+            });
         }
 
         async function toggleProducto(id) {

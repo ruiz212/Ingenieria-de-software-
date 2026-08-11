@@ -16,31 +16,87 @@
 
     <main class="admin-layout">
         <div class="page-header">
-            <h2>Contabilidad Privada</h2>
-            <p>Gestión de egresos del local y vales a empleados.</p>
+            <h2>Dashboard Financiero</h2>
+            <p>Resumen de ingresos, gastos y salud financiera de la empresa.</p>
         </div>
 
-        <!-- Metrics -->
-        <div class="metrics-grid">
-            <div class="metric-card">
+        <h3 style="margin-bottom: 1rem; color: var(--text-dark);">Resumen de Hoy</h3>
+        <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 2rem;">
+            <!-- Ingresos Hoy -->
+            <div class="metric-card" style="border-left: 4px solid var(--success);">
+                <div class="metric-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success);">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <div class="metric-body">
+                    <div class="metric-title">Ingresos Hoy</div>
+                    <div class="metric-value text-success">C${{ "%.2f"|format(metricas.ingresos_hoy) }}</div>
+                </div>
+            </div>
+            <!-- Compras MP Hoy -->
+            <div class="metric-card" style="border-left: 4px solid var(--warning);">
+                <div class="metric-icon pending">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+                </div>
+                <div class="metric-body">
+                    <div class="metric-title">Compras MP Hoy</div>
+                    <div class="metric-value text-warning">C${{ "%.2f"|format(metricas.compras_hoy) }}</div>
+                </div>
+            </div>
+            <!-- Egresos Priv Hoy -->
+            <div class="metric-card" style="border-left: 4px solid var(--danger);">
                 <div class="metric-icon expense">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
                 </div>
                 <div class="metric-body">
-                    <div class="metric-title">Gastos del Mes</div>
-                    <div class="metric-value text-danger">C${{ "%.2f"|format(metricas.total_egresos_mes) }}</div>
+                    <div class="metric-title">Gastos Priv. Hoy</div>
+                    <div class="metric-value text-danger">C${{ "%.2f"|format(metricas.egresos_hoy) }}</div>
                 </div>
             </div>
-            <div class="metric-card">
-                <div class="metric-icon pending">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <!-- Balance Hoy -->
+            <div class="metric-card" style="border-left: 4px solid var(--primary);">
+                <div class="metric-icon" style="background: rgba(99, 102, 241, 0.1); color: var(--primary);">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
                 </div>
                 <div class="metric-body">
-                    <div class="metric-title">Vales Pendientes</div>
-                    <div class="metric-value text-warning">C${{ "%.2f"|format(metricas.total_vales_pendientes) }}</div>
+                    <div class="metric-title">Utilidad Neta Hoy</div>
+                    <div class="metric-value" style="color: var(--primary);">C${{ "%.2f"|format(metricas.balance_hoy) }}</div>
                 </div>
             </div>
         </div>
+
+        <h3 style="margin-bottom: 1rem; color: var(--text-dark);">Resumen del Mes en Curso</h3>
+        <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 2rem;">
+             <!-- Ingresos Mes -->
+             <div class="metric-card" style="border-left: 4px solid var(--success);">
+                <div class="metric-body">
+                    <div class="metric-title">Ingresos Mensuales</div>
+                    <div class="metric-value text-success">C${{ "%.2f"|format(metricas.ingresos_mes) }}</div>
+                </div>
+            </div>
+            <!-- Compras Mes -->
+            <div class="metric-card" style="border-left: 4px solid var(--warning);">
+                <div class="metric-body">
+                    <div class="metric-title">Compras Mensuales</div>
+                    <div class="metric-value text-warning">C${{ "%.2f"|format(metricas.compras_mes) }}</div>
+                </div>
+            </div>
+            <!-- Gastos Mes -->
+            <div class="metric-card" style="border-left: 4px solid var(--danger);">
+                <div class="metric-body">
+                    <div class="metric-title">Gastos Mensuales</div>
+                    <div class="metric-value text-danger">C${{ "%.2f"|format(metricas.egresos_mes) }}</div>
+                </div>
+            </div>
+            <!-- Balance Mes -->
+            <div class="metric-card" style="border-left: 4px solid var(--primary);">
+                <div class="metric-body">
+                    <div class="metric-title">Utilidad Neta del Mes</div>
+                    <div class="metric-value" style="color: var(--primary);">C${{ "%.2f"|format(metricas.balance_mes) }}</div>
+                </div>
+            </div>
+        </div>
+
+        <h3 style="margin-bottom: 1rem; color: var(--text-dark);">Control de Gastos</h3>
 
         <!-- Panels -->
         <div class="panels-grid">

@@ -808,6 +808,7 @@ a { color: inherit; }
     opacity: 1;
     pointer-events: all;
 }
+/* Removed broken pointer-events rule for modals */
 
 .modal-content {
     background: var(--surface);
