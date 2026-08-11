@@ -65,13 +65,14 @@ class User(UserMixin):
 class Cliente(UserMixin):
     """Modelo de usuario que representa un cliente en la tabla Clientes."""
 
-    def __init__(self, id, nombre, apellidos, telefono, es_invitado, nivel_confianza_id):
+    def __init__(self, id, nombre, apellidos, telefono, es_invitado, nivel_confianza_id, fecha_nacimiento=None):
         self.id = id
         self.nombre = nombre
         self.apellidos = apellidos
         self.telefono = telefono
         self.es_invitado = es_invitado
         self.nivel_confianza_id = nivel_confianza_id
+        self.fecha_nacimiento = fecha_nacimiento
         self.rol_nombre = "Cliente" if not es_invitado else "Invitado"
 
     def get_id(self):
@@ -86,7 +87,7 @@ class Cliente(UserMixin):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT ID, Nombre, Apellidos, Telefono, EsInvitado, NivelConfianzaID "
+            "SELECT ID, Nombre, Apellidos, Telefono, EsInvitado, NivelConfianzaID, FechaNacimiento "
             "FROM Clientes WHERE ID = ?", cliente_id
         )
         row = cursor.fetchone()
@@ -95,7 +96,8 @@ class Cliente(UserMixin):
             return Cliente(
                 id=row.ID, nombre=row.Nombre, apellidos=row.Apellidos,
                 telefono=row.Telefono, es_invitado=row.EsInvitado,
-                nivel_confianza_id=row.NivelConfianzaID
+                nivel_confianza_id=row.NivelConfianzaID,
+                fecha_nacimiento=row.FechaNacimiento
             )
         return None
 
@@ -104,7 +106,7 @@ class Cliente(UserMixin):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT ID, Nombre, Apellidos, Telefono, PasswordHash, EsInvitado, NivelConfianzaID "
+            "SELECT ID, Nombre, Apellidos, Telefono, PasswordHash, EsInvitado, NivelConfianzaID, FechaNacimiento "
             "FROM Clientes WHERE Telefono = ?", telefono
         )
         row = cursor.fetchone()
@@ -113,7 +115,8 @@ class Cliente(UserMixin):
             cliente = Cliente(
                 id=row.ID, nombre=row.Nombre, apellidos=row.Apellidos,
                 telefono=row.Telefono, es_invitado=row.EsInvitado,
-                nivel_confianza_id=row.NivelConfianzaID
+                nivel_confianza_id=row.NivelConfianzaID,
+                fecha_nacimiento=row.FechaNacimiento
             )
             return cliente, row.PasswordHash
         return None, None

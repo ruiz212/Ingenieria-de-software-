@@ -191,9 +191,29 @@
                 <strong>{{ encargo.encargo_detalles.nombre_cliente }}</strong>
                 <span>Tel: {{ encargo.encargo_detalles.telefono }}</span>
                 <span class="delivery-date">Entrega: {{ encargo.encargo_detalles.fecha_entrega }}</span>
+                {% if encargo.encargo_detalles.telefono %}
+                <div style="margin-top: 0.75rem;">
+                    <a href="https://wa.me/{{ encargo.encargo_detalles.telefono | replace('-', '') | replace(' ', '') }}" target="_blank" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; padding: 0.3rem 0.6rem; color: #25D366; border-color: rgba(37, 211, 102, 0.4); text-decoration: none;">
+                        💬 Hablar con el cliente
+                    </a>
+                </div>
+                {% endif %}
             </div>
 
             <div class="order-products">
+                {% if encargo.encargo_detalles.especificaciones or encargo.encargo_detalles.ruta_imagen_referencia %}
+                <div style="background: #fff9f0; border: 1px solid var(--warning); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 1rem;">
+                    <div style="color: #d97706; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.25rem;">✨ Pastel Personalizado</div>
+                    {% if encargo.encargo_detalles.especificaciones %}
+                        <p style="font-size: 0.85rem; margin: 0 0 0.5rem 0; color: var(--text-main);">{{ encargo.encargo_detalles.especificaciones }}</p>
+                    {% endif %}
+                    {% if encargo.encargo_detalles.ruta_imagen_referencia %}
+                        <a href="{{ url_for('static', filename=encargo.encargo_detalles.ruta_imagen_referencia) }}" target="_blank" style="font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.25rem; color: var(--primary); font-weight: 700; text-decoration: none; background: rgba(30, 64, 175, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px;">
+                            🖼️ Ver Foto Referencia
+                        </a>
+                    {% endif %}
+                </div>
+                {% endif %}
                 <ul>
                     {% for item in encargo.productos %}
                     <li>

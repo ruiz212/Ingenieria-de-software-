@@ -803,14 +803,10 @@ a { color: inherit; }
     padding: 1rem;
 }
 
-.modal-overlay.active {
+.modal-overlay.active,
+.modal-overlay:not(.hidden) {
     opacity: 1;
     pointer-events: all;
-}
-
-/* For modals using the active/inactive pattern (contabilidad) */
-.modal-overlay:not(.active):not(.hidden) {
-    pointer-events: none;
 }
 
 .modal-content {

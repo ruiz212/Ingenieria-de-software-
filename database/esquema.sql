@@ -206,6 +206,9 @@ CREATE TABLE Encargos (
     Estado VARCHAR(20) NOT NULL DEFAULT 'Pendiente',
     PoliticasAceptadas BIT NOT NULL DEFAULT 1,
     NotasCliente VARCHAR(500) NULL,
+    Especificaciones VARCHAR(MAX) NULL,
+    RutaImagenReferencia VARCHAR(255) NULL,
+    TelefonoContacto VARCHAR(20) NULL,
     CONSTRAINT FK_Encargos_Facturas FOREIGN KEY (FacturaID) REFERENCES Facturas(ID),
     CONSTRAINT CK_Encargos_Estado CHECK (Estado IN ('Pendiente', 'En Proceso', 'Listo', 'Entregado'))
 );

@@ -39,7 +39,9 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.add('active');
             
             const filter = btn.dataset.filter;
-            currentCategoryTitle.textContent = `Mostrador - ${filter}`;
+            if (currentCategoryTitle) {
+                currentCategoryTitle.textContent = `Mostrador - ${filter}`;
+            }
             
             filterableProducts.forEach(product => {
                 if (filter === 'Todos' || product.dataset.categoria === filter) {
@@ -65,6 +67,97 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnCerrarBaseEncargo) {
         btnCerrarBaseEncargo.addEventListener('click', () => {
             baseEncargoModal.classList.add('hidden');
+        });
+    }
+
+    // Lógica del Botón "Pastel Personalizado"
+    const btnPastelPersonalizado = document.getElementById('btn-pastel-personalizado');
+    const pastelPersonalizadoModal = document.getElementById('pastel-personalizado-modal');
+    const btnCerrarPastel = document.getElementById('btn-cerrar-pastel');
+    const formPastel = document.getElementById('form-pastel-personalizado');
+
+    if (btnPastelPersonalizado) {
+        btnPastelPersonalizado.addEventListener('click', () => {
+            pastelPersonalizadoModal.classList.remove('hidden');
+        });
+    }
+
+    if (btnCerrarPastel) {
+        btnCerrarPastel.addEventListener('click', () => {
+            pastelPersonalizadoModal.classList.add('hidden');
+        });
+    }
+
+    if (formPastel) {
+        formPastel.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const btnSubmit = formPastel.querySelector('button[type="submit"]');
+            btnSubmit.disabled = true;
+            btnSubmit.textContent = 'Procesando...';
+
+            const especificaciones = document.getElementById('pastel-especificaciones').value;
+            const fechaEntrega = document.getElementById('pastel-fecha').value;
+            const fotoInput = document.getElementById('pastel-foto');
+            const telefonoInput = document.getElementById('pastel-telefono');
+            
+            let rutaImagen = null;
+
+            // Si hay foto, subirla primero
+            if (fotoInput.files.length > 0) {
+                const formData = new FormData();
+                formData.append('foto', fotoInput.files[0]);
+                try {
+                    const response = await fetch('/api/upload_referencia', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+                    if (response.ok) {
+                        rutaImagen = result.ruta;
+                    } else {
+                        showToast('Error al subir la imagen: ' + result.error, true);
+                        btnSubmit.disabled = false;
+                        btnSubmit.textContent = 'Enviar Solicitud';
+                        return;
+                    }
+                } catch (error) {
+                    showToast('Error de conexión al subir la imagen.', true);
+                    btnSubmit.disabled = false;
+                    btnSubmit.textContent = 'Enviar Solicitud';
+                    return;
+                }
+            }
+
+            // Enviar solicitud de cotización al backend
+            const cotizacionData = {
+                especificaciones: especificaciones,
+                fecha_entrega: fechaEntrega,
+                ruta_imagen_referencia: rutaImagen,
+                telefono: telefonoInput ? telefonoInput.value : null
+            };
+
+            try {
+                const response = await fetch('/api/cotizaciones', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cotizacionData)
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showToast('¡Cotización enviada a recepción!');
+                    pastelPersonalizadoModal.classList.add('hidden');
+                    formPastel.reset();
+                } else {
+                    showToast('Error: ' + (result.error || 'No se pudo enviar'), true);
+                }
+            } catch (error) {
+                showToast('Error de conexión.', true);
+            }
+            
+            btnSubmit.disabled = false;
+            btnSubmit.textContent = 'Enviar Solicitud';
         });
     }
 
@@ -219,15 +312,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const tieneEncargos = carrito.some(item => item.categoria === 'Reposteria');
         
         if (tieneEncargos) {
-            inputTotalModal.value = `$${calcularTotal().toFixed(2)}`;
-            inputAdelanto.value = '';
-            inputSaldo.value = `$${calcularTotal().toFixed(2)}`;
+            const total = calcularTotal();
+            inputTotalModal.value = `$${total.toFixed(2)}`;
+            inputAdelanto.value = (total / 2).toFixed(2);
+            
             document.getElementById('modal-efectivo-encargo').value = '';
             document.getElementById('modal-cambio-encargo').value = '';
             document.getElementById('desglose-cambio-encargo').innerHTML = '';
-            // Limpiar campos de cliente
-            document.getElementById('modal-nombre-cliente').value = '';
-            document.getElementById('modal-telefono-cliente').value = '';
+            
+            const metodoPago = document.getElementById('modal-metodo-pago');
+            if (metodoPago) metodoPago.value = 'Efectivo';
+            
+            const efectivoContainer = document.getElementById('encargo-efectivo-container');
+            if (efectivoContainer) efectivoContainer.style.display = 'block';
+            
+            const nombreInput = document.getElementById('modal-nombre-cliente');
+            const telefonoInput = document.getElementById('modal-telefono-cliente');
+            if (nombreInput && nombreInput.type !== 'hidden') nombreInput.value = '';
+            if (telefonoInput && telefonoInput.type !== 'hidden') telefonoInput.value = '';
+            
+            const customItem = carrito.find(item => item.es_custom);
+            const fechaContainer = document.getElementById('encargo-fecha-container');
+            const fechaInput = document.getElementById('modal-fecha');
+            
+            if (customItem) {
+                if (fechaContainer) fechaContainer.style.display = 'none';
+                if (fechaInput) fechaInput.value = customItem.encargo_detalles.fecha_entrega;
+            } else {
+                if (fechaContainer) fechaContainer.style.display = 'block';
+                if (fechaInput) fechaInput.value = '';
+            }
+
             modal.classList.remove('hidden');
         } else {
             // Abrir Modal de Pago Normal
@@ -239,6 +354,21 @@ document.addEventListener('DOMContentLoaded', () => {
             pagoModal.classList.remove('hidden');
         }
     });
+
+    const metodoPagoSelect = document.getElementById('modal-metodo-pago');
+    if (metodoPagoSelect) {
+        metodoPagoSelect.addEventListener('change', (e) => {
+            const efectivoContainer = document.getElementById('encargo-efectivo-container');
+            if (e.target.value === 'Efectivo') {
+                efectivoContainer.style.display = 'block';
+            } else {
+                efectivoContainer.style.display = 'none';
+                document.getElementById('modal-efectivo-encargo').value = '';
+                document.getElementById('modal-cambio-encargo').value = '';
+                document.getElementById('desglose-cambio-encargo').innerHTML = '';
+            }
+        });
+    }
 
     function actualizarCambioEncargo() {
         const adelanto = parseFloat(inputAdelanto.value) || 0;
@@ -253,21 +383,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('desglose-cambio-encargo').innerHTML = '';
         }
     }
-
-    inputAdelanto.addEventListener('input', (e) => {
-        const adelanto = parseFloat(e.target.value) || 0;
-        const total = calcularTotal();
-        const saldo = total - adelanto;
-        inputSaldo.value = `$${saldo.toFixed(2)}`;
-        
-        // Colorear en rojo si es inválido
-        if (adelanto > total) {
-            inputSaldo.style.color = 'var(--danger)';
-        } else {
-            inputSaldo.style.color = 'var(--text)';
-        }
-        actualizarCambioEncargo();
-    });
 
     document.getElementById('modal-efectivo-encargo').addEventListener('input', actualizarCambioEncargo);
 
@@ -285,30 +400,44 @@ document.addEventListener('DOMContentLoaded', () => {
         const nombreCliente = document.getElementById('modal-nombre-cliente').value.trim();
         const telefonoCliente = document.getElementById('modal-telefono-cliente').value.trim();
         const total = calcularTotal();
+        const metodoPago = document.getElementById('modal-metodo-pago') ? document.getElementById('modal-metodo-pago').value : 'Efectivo';
         
         if (isNaN(adelanto) || !fecha) {
-            showToast('Por favor, ingresa el adelanto y la fecha de entrega', true);
+            showToast('Por favor, revisa el adelanto y la fecha de entrega', true);
             return;
         }
         
-        if (adelanto > total) {
-            showToast('El adelanto no puede ser mayor al total ($' + total.toFixed(2) + ')', true);
-            return;
+        if (metodoPago === 'Efectivo') {
+            const efectivo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
+            if (efectivo < adelanto && adelanto > 0) {
+                showToast('El efectivo recibido es menor al adelanto', true);
+                return;
+            }
         }
         
-        const efectivo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
-        if (efectivo < adelanto && adelanto > 0) {
-            showToast('El efectivo recibido es menor al adelanto', true);
-            return;
+        let especificaciones = null;
+        let ruta_imagen = null;
+        let telefonoCustom = null;
+        let fechaCustom = null;
+        
+        const customItem = carrito.find(item => item.es_custom);
+        if (customItem) {
+            especificaciones = customItem.encargo_detalles.especificaciones;
+            ruta_imagen = customItem.encargo_detalles.ruta_imagen_referencia;
+            telefonoCustom = customItem.encargo_detalles.telefono;
+            fechaCustom = customItem.encargo_detalles.fecha_entrega;
         }
         
         cerrarModal();
         procesarFactura(true, {
             adelanto: adelanto,
             saldo: total - adelanto,
-            fecha_entrega: fecha,
+            metodo_adelanto: metodoPago,
+            fecha_entrega: fechaCustom ? fechaCustom : fecha,
             nombre_cliente: nombreCliente,
-            telefono: telefonoCliente
+            telefono: telefonoCustom ? telefonoCustom : telefonoCliente,
+            especificaciones: especificaciones,
+            ruta_imagen_referencia: ruta_imagen
         });
     });
 
@@ -611,8 +740,199 @@ function showToast(message, isError = false) {
     toast.textContent = message;
     
     container.appendChild(toast);
+    container.appendChild(toast);
     setTimeout(() => {
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
+
+// ==========================================
+// LÓGICA DE COTIZACIONES
+// ==========================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Modal Cliente: Mis Cotizaciones
+    const btnMisCotizaciones = document.getElementById('btn-mis-cotizaciones');
+    const modalMisCotizaciones = document.getElementById('mis-cotizaciones-modal');
+    const btnCerrarMisCot = document.getElementById('btn-cerrar-mis-cotizaciones');
+    const listaMisCot = document.getElementById('cotizaciones-cliente-list');
+
+    if (btnMisCotizaciones) {
+        btnMisCotizaciones.addEventListener('click', async () => {
+            modalMisCotizaciones.classList.remove('hidden');
+            await cargarMisCotizaciones();
+        });
+
+        btnCerrarMisCot.addEventListener('click', () => {
+            modalMisCotizaciones.classList.add('hidden');
+        });
+    }
+
+    async function cargarMisCotizaciones() {
+        listaMisCot.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Cargando...</p>';
+        try {
+            const res = await fetch('/api/cotizaciones/cliente');
+            const data = await res.json();
+            
+            if (data.length === 0) {
+                listaMisCot.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No tienes cotizaciones activas.</p>';
+                return;
+            }
+
+            listaMisCot.innerHTML = data.map(cot => `
+                <div style="background: var(--background); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong>Para: ${cot.fecha_entrega}</strong>
+                        <span class="badge" style="background: ${cot.estado === 'Cotizada' ? 'var(--success)' : (cot.estado === 'Rechazada' ? 'var(--danger)' : 'var(--warning)')}; color: white; padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.8rem;">
+                            ${cot.estado}
+                        </span>
+                    </div>
+                    <p style="font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--text-main);">${cot.especificaciones}</p>
+                    ${cot.ruta_imagen ? `<a href="/static/${cot.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary);">Ver foto de referencia</a>` : ''}
+                    
+                    ${cot.estado === 'Cotizada' ? `
+                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                <span>Precio Asignado:</span>
+                                <strong style="font-size: 1.2rem; color: var(--success);">C$${cot.precio_cotizado.toFixed(2)}</strong>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <button class="btn btn-primary btn-aceptar-cot" data-id="${cot.id}" data-precio="${cot.precio_cotizado}" data-specs="${cot.especificaciones}" data-img="${cot.ruta_imagen || ''}" data-fecha="${cot.fecha_entrega}" style="flex: 1;">Aceptar y Pagar Adelanto</button>
+                                <button class="btn btn-outline btn-rechazar-cot" data-id="${cot.id}" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">Rechazar</button>
+                                <a href="https://wa.me/50588888888?text=Hola, tengo una duda sobre la cotización de mi pastel para el ${cot.fecha_entrega}" target="_blank" class="btn btn-outline" style="border-color: #25D366; color: #25D366;">WhatsApp</a>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+
+            // Event listeners para los botones de aceptar/rechazar
+            document.querySelectorAll('.btn-aceptar-cot').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = e.target.dataset.id;
+                    const precio = parseFloat(e.target.dataset.precio);
+                    const specs = e.target.dataset.specs;
+                    const img = e.target.dataset.img;
+                    const fecha = e.target.dataset.fecha;
+                    
+                    // Agregar al carrito
+                    const itemPersonalizado = {
+                        id: 'custom_' + id,
+                        nombre: 'Pastel Personalizado',
+                        precio: precio,
+                        categoria: 'Reposteria',
+                        cantidad: 1,
+                        subtotal: precio,
+                        detalle_ingredientes: { ingredientes: [], notas_especiales: '' },
+                        encargo_detalles: {
+                            fecha_entrega: fecha,
+                            especificaciones: specs,
+                            ruta_imagen_referencia: img || null,
+                            telefono: null
+                        },
+                        es_custom: true
+                    };
+                    carrito.push(itemPersonalizado);
+                    renderizarCarrito();
+                    modalMisCotizaciones.classList.add('hidden');
+                    showToast('Pastel agregado al carrito. Procede a facturar el pago del 50% mínimo.');
+                });
+            });
+
+            document.querySelectorAll('.btn-rechazar-cot').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    if (confirm('¿Seguro que deseas rechazar y cancelar esta cotización?')) {
+                        const id = e.target.dataset.id;
+                        await fetch(`/api/cotizaciones/${id}/rechazar`, { method: 'POST' });
+                        showToast('Cotización rechazada');
+                        cargarMisCotizaciones();
+                    }
+                });
+            });
+
+        } catch (error) {
+            listaMisCot.innerHTML = '<p style="text-align: center; color: var(--danger);">Error al cargar las cotizaciones.</p>';
+        }
+    }
+
+    // Modal Recepción: Pedidos Clientes
+    const btnPedidosClientes = document.getElementById('btn-pedidos-clientes');
+    const modalPedidos = document.getElementById('pedidos-clientes-modal');
+    const btnCerrarPedidos = document.getElementById('btn-cerrar-pedidos-clientes');
+    const listaPedidos = document.getElementById('cotizaciones-pendientes-list');
+
+    if (btnPedidosClientes) {
+        btnPedidosClientes.addEventListener('click', async () => {
+            modalPedidos.classList.remove('hidden');
+            await cargarPedidosPendientes();
+        });
+
+        btnCerrarPedidos.addEventListener('click', () => {
+            modalPedidos.classList.add('hidden');
+        });
+    }
+
+    async function cargarPedidosPendientes() {
+        listaPedidos.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Cargando...</p>';
+        try {
+            const res = await fetch('/api/cotizaciones/pendientes');
+            const data = await res.json();
+            
+            if (data.length === 0) {
+                listaPedidos.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No hay pedidos pendientes por cotizar.</p>';
+                return;
+            }
+
+            listaPedidos.innerHTML = data.map(cot => `
+                <div style="background: var(--background); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong>Cliente: ${cot.cliente}</strong>
+                        <span style="font-size: 0.85rem; color: var(--text-muted);">Fecha Entrega: ${cot.fecha_entrega}</span>
+                    </div>
+                    <p style="font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--text-main);">${cot.especificaciones}</p>
+                    ${cot.ruta_imagen ? `<a href="/static/${cot.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary); display: inline-block; margin-bottom: 1rem;">Ver foto de referencia</a>` : ''}
+                    
+                    <div style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center;">
+                        <input type="number" id="precio-cot-${cot.id}" class="form-control" placeholder="Precio (C$)" min="0" step="0.01" style="width: 150px;">
+                        <button class="btn btn-primary btn-enviar-cot" data-id="${cot.id}">Fijar Precio</button>
+                        ${cot.telefono ? `<a href="https://wa.me/505${cot.telefono.replace(/[^0-9]/g, '')}?text=Hola ${cot.cliente}, te escribimos de Panadería Amada sobre tu encargo para el ${cot.fecha_entrega}..." target="_blank" class="btn btn-outline" style="border-color: #25D366; color: #25D366;">WhatsApp Cliente</a>` : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            document.querySelectorAll('.btn-enviar-cot').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.target.dataset.id;
+                    const precioInput = document.getElementById(`precio-cot-${id}`);
+                    const precio = parseFloat(precioInput.value);
+                    
+                    if (isNaN(precio) || precio <= 0) {
+                        showToast('Ingresa un precio válido', true);
+                        return;
+                    }
+
+                    try {
+                        const res = await fetch(`/api/cotizaciones/${id}/cotizar`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ precio: precio })
+                        });
+                        
+                        if (res.ok) {
+                            showToast('Cotización enviada al cliente');
+                            cargarPedidosPendientes();
+                        } else {
+                            showToast('Error al enviar cotización', true);
+                        }
+                    } catch (error) {
+                        showToast('Error de conexión', true);
+                    }
+                });
+            });
+
+        } catch (error) {
+            listaPedidos.innerHTML = '<p style="text-align: center; color: var(--danger);">Error al cargar pedidos.</p>';
+        }
+    }
+});

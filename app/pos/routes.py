@@ -2,9 +2,11 @@
 # Rutas del Punto de Venta y API de Facturas
 
 import uuid
+import os
 from datetime import datetime
 
-from flask import render_template, request, jsonify
+from flask import render_template, request, jsonify, current_app
+from werkzeug.utils import secure_filename
 from flask_login import login_required, current_user
 
 from app.pos import pos_bp
@@ -16,7 +18,7 @@ from app.auth.decorators import roles_required
 
 @pos_bp.route('/pos')
 @login_required
-@roles_required('Estandar', 'Admin', 'SuperAdmin')
+@roles_required('Estandar', 'Admin', 'SuperAdmin', 'Cliente', 'Invitado')
 def index():
     """Carga productos, categorías e ingredientes desde la BD."""
     conn = get_db_connection()
@@ -55,7 +57,29 @@ def index():
                            productos=productos,
                            ingredientes=ingredientes,
                            categorias=categorias,
-                           user=current_user)
+                           user=current_user,
+                           mes_actual=datetime.now().month)
+
+@pos_bp.route('/api/upload_referencia', methods=['POST'])
+@csrf.exempt
+@login_required
+def upload_referencia():
+    if 'foto' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['foto']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    if file:
+        filename = secure_filename(file.filename)
+        unique_filename = f"{uuid.uuid4().hex}_{filename}"
+        upload_folder = os.path.join(current_app.root_path, 'static', 'uploads', 'referencias')
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        file_path = os.path.join(upload_folder, unique_filename)
+        file.save(file_path)
+        
+        return jsonify({'ruta': f"uploads/referencias/{unique_filename}"}), 200
 
 
 @pos_bp.route('/api/factura', methods=['POST'])
@@ -91,10 +115,15 @@ def registrar_factura():
 
         # 3. Determinar ClienteID y guardar datos del cliente si es encargo
         cliente_id = 1 # Cliente General por defecto
+        telefono_contacto_encargo = None
+        es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente'
         
-        if es_encargo and datos_encargo:
+        if es_cliente_registrado:
+            cliente_id = current_user.id
+        elif es_encargo and datos_encargo:
             nombre_cli = datos_encargo.get('nombre_cliente', '').strip()
             telefono_cli = datos_encargo.get('telefono', '').strip()
+            telefono_contacto_encargo = telefono_cli if telefono_cli else None
             
             if nombre_cli:
                 # Intentar buscar el cliente por telefono
@@ -168,9 +197,12 @@ def registrar_factura():
 
             # Registrar encargo
             fecha_entrega = datos_encargo.get('fecha_entrega', datetime.now().strftime('%Y-%m-%d'))
+            especificaciones = datos_encargo.get('especificaciones', None)
+            ruta_imagen = datos_encargo.get('ruta_imagen_referencia', None)
+            
             cursor.execute(
-                "INSERT INTO Encargos (FacturaID, FechaEntrega, Estado, NotasCliente) VALUES (?, ?, 'Pendiente', ?)",
-                factura_id, fecha_entrega, datos_encargo.get('notas', '')
+                "INSERT INTO Encargos (FacturaID, FechaEntrega, Estado, NotasCliente, Especificaciones, RutaImagenReferencia, TelefonoContacto) VALUES (?, ?, 'Pendiente', ?, ?, ?, ?)",
+                factura_id, fecha_entrega, datos_encargo.get('notas', ''), especificaciones, ruta_imagen, telefono_contacto_encargo
             )
         else:
             # Venta de mostrador: pago completo
@@ -212,5 +244,155 @@ def registrar_factura():
     except Exception as e:
         conn.rollback()
         return jsonify({'error': f'Error al registrar factura: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+# ============================================================
+# API DE COTIZACIONES DE PASTELES PERSONALIZADOS
+# ============================================================
+
+from flask import session
+
+@pos_bp.route('/api/cotizaciones', methods=['POST'])
+@csrf.exempt
+@login_required
+def crear_cotizacion():
+    datos = request.json
+    especificaciones = datos.get('especificaciones')
+    fecha_entrega = datos.get('fecha_entrega')
+    ruta_imagen = datos.get('ruta_imagen_referencia')
+    telefono = datos.get('telefono')
+
+    if not especificaciones or not fecha_entrega:
+        return jsonify({'error': 'Faltan datos requeridos'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cliente_id = current_user.id if current_user.rol_nombre in ['Cliente', 'Invitado'] and not current_user.es_invitado else None
+    
+    # Para invitados, usamos un Session ID
+    session_id = None
+    if not cliente_id:
+        if 'cotizacion_session_id' not in session:
+            import uuid
+            session['cotizacion_session_id'] = str(uuid.uuid4())
+        session_id = session['cotizacion_session_id']
+        
+    try:
+        cursor.execute(
+            "INSERT INTO Cotizaciones (ClienteID, SessionID, Especificaciones, FechaEntrega, RutaImagenReferencia, TelefonoContacto, Estado) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'Pendiente')",
+            cliente_id, session_id, especificaciones, fecha_entrega, ruta_imagen, telefono
+        )
+        conn.commit()
+        return jsonify({'mensaje': 'Cotización solicitada correctamente'}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+@pos_bp.route('/api/cotizaciones/cliente', methods=['GET'])
+@login_required
+def obtener_cotizaciones_cliente():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cliente_id = current_user.id if current_user.rol_nombre in ['Cliente', 'Invitado'] and not current_user.es_invitado else None
+    session_id = session.get('cotizacion_session_id')
+    
+    if cliente_id:
+        cursor.execute("SELECT * FROM Cotizaciones WHERE ClienteID = ? ORDER BY FechaSolicitud DESC", cliente_id)
+    elif session_id:
+        cursor.execute("SELECT * FROM Cotizaciones WHERE SessionID = ? ORDER BY FechaSolicitud DESC", session_id)
+    else:
+        return jsonify([])
+        
+    cotizaciones = []
+    for row in cursor.fetchall():
+        cotizaciones.append({
+            'id': row.ID,
+            'especificaciones': row.Especificaciones,
+            'fecha_entrega': row.FechaEntrega.strftime('%Y-%m-%d') if row.FechaEntrega else '',
+            'ruta_imagen': row.RutaImagenReferencia,
+            'estado': row.Estado,
+            'precio_cotizado': float(row.PrecioCotizado) if row.PrecioCotizado else None
+        })
+    
+    conn.close()
+    return jsonify(cotizaciones)
+
+@pos_bp.route('/api/cotizaciones/pendientes', methods=['GET'])
+@login_required
+@roles_required('Estandar', 'Admin', 'SuperAdmin')
+def obtener_cotizaciones_pendientes():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT c.*, cl.Nombre AS ClienteNombre 
+        FROM Cotizaciones c
+        LEFT JOIN Clientes cl ON c.ClienteID = cl.ID
+        WHERE c.Estado = 'Pendiente'
+        ORDER BY c.FechaSolicitud ASC
+    """)
+    
+    cotizaciones = []
+    for row in cursor.fetchall():
+        cotizaciones.append({
+            'id': row.ID,
+            'cliente': row.ClienteNombre or 'Invitado',
+            'telefono': row.TelefonoContacto,
+            'especificaciones': row.Especificaciones,
+            'fecha_entrega': row.FechaEntrega.strftime('%Y-%m-%d') if row.FechaEntrega else '',
+            'ruta_imagen': row.RutaImagenReferencia,
+            'fecha_solicitud': row.FechaSolicitud.strftime('%Y-%m-%d %H:%M')
+        })
+        
+    conn.close()
+    return jsonify(cotizaciones)
+
+@pos_bp.route('/api/cotizaciones/<int:id>/cotizar', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Estandar', 'Admin', 'SuperAdmin')
+def cotizar_pedido(id):
+    datos = request.json
+    precio = datos.get('precio')
+    
+    if not precio:
+        return jsonify({'error': 'Precio es requerido'}), 400
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            "UPDATE Cotizaciones SET PrecioCotizado = ?, Estado = 'Cotizada' WHERE ID = ?",
+            precio, id
+        )
+        conn.commit()
+        return jsonify({'mensaje': 'Cotización enviada'}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+@pos_bp.route('/api/cotizaciones/<int:id>/rechazar', methods=['POST'])
+@csrf.exempt
+@login_required
+def rechazar_cotizacion(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("UPDATE Cotizaciones SET Estado = 'Rechazada' WHERE ID = ?", id)
+        conn.commit()
+        return jsonify({'mensaje': 'Cotización rechazada'}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
     finally:
         conn.close()

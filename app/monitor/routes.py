@@ -21,7 +21,7 @@ def seguimiento(codigo):
     cursor = conn.cursor()
     cursor.execute(
         "SELECT f.NumeroFactura, f.FechaHora, f.Total, f.Subtotal, f.IVA, "
-        "       e.Estado, e.FechaEntrega, e.NotasCliente, "
+        "       e.Estado, e.FechaEntrega, e.NotasCliente, e.Especificaciones, e.RutaImagenReferencia, "
         "       c.Nombre AS NombreCliente "
         "FROM Facturas f "
         "JOIN Encargos e ON e.FacturaID = f.ID "
@@ -70,6 +70,8 @@ def seguimiento(codigo):
             'estado': row.Estado,
             'fecha_entrega': row.FechaEntrega.strftime('%d/%m/%Y') if row.FechaEntrega else '',
             'notas': row.NotasCliente or '',
+            'especificaciones': row.Especificaciones or '',
+            'ruta_imagen_referencia': row.RutaImagenReferencia or '',
             'nombre_cliente': row.NombreCliente or 'N/A',
             'adelanto': adelanto,
             'saldo': saldo
@@ -84,14 +86,14 @@ def seguimiento(codigo):
 
 @monitor_bp.route('/monitor')
 @login_required
-@roles_required('Invitado', 'Admin', 'SuperAdmin')
+@roles_required('Empleado Estandar', 'Admin', 'SuperAdmin')
 def monitor_pedidos():
     """Panel interno para que la panadería vea y actualice los pedidos."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
         "SELECT f.ID, f.NumeroFactura, f.CodigoSeguimiento, f.FechaHora, f.Total, "
-        "       e.Estado, e.FechaEntrega, e.NotasCliente, "
+        "       e.Estado, e.FechaEntrega, e.NotasCliente, e.Especificaciones, e.RutaImagenReferencia, e.TelefonoContacto, "
         "       c.Nombre AS ClienteNombre, c.Telefono AS ClienteTelefono "
         "FROM Facturas f "
         "JOIN Encargos e ON e.FacturaID = f.ID "
@@ -111,8 +113,10 @@ def monitor_pedidos():
                 'estado': row.Estado,
                 'fecha_entrega': row.FechaEntrega.strftime('%d/%m/%Y') if row.FechaEntrega else '',
                 'notas': row.NotasCliente or '',
+                'especificaciones': row.Especificaciones or '',
+                'ruta_imagen_referencia': row.RutaImagenReferencia or '',
                 'nombre_cliente': row.ClienteNombre or 'Cliente General',
-                'telefono': row.ClienteTelefono or 'N/A'
+                'telefono': row.TelefonoContacto or row.ClienteTelefono or ''
             }
         })
     conn.close()

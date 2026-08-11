@@ -15,10 +15,8 @@ def main_hub():
     
     if rol in ['SuperAdmin', 'Admin']:
         return redirect(url_for('admin.dashboard'))
-    elif rol == 'Estandar':
+    elif rol in ['Estandar', 'Cliente', 'Invitado']:
         return redirect(url_for('pos.index'))
-    elif rol == 'Invitado':
-        return redirect(url_for('monitor.monitor_pedidos'))
     
     # Fallback por si acaso
     return redirect(url_for('pos.index'))

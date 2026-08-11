@@ -19,10 +19,26 @@
             </div>
         </div>
         <div style="display: flex; align-items: center; gap: 1rem;">
-            <button id="btn-nuevo-encargo" class="btn btn-primary" style="background: var(--warning); border: none;">+ Encargo Especial</button>
+            {% if user.rol_nombre in ['Cliente', 'Invitado'] %}
+                <button id="btn-mis-cotizaciones" class="btn btn-outline" style="border-color: var(--secondary); color: var(--secondary);">📝 Mis Cotizaciones</button>
+                <button id="btn-pastel-personalizado" class="btn btn-primary" style="background: var(--warning); border: none;">🎂 Pedir Pastel Personalizado</button>
+            {% else %}
+                <button id="btn-nuevo-encargo" class="btn btn-primary" style="background: var(--warning); border: none;">📦 Pedidos Clientes</button>
+            {% endif %}
             <a href="/logout" class="btn btn-outline" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">Cerrar Sesión</a>
         </div>
     </header>
+    
+    {% if user.rol_nombre == 'Cliente' and user.fecha_nacimiento and user.fecha_nacimiento.month == mes_actual %}
+    <div style="background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; padding: 1rem; text-align: center; border-radius: var(--radius-md); margin: 1rem 1.5rem; display: flex; align-items: center; justify-content: center; gap: 1rem; box-shadow: var(--shadow-md);">
+        <span style="font-size: 2rem;">🎉</span>
+        <div>
+            <h2 style="margin: 0; font-size: 1.25rem;">¡Es tu mes de cumpleaños, {{ user.nombre.split()[0] if user.nombre else 'Cliente' }}!</h2>
+            <p style="margin: 0; font-size: 0.95rem; opacity: 0.9;">Mira estos pasteles especiales para celebrar tu día.</p>
+        </div>
+        <span style="font-size: 2rem;">🎂</span>
+    </div>
+    {% endif %}
     
     <main class="pos-layout">
         <!-- Izquierda: Contenido Principal (Catálogo y Categorías) -->
@@ -91,7 +107,7 @@
                     </div>
                 </div>
                 <button type="button" class="btn btn-primary" id="btn-facturar" style="width: 100%; padding: 1.25rem; font-size: 1.1rem; border-radius: var(--radius-lg);" disabled>
-                    Facturar Venta (C$0.00)
+                    Facturar Venta
                 </button>
             </div>
         </aside>
@@ -100,12 +116,50 @@
     <!-- Modals Background -->
     <div id="modal-overlay" class="modal-overlay hidden"></div>
 
+    <!-- Modal Pastel Personalizado -->
+    <div id="pastel-personalizado-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <h2>Pedir Pastel Personalizado</h2>
+            <p class="subtitle">Cuéntanos cómo quieres tu pastel ideal.</p>
+            
+            <form id="form-pastel-personalizado">
+                <div class="form-group">
+                    <label for="pastel-especificaciones">Especificaciones (Sabores, decoración, detalles):</label>
+                    <textarea id="pastel-especificaciones" class="form-control" rows="4" required placeholder="Ej: Pastel de vainilla relleno de fresa con cubierta de chocolate, mensaje 'Feliz Cumpleaños'"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="pastel-fecha">Fecha de entrega deseada:</label>
+                    <input type="date" id="pastel-fecha" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="pastel-foto">Foto de Referencia (Opcional):</label>
+                    <input type="file" id="pastel-foto" class="form-control" accept="image/*">
+                </div>
+
+                {% if user.rol_nombre == 'Invitado' %}
+                <div class="form-group">
+                    <label for="pastel-telefono">Teléfono de contacto (WhatsApp):</label>
+                    <input type="tel" id="pastel-telefono" class="form-control" required placeholder="Ej: 8888-1234">
+                </div>
+                {% endif %}
+                
+                <div class="modal-actions" style="margin-top: 1.5rem;">
+                    <button type="button" class="btn btn-outline" id="btn-cerrar-pastel">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Añadir al Carrito</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal para Encargos -->
     <div id="encargo-modal" class="modal-overlay hidden">
         <div class="modal-content">
-            <h2>Registrar Encargo</h2>
-            <p class="subtitle">Se detectaron productos por encargo en la factura.</p>
+            <h2 id="encargo-modal-title">{% if user.rol_nombre in ['Cliente', 'Invitado'] %}Mi Encargo{% else %}Registrar Encargo{% endif %}</h2>
+            <p class="subtitle">{% if user.rol_nombre in ['Cliente', 'Invitado'] %}Confirma tu encargo pagando el 50% por adelantado.{% else %}Se detectaron productos por encargo en la factura.{% endif %}</p>
             
+            {% if user.rol_nombre != 'Cliente' %}
             <div class="form-group">
                 <label for="modal-nombre-cliente">Nombre del Cliente:</label>
                 <input type="text" id="modal-nombre-cliente" class="form-control" placeholder="Ej. María López" required>
@@ -114,6 +168,11 @@
                 <label for="modal-telefono-cliente">Teléfono del Cliente:</label>
                 <input type="tel" id="modal-telefono-cliente" class="form-control" placeholder="Ej. 8888-1234" required>
             </div>
+            {% else %}
+            <!-- El cliente ya tiene nombre y teléfono en la sesión -->
+            <input type="hidden" id="modal-nombre-cliente" value="{{ user.nombre_completo }}">
+            <input type="hidden" id="modal-telefono-cliente" value="{{ user.telefono or '' }}">
+            {% endif %}
             
             <div style="display: flex; gap: 1rem;">
                 <div class="form-group" style="flex: 1;">
@@ -121,17 +180,22 @@
                     <input type="text" id="modal-total" class="form-control" readonly>
                 </div>
                 <div class="form-group" style="flex: 1;">
-                    <label for="modal-adelanto">Adelanto (Pago parcial):</label>
-                    <input type="number" id="modal-adelanto" class="form-control" min="0" step="0.01" required>
+                    <label for="modal-adelanto">Adelanto (50% Requerido):</label>
+                    <input type="number" id="modal-adelanto" class="form-control" readonly style="background: var(--background); font-weight: bold;">
                 </div>
             </div>
 
             <div class="form-group">
-                <label>Saldo Pendiente:</label>
-                <input type="text" id="modal-saldo" class="form-control" readonly style="color: var(--danger); font-weight: 700;">
+                <label for="modal-metodo-pago">Método de Pago:</label>
+                <select id="modal-metodo-pago" class="form-control">
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Tarjeta">Tarjeta</option>
+                    <option value="Transferencia">Transferencia</option>
+                </select>
             </div>
             
-            <div class="form-group" style="background: var(--background); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); margin-top: 1.5rem;">
+            <!-- Solo mostrar efectivo recibido si el método de pago es Efectivo -->
+            <div id="encargo-efectivo-container" class="form-group" style="background: var(--background); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); margin-top: 1.5rem;">
                 <label for="modal-efectivo-encargo">Efectivo Recibido (C$):</label>
                 <input type="number" id="modal-efectivo-encargo" class="form-control" min="0" step="0.01" placeholder="Ej. 1000">
                 
@@ -142,9 +206,9 @@
                 <div id="desglose-cambio-encargo" style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted); text-align: right;"></div>
             </div>
 
-            <div class="form-group" style="margin-top: 1.5rem;">
+            <div class="form-group" style="margin-top: 1.5rem; display: none;" id="encargo-fecha-container">
                 <label for="modal-fecha">Fecha de Entrega:</label>
-                <input type="date" id="modal-fecha" class="form-control" required>
+                <input type="date" id="modal-fecha" class="form-control">
             </div>
             
             <div class="modal-actions">
@@ -341,6 +405,34 @@
     </div>
 
     <div id="toast-container" class="toast-container"></div>
+
+    <!-- Modal Mis Cotizaciones (Cliente) -->
+    <div id="mis-cotizaciones-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 600px; width: 90%;">
+            <h2>Mis Cotizaciones</h2>
+            <p class="subtitle">Revisa el estado de tus solicitudes de pastel personalizado.</p>
+            <div id="cotizaciones-cliente-list" style="margin-top: 1rem; max-height: 60vh; overflow-y: auto;">
+                <p style="text-align: center; color: var(--text-muted);">Cargando...</p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" id="btn-cerrar-mis-cotizaciones">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Pedidos Clientes (Recepción) -->
+    <div id="pedidos-clientes-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 700px; width: 90%;">
+            <h2>Pedidos de Clientes (Pendientes)</h2>
+            <p class="subtitle">Asigna un precio a los pasteles personalizados solicitados.</p>
+            <div id="cotizaciones-pendientes-list" style="margin-top: 1rem; max-height: 60vh; overflow-y: auto;">
+                <p style="text-align: center; color: var(--text-muted);">Cargando...</p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" id="btn-cerrar-pedidos-clientes">Cerrar</button>
+            </div>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='js/pos.js') }}"></script>
     <script>
