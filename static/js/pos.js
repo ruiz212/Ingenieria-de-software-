@@ -126,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <strong>Especificaciones:</strong><br>
                                 ${c.especificaciones}
                             </div>
-                            ${c.ruta_imagen ? `<a href="/static/${c.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary); text-decoration: underline;">Ver Foto de Referencia</a>` : ''}
+                            ${c.ruta_imagen ? `<a href="${c.ruta_imagen.startsWith('http') ? c.ruta_imagen : '/static/' + c.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary); text-decoration: underline;">Ver Foto de Referencia</a>` : ''}
                             
                             <div style="width: 100%; display: flex; gap: 0.5rem; margin-top: 0.5rem;">
                                 <input type="number" id="precio-cotizacion-${c.id}" class="form-control" placeholder="Precio (C$)" min="0" step="0.01" style="flex: 1;">
@@ -986,7 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </span>
                     </div>
                     <p style="font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--text-main);">${cot.especificaciones}</p>
-                    ${cot.ruta_imagen ? `<a href="/static/${cot.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary);">Ver foto de referencia</a>` : ''}
+                    ${cot.ruta_imagen ? `<a href="${cot.ruta_imagen.startsWith('http') ? cot.ruta_imagen : '/static/' + cot.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary);">Ver foto de referencia</a>` : ''}
                     
                     ${cot.estado === 'Cotizada' ? `
                         <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
@@ -1088,7 +1088,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span style="font-size: 0.85rem; color: var(--text-muted);">Fecha Entrega: ${cot.fecha_entrega}</span>
                     </div>
                     <p style="font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--text-main);">${cot.especificaciones}</p>
-                    ${cot.ruta_imagen ? `<a href="/static/${cot.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary); display: inline-block; margin-bottom: 1rem;">Ver foto de referencia</a>` : ''}
+                    ${cot.ruta_imagen ? `<a href="${cot.ruta_imagen.startsWith('http') ? cot.ruta_imagen : '/static/' + cot.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary); display: inline-block; margin-bottom: 1rem;">Ver foto de referencia</a>` : ''}
                     
                     <div style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center;">
                         <input type="number" id="precio-cot-${cot.id}" class="form-control" placeholder="Precio (C$)" min="0" step="0.01" style="width: 150px;">

@@ -71,15 +71,41 @@ def upload_referencia():
         return jsonify({'error': 'No selected file'}), 400
     
     if file:
-        filename = secure_filename(file.filename)
-        unique_filename = f"{uuid.uuid4().hex}_{filename}"
-        upload_folder = os.path.join(current_app.root_path, 'static', 'uploads', 'referencias')
-        os.makedirs(upload_folder, exist_ok=True)
+        import requests
+        import base64
+        import os
         
-        file_path = os.path.join(upload_folder, unique_filename)
-        file.save(file_path)
+        # Lee la imagen y la codifica en base64
+        img_data = file.read()
+        b64_image = base64.b64encode(img_data).decode('utf-8')
         
-        return jsonify({'ruta': f"uploads/referencias/{unique_filename}"}), 200
+        # API Key de ImgBB (debe configurarse en .env, si no usa una por defecto o falla)
+        # Nota: Por favor define IMGBB_API_KEY en tu archivo .env
+        api_key = os.environ.get('IMGBB_API_KEY', '')
+        
+        if not api_key:
+            return jsonify({'error': 'La clave de API de ImgBB no está configurada (IMGBB_API_KEY).'}), 500
+
+        try:
+            # Petición a la API de ImgBB
+            response = requests.post(
+                'https://api.imgbb.com/1/upload',
+                data={
+                    'key': api_key,
+                    'image': b64_image
+                }
+            )
+            
+            result = response.json()
+            if result.get('success'):
+                url_imagen = result['data']['url']
+                return jsonify({'ruta': url_imagen}), 200
+            else:
+                error_msg = result.get('error', {}).get('message', 'Error desconocido en ImgBB')
+                return jsonify({'error': f'Error al subir a ImgBB: {error_msg}'}), 500
+                
+        except Exception as e:
+            return jsonify({'error': f'Error de conexión con ImgBB: {str(e)}'}), 500
 
 
 @pos_bp.route('/api/factura', methods=['POST'])

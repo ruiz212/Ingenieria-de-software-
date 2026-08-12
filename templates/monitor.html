@@ -208,8 +208,8 @@
                         <p style="font-size: 0.85rem; margin: 0 0 0.5rem 0; color: var(--text-main);">{{ encargo.encargo_detalles.especificaciones }}</p>
                     {% endif %}
                     {% if encargo.encargo_detalles.ruta_imagen_referencia %}
-                        <a href="{{ url_for('static', filename=encargo.encargo_detalles.ruta_imagen_referencia) }}" target="_blank" style="font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.25rem; color: var(--primary); font-weight: 700; text-decoration: none; background: rgba(30, 64, 175, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px;">
-                            🖼️ Ver Foto Referencia
+                        <a href="{% if encargo.encargo_detalles.ruta_imagen_referencia.startswith('http') %}{{ encargo.encargo_detalles.ruta_imagen_referencia }}{% else %}{{ url_for('static', filename=encargo.encargo_detalles.ruta_imagen_referencia) }}{% endif %}" target="_blank" style="font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.25rem; color: var(--primary); font-weight: 700; text-decoration: none; background: rgba(30, 64, 175, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px;">
+                            <span style="font-size: 1rem;">🖼️</span> Foto Referencia
                         </a>
                     {% endif %}
                 </div>
