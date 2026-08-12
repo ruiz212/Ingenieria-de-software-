@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurar Autenticador | Panadería Amada</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .totp-setup-container {
+            max-width: 600px;
+            margin: 2rem auto;
+        }
+        
+        .qr-container {
+            text-align: center;
+            background: white;
+            padding: 1rem;
+            border-radius: var(--radius-md);
+            display: inline-block;
+            margin: 1.5rem 0;
+            border: 1px solid var(--border-light);
+        }
+        
+        .secret-key {
+            font-family: monospace;
+            background: var(--surface-sunken);
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-sm);
+            letter-spacing: 0.1em;
+            font-size: 1.1rem;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+
+        .step-card {
+            margin-bottom: 1.5rem;
+        }
+
+        .totp-input-wrapper input {
+            text-align: center;
+            letter-spacing: 0.5em;
+            font-size: 1.25rem;
+            font-weight: 700;
+            max-width: 200px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-bg">
+        <div class="ambient-shape shape-1"></div>
+        <div class="ambient-shape shape-2"></div>
+    </div>
+
+    {% include 'admin/navbar.html' %}
+
+    <main class="admin-layout">
+        <div class="page-header">
+            <h2>Autenticación en Dos Pasos (TOTP)</h2>
+            <p>Protege tu cuenta con una capa extra de seguridad.</p>
+        </div>
+
+        <div class="totp-setup-container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}" style="background: var(--danger-bg); color: var(--danger); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1rem;">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="panel step-card">
+                <div class="panel-header">
+                    <h3>1. Descarga una aplicación autenticadora</h3>
+                </div>
+                <div class="panel-body">
+                    <p>Descarga e instala <strong>Google Authenticator</strong>, <strong>Microsoft Authenticator</strong> o <strong>Authy</strong> en tu dispositivo móvil.</p>
+                </div>
+            </div>
+
+            <div class="panel step-card">
+                <div class="panel-header">
+                    <h3>2. Escanea el código QR</h3>
+                </div>
+                <div class="panel-body" style="text-align: center;">
+                    <p>Abre la aplicación y escanea el siguiente código QR:</p>
+                    
+                    <div class="qr-container">
+                        <img src="data:image/png;base64,{{ qr_base64 }}" alt="Código QR TOTP" style="max-width: 200px;">
+                    </div>
+                    
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;">O ingresa esta clave manualmente:</p>
+                    <div class="secret-key">{{ secret }}</div>
+                </div>
+            </div>
+
+            <div class="panel step-card">
+                <div class="panel-header panel-accent-primary">
+                    <h3>3. Verifica el código</h3>
+                </div>
+                <div class="panel-body">
+                    <p style="margin-bottom: 1rem;">Ingresa el código de 6 dígitos generado por la aplicación para confirmar la configuración:</p>
+                    
+                    <form method="POST" action="{{ url_for('auth.setup_totp') }}" style="text-align: center;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="form-group totp-input-wrapper">
+                            <input type="text" name="totp_code" class="form-control" required autocomplete="off" placeholder="••••••" maxlength="6" pattern="\d{6}">
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem; padding-left: 2rem; padding-right: 2rem;">Activar Autenticador</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

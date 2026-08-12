@@ -313,9 +313,9 @@
                     </div>
                 </div>
 
-                <!-- PASO 3: Verificación SMS -->
+                <!-- PASO 3: Seguridad -->
                 <div class="form-step" id="step-3">
-                    <h3 style="margin-bottom: 1rem; color: var(--text-color); font-size: 1.1rem;">Seguridad y Verificación</h3>
+                    <h3 style="margin-bottom: 1rem; color: var(--text-color); font-size: 1.1rem;">Seguridad de la Cuenta</h3>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="telefono">Teléfono Celular</label>
@@ -327,34 +327,9 @@
                         </div>
                     </div>
                     
-                    <div class="form-group full-width" style="margin-top: 1rem;">
-                        <button type="button" id="btn-send-sms" class="btn btn-outline" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="sendSms()">
-                            Enviar Código SMS
-                        </button>
-                    </div>
-                    
-                    <div class="sms-section" id="sms-section" style="display: none;">
-                        <p style="text-align: center; font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">
-                            Hemos enviado un código de 6 dígitos a tu teléfono.
-                        </p>
-                        <div class="code-inputs">
-                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 1)">
-                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 2)">
-                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 3)">
-                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 4)">
-                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 5)">
-                            <input type="text" class="code-input" maxlength="1" onkeyup="moveToNext(this, event, 6)">
-                        </div>
-                        <p id="sms-error" style="color: var(--danger); font-size: 0.85rem; text-align: center; margin-top: 0.5rem; display: none;">Código incorrecto.</p>
-                        
-                        <button type="button" id="btn-verify-sms" class="btn btn-primary" style="width: 100%; margin-top: 1rem;" onclick="verifySms()">
-                            Verificar Código
-                        </button>
-                    </div>
-
                     <div class="btn-controls">
                         <button type="button" class="btn btn-outline" onclick="prevStep(2)">Atrás</button>
-                        <button type="submit" id="btn-submit" class="btn btn-primary" disabled style="opacity: 0.5; cursor: not-allowed;">Registrar Cuenta</button>
+                        <button type="submit" id="btn-submit" class="btn btn-primary">Registrar Cuenta</button>
                     </div>
                 </div>
             </form>
@@ -387,7 +362,7 @@
             const titles = {
                 1: "Información Básica",
                 2: "Detalles",
-                3: "Seguridad y Verificación"
+                3: "Seguridad de la Cuenta"
             };
             document.getElementById('step-title').innerText = titles[currentStep];
         }
@@ -424,102 +399,6 @@
             updateProgress();
         }
 
-        function moveToNext(input, event, index) {
-            if (event.key === 'Backspace' && input.value.length === 0) {
-                const prev = input.previousElementSibling;
-                if (prev) prev.focus();
-                return;
-            }
-            if (input.value.length === 1) {
-                const next = input.nextElementSibling;
-                if (next) next.focus();
-            }
-        }
-
-        async function sendSms() {
-            if (!validateStep(3)) {
-                return;
-            }
-
-            const telefono = document.getElementById('telefono').value;
-            const csrf = document.getElementById('csrf_token').value;
-            const btn = document.getElementById('btn-send-sms');
-            
-            btn.innerText = "Enviando...";
-            btn.disabled = true;
-
-            try {
-                const res = await fetch('/api/enviar_codigo_sms', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-                    body: JSON.stringify({ telefono })
-                });
-                
-                const data = await res.json();
-                
-                if (res.ok) {
-                    btn.innerText = "Código Enviado ✓";
-                    document.getElementById('sms-section').style.display = 'block';
-                    document.querySelector('.code-input').focus();
-                    
-                    // Solo para desarrollo: Mostrar el código simulado al usuario
-                    if (data.dev_codigo) {
-                        setTimeout(() => alert("🔧 MODO DE PRUEBA\nTu código SMS simulado es: " + data.dev_codigo), 500);
-                    }
-                } else {
-                    alert(data.error || "Error al enviar SMS");
-                    btn.innerText = "Reintentar";
-                    btn.disabled = false;
-                }
-            } catch (err) {
-                alert("Error de conexión");
-                btn.innerText = "Reintentar";
-                btn.disabled = false;
-            }
-        }
-
-        async function verifySms() {
-            const inputs = document.querySelectorAll('.code-input');
-            let codigo = '';
-            inputs.forEach(input => codigo += input.value);
-            
-            if (codigo.length < 6) {
-                document.getElementById('sms-error').innerText = "Ingresa los 6 dígitos";
-                document.getElementById('sms-error').style.display = 'block';
-                return;
-            }
-
-            const telefono = document.getElementById('telefono').value;
-            const csrf = document.getElementById('csrf_token').value;
-            const btn = document.getElementById('btn-verify-sms');
-            
-            btn.innerText = "Verificando...";
-            
-            try {
-                const res = await fetch('/api/verificar_codigo_sms', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-                    body: JSON.stringify({ codigo, telefono })
-                });
-                
-                if (res.ok) {
-                    document.getElementById('sms-section').innerHTML = '<div style="color: #047857; text-align: center; padding: 1rem; font-weight: bold; background: #d1fae5; border-radius: 8px;">✓ Teléfono Verificado</div>';
-                    const submitBtn = document.getElementById('btn-submit');
-                    submitBtn.disabled = false;
-                    submitBtn.style.opacity = '1';
-                    submitBtn.style.cursor = 'pointer';
-                } else {
-                    const data = await res.json();
-                    document.getElementById('sms-error').innerText = data.error || "Código incorrecto";
-                    document.getElementById('sms-error').style.display = 'block';
-                    btn.innerText = "Verificar Código";
-                }
-            } catch (err) {
-                document.getElementById('sms-error').innerText = "Error de conexión";
-                document.getElementById('sms-error').style.display = 'block';
-                btn.innerText = "Verificar Código";
-            }
-        }
     </script>
 </body>
 </html>

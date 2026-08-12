@@ -104,9 +104,13 @@ def registrar_factura():
     cursor = conn.cursor()
 
     try:
-        # 1. Obtener o crear turno activo
-        turno_id = obtener_o_crear_turno(current_user.id)
-
+        # 1. Obtener o crear turno activo (solo para empleados)
+        es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente'
+        es_invitado = getattr(current_user, 'rol_nombre', '') == 'Invitado'
+        
+        turno_id = None
+        if not (es_cliente_registrado or es_invitado):
+            turno_id = obtener_o_crear_turno(current_user.id)
         # 2. Generar número de factura correlativo desde la BD
         cursor.execute("SELECT ISNULL(MAX(ID), 0) + 1 FROM Facturas")
         siguiente_num = cursor.fetchone()[0]

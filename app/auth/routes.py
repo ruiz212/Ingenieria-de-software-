@@ -7,6 +7,10 @@ from werkzeug.security import check_password_hash, generate_password_hash  # typ
 from werkzeug.utils import secure_filename  # type: ignore
 import os
 import random
+import pyotp
+import qrcode
+import base64
+from io import BytesIO
 from app.extensions import csrf
 from twilio.rest import Client
 
@@ -28,9 +32,14 @@ def login():
         # 1. Intentar como Administrador / Empleado
         user, password_hash = User.get_by_username(identificador)
         if user and check_password_hash(password_hash, password):
-            login_user(user, remember=True)
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('hub.main_hub'))
+            if getattr(user, 'totp_enabled', False):
+                session['pre_totp_user_id'] = user.id
+                session['next_page'] = request.args.get('next')
+                return redirect(url_for('auth.login_totp'))
+            else:
+                login_user(user, remember=True)
+                next_page = request.args.get('next')
+                return redirect(next_page or url_for('hub.main_hub'))
 
         # 2. Intentar como Cliente
         cliente, password_hash_cli = Cliente.get_by_telefono(identificador)
@@ -42,6 +51,91 @@ def login():
         flash("Usuario/Teléfono o contraseña incorrectos", "error")
 
     return render_template('login.html')
+
+@auth_bp.route('/login/totp', methods=['GET', 'POST'])
+def login_totp():
+    """Pantalla para ingresar el código TOTP."""
+    if current_user.is_authenticated:
+        return redirect(url_for('hub.main_hub'))
+        
+    user_id = session.get('pre_totp_user_id')
+    if not user_id:
+        return redirect(url_for('auth.login'))
+        
+    user = User.get_by_id(user_id)
+    if not user or not user.totp_secret:
+        return redirect(url_for('auth.login'))
+        
+    if request.method == 'POST':
+        totp_code = request.form.get('totp_code')
+        totp = pyotp.TOTP(user.totp_secret)
+        
+        if totp.verify(totp_code):
+            login_user(user, remember=True)
+            session.pop('pre_totp_user_id', None)
+            next_page = session.pop('next_page', None)
+            return redirect(next_page or url_for('hub.main_hub'))
+        else:
+            flash("Código incorrecto.", "error")
+            
+    return render_template('totp_login.html')
+
+@auth_bp.route('/perfil/setup_totp', methods=['GET', 'POST'])
+@login_required
+def setup_totp():
+    """Ruta para configurar TOTP para empleados/administradores."""
+    # Solo permitir a empleados
+    if getattr(current_user, 'rol_nombre', '') in ['Cliente', 'Invitado']:
+        flash("Acceso denegado.", "error")
+        return redirect('/pos')
+        
+    user = User.get_by_id(current_user.id)
+    
+    if request.method == 'POST':
+        # El usuario ingresa el código para confirmar la configuración
+        totp_code = request.form.get('totp_code')
+        secret = session.get('setup_totp_secret')
+        
+        if not secret:
+            flash("La sesión expiró. Vuelve a intentarlo.", "error")
+            return redirect(url_for('auth.setup_totp'))
+            
+        totp = pyotp.TOTP(secret)
+        if totp.verify(totp_code):
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE Usuarios SET TOTPSecret = ?, TOTPEnabled = 1 WHERE ID = ?", secret, user.id)
+            conn.commit()
+            conn.close()
+            
+            # Actualizar en sesión
+            user.totp_secret = secret
+            user.totp_enabled = True
+            session.pop('setup_totp_secret', None)
+            
+            flash("¡Autenticación en dos pasos habilitada con éxito!", "success")
+            return redirect(url_for('hub.main_hub'))
+        else:
+            flash("Código incorrecto. Inténtalo de nuevo.", "error")
+            
+    # GET: Generar secreto y código QR
+    if user.totp_enabled:
+        flash("La autenticación en dos pasos ya está habilitada.", "info")
+        return redirect(url_for('hub.main_hub'))
+        
+    secret = pyotp.random_base32()
+    session['setup_totp_secret'] = secret
+    
+    # Generar URI para Google Authenticator
+    totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user.username, issuer_name="Panadería Amada")
+    
+    # Generar imagen QR
+    qr = qrcode.make(totp_uri)
+    buf = BytesIO()
+    qr.save(buf, format="PNG")
+    qr_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    
+    return render_template('admin/setup_totp.html', secret=secret, qr_base64=qr_base64, user=user)
 
 
 @auth_bp.route('/logout')
@@ -79,9 +173,9 @@ def cliente_registro():
         genero = request.form.get('genero')
         fecha_nacimiento = request.form.get('fecha_nacimiento')
         
-        # Validar que el teléfono fue verificado por SMS
-        if not session.get('telefono_verificado') or session.get('sms_phone') != telefono:
-            flash("Debes verificar tu número de teléfono por SMS antes de registrarte.", "error")
+        # Validar que el teléfono fue proporcionado
+        if not telefono:
+            flash("El número de teléfono es obligatorio.", "error")
             return redirect(url_for('auth.cliente_registro'))
         
         foto = request.files.get('foto')

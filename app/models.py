@@ -9,12 +9,14 @@ from app.extensions import login_manager
 class User(UserMixin):
     """Modelo de usuario que representa una fila de la tabla Usuarios."""
 
-    def __init__(self, id, username, nombre_completo, rol_id, rol_nombre=None):
+    def __init__(self, id, username, nombre_completo, rol_id, rol_nombre=None, totp_secret=None, totp_enabled=False):
         self.id = id
         self.username = username
         self.nombre_completo = nombre_completo
         self.rol_id = rol_id
         self.rol_nombre = rol_nombre
+        self.totp_secret = totp_secret
+        self.totp_enabled = totp_enabled
 
     def get_id(self):
         """Devuelve un ID modificado con prefijo para diferenciar entre Empleados y Clientes."""
@@ -26,7 +28,7 @@ class User(UserMixin):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT u.ID, u.Username, u.NombreCompleto, u.RolID, r.Nombre "
+            "SELECT u.ID, u.Username, u.NombreCompleto, u.RolID, r.Nombre, u.TOTPSecret, u.TOTPEnabled "
             "FROM Usuarios u JOIN Roles r ON u.RolID = r.ID "
             "WHERE u.ID = ? AND u.Activo = 1", user_id
         )
@@ -36,7 +38,8 @@ class User(UserMixin):
             return User(
                 id=row.ID, username=row.Username,
                 nombre_completo=row.NombreCompleto,
-                rol_id=row.RolID, rol_nombre=row.Nombre
+                rol_id=row.RolID, rol_nombre=row.Nombre,
+                totp_secret=row.TOTPSecret, totp_enabled=row.TOTPEnabled
             )
         return None
 
@@ -46,7 +49,7 @@ class User(UserMixin):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT u.ID, u.Username, u.PasswordHash, u.NombreCompleto, u.RolID, r.Nombre "
+            "SELECT u.ID, u.Username, u.PasswordHash, u.NombreCompleto, u.RolID, r.Nombre, u.TOTPSecret, u.TOTPEnabled "
             "FROM Usuarios u JOIN Roles r ON u.RolID = r.ID "
             "WHERE u.Username = ? AND u.Activo = 1", username
         )
@@ -56,7 +59,8 @@ class User(UserMixin):
             user = User(
                 id=row.ID, username=row.Username,
                 nombre_completo=row.NombreCompleto,
-                rol_id=row.RolID, rol_nombre=row.Nombre
+                rol_id=row.RolID, rol_nombre=row.Nombre,
+                totp_secret=row.TOTPSecret, totp_enabled=row.TOTPEnabled
             )
             return user, row.PasswordHash
         return None, None

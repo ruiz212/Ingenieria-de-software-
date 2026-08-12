@@ -23,7 +23,11 @@
                 <button id="btn-mis-cotizaciones" class="btn btn-outline" style="border-color: var(--secondary); color: var(--secondary);">📝 Mis Cotizaciones</button>
                 <button id="btn-pastel-personalizado" class="btn btn-primary" style="background: var(--warning); border: none;">🎂 Pedir Pastel Personalizado</button>
             {% else %}
-                <button id="btn-nuevo-encargo" class="btn btn-primary" style="background: var(--warning); border: none;">📦 Pedidos Clientes</button>
+                <button id="btn-ver-pedidos-clientes" class="btn btn-outline" style="border-color: var(--warning); color: var(--warning); position: relative;">
+                    🔔 Solicitudes Web
+                    <span id="badge-pedidos" style="position: absolute; top: -8px; right: -8px; background: var(--danger); color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 0.75rem; font-weight: bold; display: none; align-items: center; justify-content: center;">0</span>
+                </button>
+                <button id="btn-nuevo-encargo" class="btn btn-primary" style="background: var(--warning); border: none;">📦 Nuevo Encargo Local</button>
             {% endif %}
             <a href="/logout" class="btn btn-outline" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">Cerrar Sesión</a>
         </div>
@@ -107,9 +111,15 @@
                         <span id="total-display">C$0.00</span>
                     </div>
                 </div>
+                {% if user.rol_nombre in ['Cliente', 'Invitado'] %}
+                <button type="button" class="btn btn-primary" id="btn-realizar-pedido" style="width: 100%; padding: 1.25rem; font-size: 1.1rem; border-radius: var(--radius-lg); background: var(--success); border: none;" disabled>
+                    Realizar Pedido
+                </button>
+                {% else %}
                 <button type="button" class="btn btn-primary" id="btn-facturar" style="width: 100%; padding: 1.25rem; font-size: 1.1rem; border-radius: var(--radius-lg);" disabled>
                     Facturar Venta
                 </button>
+                {% endif %}
             </div>
         </aside>
     </main>

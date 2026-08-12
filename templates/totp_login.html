@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panadería Amada | Iniciar Sesión</title>
+    <title>Panadería Amada | Autenticación en dos pasos</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
     <style>
@@ -170,6 +170,13 @@
             background-color: #ffffff;
             box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.1);
         }
+        
+        .totp-input-wrapper input {
+            text-align: center;
+            letter-spacing: 0.5em;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
 
         /* Botón Principal */
         .btn-login {
@@ -202,19 +209,6 @@
             text-align: center;
         }
 
-        .link-primary {
-            color: var(--brand-primary);
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.95rem;
-            transition: color 0.2s;
-        }
-
-        .link-primary:hover {
-            color: var(--brand-primary-hover);
-            text-decoration: underline;
-        }
-
         .link-secondary {
             color: var(--text-muted);
             text-decoration: none;
@@ -226,25 +220,6 @@
         .link-secondary:hover {
             color: var(--text-main);
         }
-
-        .divider {
-            display: flex;
-            align-items: center;
-            text-align: center;
-            margin: 1.5rem 0;
-            color: #9ca3af;
-            font-size: 0.875rem;
-        }
-
-        .divider::before,
-        .divider::after {
-            content: '';
-            flex: 1;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        .divider:not(:empty)::before { margin-right: .75em; }
-        .divider:not(:empty)::after { margin-left: .75em; }
 
         /* Mensajes Flash */
         .flash-messages {
@@ -289,8 +264,8 @@
                 🥐 <span>Amada</span>
             </div>
             <div class="welcome-text">
-                <h2>Tradición en cada bocado</h2>
-                <p>Bienvenido al sistema integral de gestión y punto de venta de Panadería Amada. Accede para continuar.</p>
+                <h2>Seguridad primero</h2>
+                <p>Protegiendo la información de nuestro negocio y nuestros clientes.</p>
             </div>
         </div>
 
@@ -298,8 +273,9 @@
         <div class="split-right">
             <div class="login-form-container">
                 <div class="form-header">
-                    <h1>Iniciar Sesión</h1>
-                    <p>Ingresa tus credenciales para acceder</p>
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔐</div>
+                    <h1>Verificación</h1>
+                    <p>Ingresa el código de 6 dígitos de tu app</p>
                 </div>
 
                 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -315,27 +291,19 @@
                     {% endif %}
                 {% endwith %}
 
-                <form method="POST" action="/login">
+                <form method="POST" action="{{ url_for('auth.login_totp') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
-                    <div class="form-group">
-                        <label for="identificador" class="form-label">Usuario o Teléfono</label>
-                        <input type="text" id="identificador" name="identificador" class="form-control" required autocomplete="username" placeholder="Ej. amada o 88881234">
+                    <div class="form-group totp-input-wrapper">
+                        <label for="totp_code" class="form-label">Código TOTP</label>
+                        <input type="text" id="totp_code" name="totp_code" class="form-control" required autocomplete="off" placeholder="••••••" maxlength="6" pattern="\d{6}">
                     </div>
 
-                    <div class="form-group">
-                        <label for="password" class="form-label">Contraseña</label>
-                        <input type="password" id="password" name="password" class="form-control" required autocomplete="current-password" placeholder="••••••••">
-                    </div>
-
-                    <button type="submit" class="btn-login">Ingresar al Sistema</button>
+                    <button type="submit" class="btn-login">Verificar y Entrar</button>
                 </form>
 
-                <div class="divider">Clientes</div>
-
                 <div class="secondary-actions">
-                    <a href="{{ url_for('auth.cliente_registro') }}" class="link-primary">¿Eres nuevo? Crea tu cuenta</a>
-                    <a href="{{ url_for('auth.cliente_invitado') }}" class="link-secondary">Continuar como invitado</a>
+                    <a href="{{ url_for('auth.login') }}" class="link-secondary">Cancelar e iniciar con otra cuenta</a>
                 </div>
             </div>
         </div>

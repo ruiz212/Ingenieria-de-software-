@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuración | Panadería Amada</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            align-items: start;
+        }
+
+        .config-section {
+            animation: fadeSlideUp 0.5s var(--ease-out) both;
+        }
+        .config-section:nth-child(2) { animation-delay: 80ms; }
+        .config-section:nth-child(3) { animation-delay: 160ms; }
+        .config-section:nth-child(4) { animation-delay: 240ms; }
+
+        .config-section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .config-section-header .section-icon {
+            width: 38px; height: 38px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+
+        .config-section-header h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--secondary);
+            margin-bottom: 0.1rem;
+        }
+
+        .config-section-header p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .config-field {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-light);
+            transition: background var(--transition-fast);
+        }
+        .config-field:last-child { border-bottom: none; }
+        .config-field:hover { background: var(--surface-sunken); }
+
+        .config-field-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .config-field-label {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--secondary);
+            margin-bottom: 0.15rem;
+        }
+        .config-field-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .config-field-input {
+            flex-shrink: 0;
+            margin-left: 1rem;
+        }
+        .config-field-input input[type="text"],
+        .config-field-input input[type="number"] {
+            width: 160px;
+            padding: 0.5rem 0.75rem;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            font-family: inherit;
+            background: var(--surface);
+            color: var(--text-main);
+            transition: all var(--transition-fast);
+        }
+        .config-field-input input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: var(--shadow-glow);
+        }
+
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            cursor: pointer;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--border);
+            border-radius: 24px;
+            transition: all 0.3s var(--ease-out);
+        }
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 18px; height: 18px;
+            left: 3px; bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.3s var(--ease-spring);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--primary-color);
+        }
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(20px);
+        }
+
+        /* TOTP Users Table */
+        .totp-users-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        .totp-users-table thead th {
+            text-align: left;
+            padding: 0.75rem 1.25rem;
+            color: var(--text-muted);
+            font-weight: 700;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-sunken);
+        }
+        .totp-users-table tbody td {
+            padding: 0.7rem 1.25rem;
+            border-bottom: 1px solid var(--border-light);
+            vertical-align: middle;
+        }
+        .totp-users-table tbody tr:hover td {
+            background: var(--surface-sunken);
+        }
+        .totp-users-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .totp-status-active {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: var(--success);
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+        .totp-status-inactive {
+            color: var(--text-faint);
+            font-size: 0.8rem;
+        }
+        .totp-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: badgePulse 1.5s ease-in-out infinite;
+        }
+
+        .btn-reset-totp {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.75rem;
+            background: var(--danger-bg);
+            color: var(--danger);
+            border: 1px solid var(--danger-border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            transition: all var(--transition-fast);
+        }
+        .btn-reset-totp:hover {
+            background: var(--danger);
+            color: white;
+        }
+
+        /* Save bar */
+        .config-save-bar {
+            position: sticky;
+            bottom: 1rem;
+            background: var(--surface-elevated);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow-lg);
+            margin-top: 2rem;
+            animation: fadeSlideUp 0.5s var(--ease-out) both;
+            animation-delay: 300ms;
+        }
+        .config-save-bar p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .full-width { grid-column: 1 / -1; }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--success);
+            color: white;
+            padding: 0.85rem 1.25rem;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            font-size: 0.9rem;
+            box-shadow: var(--shadow-lg);
+            z-index: 2000;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.4s var(--ease-spring);
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .toast.error {
+            background: var(--danger);
+        }
+
+        @media (max-width: 768px) {
+            .config-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-bg">
+        <div class="ambient-shape shape-1"></div>
+        <div class="ambient-shape shape-2"></div>
+    </div>
+
+    {% include 'admin/navbar.html' %}
+
+    <main class="admin-layout">
+        <div class="page-header">
+            <h2>⚙️ Configuración del Sistema</h2>
+            <p>Ajustes generales del negocio, seguridad y preferencias del sistema.</p>
+        </div>
+
+        <div class="config-grid">
+
+            <!-- ========== DATOS DEL NEGOCIO ========== -->
+            <div class="panel config-section">
+                <div class="config-section-header">
+                    <div class="section-icon" style="background: var(--primary-subtle); color: var(--primary-color);">🏪</div>
+                    <div>
+                        <h3>Datos del Negocio</h3>
+                        <p>Información general que aparece en facturas y recibos.</p>
+                    </div>
+                </div>
+                <div class="config-field">
+                    <div class="config-field-info">
+                        <div class="config-field-label">Nombre del Negocio</div>
+                        <div class="config-field-desc">Se mostrará en facturas y encabezados.</div>
+                    </div>
+                    <div class="config-field-input">
+                        <input type="text" id="cfg-nombre_negocio" value="{{ config.get('nombre_negocio', {}).get('valor', '') }}">
+                    </div>
+                </div>
+                <div class="config-field">
+                    <div class="config-field-info">
+                        <div class="config-field-label">Teléfono de Contacto</div>
+                        <div class="config-field-desc">Número visible para los clientes.</div>
+                    </div>
+                    <div class="config-field-input">
+                        <input type="text" id="cfg-telefono_negocio" value="{{ config.get('telefono_negocio', {}).get('valor', '') }}" placeholder="+505 8888-1234">
+                    </div>
+                </div>
+                <div class="config-field">
+                    <div class="config-field-info">
+                        <div class="config-field-label">Dirección</div>
+                        <div class="config-field-desc">Ubicación física de la panadería.</div>
+                    </div>
+                    <div class="config-field-input">
+                        <input type="text" id="cfg-direccion_negocio" value="{{ config.get('direccion_negocio', {}).get('valor', '') }}" placeholder="Barrio X, Calle Y">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== FACTURACIÓN ========== -->
+            <div class="panel config-section">
+                <div class="config-section-header">
+                    <div class="section-icon" style="background: var(--info-bg); color: var(--info);">🧾</div>
+                    <div>
+                        <h3>Facturación</h3>
+                        <p>Parámetros de impuestos y moneda.</p>
+                    </div>
+                </div>
+                <div class="config-field">
+                    <div class="config-field-info">
+                        <div class="config-field-label">IVA (%)</div>
+                        <div class="config-field-desc">Porcentaje de impuesto aplicado a las ventas.</div>
+                    </div>
+                    <div class="config-field-input">
+                        <input type="number" id="cfg-iva_porcentaje" value="{{ config.get('iva_porcentaje', {}).get('valor', '15') }}" min="0" max="100" step="0.5">
+                    </div>
+                </div>
+                <div class="config-field">
+                    <div class="config-field-info">
+                        <div class="config-field-label">Símbolo de Moneda</div>
+                        <div class="config-field-desc">Se muestra junto a los precios (ej: C$, $, L).</div>
+                    </div>
+                    <div class="config-field-input">
+                        <input type="text" id="cfg-moneda_simbolo" value="{{ config.get('moneda_simbolo', {}).get('valor', 'C$') }}" style="width: 80px; text-align: center;">
+                    </div>
+                </div>
+                <div class="config-field">
+                    <div class="config-field-info">
+                        <div class="config-field-label">Máx. líneas por factura</div>
+                        <div class="config-field-desc">Límite de productos diferentes en una sola venta.</div>
+                    </div>
+                    <div class="config-field-input">
+                        <input type="number" id="cfg-max_items_factura" value="{{ config.get('max_items_factura', {}).get('valor', '50') }}" min="1" max="200">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== SEGURIDAD ========== -->
+            <div class="panel config-section">
+                <div class="config-section-header">
+                    <div class="section-icon" style="background: var(--success-bg); color: var(--success);">🔐</div>
+                    <div>
+                        <h3>Seguridad</h3>
+                        <p>Autenticación en dos pasos y acceso al sistema.</p>
+                    </div>
+                </div>
+                <div class="config-field">
+                    <div class="config-field-info">
+                        <div class="config-field-label">TOTP Obligatorio</div>
+                        <div class="config-field-desc">Exigir verificación en dos pasos a todos los empleados.</div>
+                    </div>
+                    <div class="config-field-input">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cfg-totp_obligatorio" {% if config.get('totp_obligatorio', {}).get('valor', '0') == '1' %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="config-field">
+                    <div class="config-field-info">
+                        <div class="config-field-label">Permitir Invitados</div>
+                        <div class="config-field-desc">Permitir que los clientes usen el POS sin crear cuenta.</div>
+                    </div>
+                    <div class="config-field-input">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cfg-permitir_invitados" {% if config.get('permitir_invitados', {}).get('valor', '1') == '1' %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ESTADO TOTP POR USUARIO ========== -->
+            <div class="panel config-section">
+                <div class="config-section-header">
+                    <div class="section-icon" style="background: var(--warning-bg); color: var(--warning);">👥</div>
+                    <div>
+                        <h3>Estado TOTP por Usuario</h3>
+                        <p>Verifica quién tiene la verificación en dos pasos activada. Puedes resetear el TOTP de un usuario si perdió acceso a su dispositivo.</p>
+                    </div>
+                </div>
+                <table class="totp-users-table">
+                    <thead>
+                        <tr>
+                            <th>Empleado</th>
+                            <th>Rol</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in usuarios_totp %}
+                        <tr id="totp-row-{{ u.id }}">
+                            <td>
+                                <span class="cell-bold">{{ u.nombre }}</span>
+                                <div class="cell-muted">@{{ u.username }}</div>
+                            </td>
+                            <td><span class="badge badge-role">{{ u.rol }}</span></td>
+                            <td>
+                                {% if u.totp_enabled %}
+                                    <span class="totp-status-active"><span class="totp-dot"></span> Activado</span>
+                                {% else %}
+                                    <span class="totp-status-inactive">No configurado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if u.totp_enabled %}
+                                    <button class="btn-reset-totp" onclick="resetTOTP({{ u.id }}, '{{ u.nombre }}')">Resetear</button>
+                                {% else %}
+                                    <span style="color: var(--text-faint); font-size: 0.8rem;">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+
+        <!-- Save bar -->
+        <div class="config-save-bar">
+            <p>Los cambios no se guardan automáticamente.</p>
+            <button class="btn btn-primary" onclick="guardarConfiguracion()">💾 Guardar Cambios</button>
+        </div>
+
+    </main>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = 'toast' + (isError ? ' error' : '');
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function guardarConfiguracion() {
+            const datos = {};
+
+            // Text & number inputs
+            document.querySelectorAll('[id^="cfg-"]').forEach(el => {
+                const clave = el.id.replace('cfg-', '');
+                if (el.type === 'checkbox') {
+                    datos[clave] = el.checked ? '1' : '0';
+                } else {
+                    datos[clave] = el.value;
+                }
+            });
+
+            fetch('/admin/api/configuracion', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(datos)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast('✅ Configuración guardada correctamente');
+                } else {
+                    showToast('❌ Error: ' + (data.error || 'Desconocido'), true);
+                }
+            })
+            .catch(err => showToast('❌ Error de red', true));
+        }
+
+        function resetTOTP(userId, nombre) {
+            if (!confirm(`¿Estás segura de resetear la verificación en dos pasos para "${nombre}"?\n\nEl usuario tendrá que volver a configurarla la próxima vez que inicie sesión.`)) return;
+
+            fetch(`/admin/api/usuarios/${userId}/reset_totp`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast(`✅ TOTP reseteado para ${nombre}`);
+                    // Update UI
+                    const row = document.getElementById('totp-row-' + userId);
+                    if (row) {
+                        const statusCell = row.cells[2];
+                        const actionCell = row.cells[3];
+                        statusCell.innerHTML = '<span class="totp-status-inactive">No configurado</span>';
+                        actionCell.innerHTML = '<span style="color: var(--text-faint); font-size: 0.8rem;">—</span>';
+                    }
+                } else {
+                    showToast('❌ Error: ' + (data.error || 'Desconocido'), true);
+                }
+            })
+            .catch(err => showToast('❌ Error de red', true));
+        }
+    </script>
+</body>
+</html>

@@ -70,6 +70,159 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Lógica del Botón "Solicitudes Web" (Cotizaciones pendientes)
+    const btnVerPedidosClientes = document.getElementById('btn-ver-pedidos-clientes');
+    const pedidosClientesModal = document.getElementById('pedidos-clientes-modal');
+    const btnCerrarPedidosClientes = document.getElementById('btn-cerrar-pedidos-clientes');
+    const badgePedidos = document.getElementById('badge-pedidos');
+
+    if (btnVerPedidosClientes) {
+        btnVerPedidosClientes.addEventListener('click', async () => {
+            const listContainer = document.getElementById('cotizaciones-pendientes-list');
+            listContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Cargando...</p>';
+            pedidosClientesModal.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/cotizaciones/pendientes');
+                if (response.ok) {
+                    const cotizaciones = await response.json();
+                    
+                    if (badgePedidos) {
+                        badgePedidos.textContent = cotizaciones.length;
+                        badgePedidos.style.display = cotizaciones.length > 0 ? 'flex' : 'none';
+                    }
+
+                    if (cotizaciones.length === 0) {
+                        listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);"><span style="font-size: 2rem; display: block; margin-bottom: 0.5rem;">🎉</span>No hay solicitudes web pendientes.</div>';
+                        return;
+                    }
+
+                    listContainer.innerHTML = '';
+                    cotizaciones.forEach(c => {
+                        const div = document.createElement('div');
+                        div.className = 'cart-item';
+                        div.style.flexDirection = 'column';
+                        div.style.alignItems = 'flex-start';
+                        div.style.gap = '0.5rem';
+                        div.style.marginBottom = '1rem';
+                        div.style.background = 'white';
+                        div.style.padding = '1rem';
+                        div.style.borderRadius = 'var(--radius-md)';
+                        div.style.border = '1px solid var(--border)';
+                        
+                        div.innerHTML = `
+                            <div style="width: 100%; display: flex; justify-content: space-between; align-items: flex-start;">
+                                <div>
+                                    <h4 style="margin: 0; color: var(--primary-color);">Solicitud #${c.id}</h4>
+                                    <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-main);">
+                                        <strong>Cliente:</strong> ${c.cliente} <br>
+                                        <strong>Teléfono:</strong> ${c.telefono || 'No proporcionado'} <br>
+                                        <strong>Para:</strong> ${c.fecha_entrega}
+                                    </p>
+                                </div>
+                                <span style="font-size: 0.75rem; background: var(--warning); color: white; padding: 0.25rem 0.5rem; border-radius: 999px;">Pendiente</span>
+                            </div>
+                            <div style="background: var(--background); padding: 0.75rem; border-radius: var(--radius-sm); width: 100%; font-size: 0.9rem; margin-top: 0.5rem;">
+                                <strong>Especificaciones:</strong><br>
+                                ${c.especificaciones}
+                            </div>
+                            ${c.ruta_imagen ? `<a href="/static/${c.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary); text-decoration: underline;">Ver Foto de Referencia</a>` : ''}
+                            
+                            <div style="width: 100%; display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                <input type="number" id="precio-cotizacion-${c.id}" class="form-control" placeholder="Precio (C$)" min="0" step="0.01" style="flex: 1;">
+                                <button type="button" class="btn btn-primary" onclick="cotizarPedido(${c.id})" style="padding: 0.5rem 1rem;">Cotizar</button>
+                                <button type="button" class="btn btn-outline" onclick="rechazarPedido(${c.id})" style="padding: 0.5rem 1rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">Rechazar</button>
+                            </div>
+                        `;
+                        listContainer.appendChild(div);
+                    });
+                } else {
+                    listContainer.innerHTML = '<p style="text-align: center; color: var(--danger);">Error al cargar solicitudes.</p>';
+                }
+            } catch (error) {
+                listContainer.innerHTML = '<p style="text-align: center; color: var(--danger);">Error de conexión.</p>';
+            }
+        });
+        
+        // Polling para actualizar el badge de notificaciones cada minuto
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/cotizaciones/pendientes');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (badgePedidos) {
+                        badgePedidos.textContent = data.length;
+                        badgePedidos.style.display = data.length > 0 ? 'flex' : 'none';
+                    }
+                }
+            } catch (e) {}
+        }, 60000);
+        
+        // Lanzar una vez al inicio
+        setTimeout(() => {
+            if (badgePedidos) {
+                fetch('/api/cotizaciones/pendientes')
+                    .then(res => res.json())
+                    .then(data => {
+                        badgePedidos.textContent = data.length;
+                        badgePedidos.style.display = data.length > 0 ? 'flex' : 'none';
+                    }).catch(() => {});
+            }
+        }, 2000);
+    }
+
+    if (btnCerrarPedidosClientes) {
+        btnCerrarPedidosClientes.addEventListener('click', () => {
+            pedidosClientesModal.classList.add('hidden');
+        });
+    }
+
+    // Funciones globales para cotizar o rechazar
+    window.cotizarPedido = async function(id) {
+        const input = document.getElementById(`precio-cotizacion-${id}`);
+        const precio = parseFloat(input.value);
+        if (isNaN(precio) || precio <= 0) {
+            showToast('Ingresa un precio válido', true);
+            return;
+        }
+        
+        if (confirm(`¿Asignar precio de C$${precio.toFixed(2)} a esta solicitud?`)) {
+            try {
+                const res = await fetch(`/api/cotizaciones/${id}/cotizar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ precio: precio })
+                });
+                if (res.ok) {
+                    showToast('Precio asignado correctamente');
+                    document.getElementById('btn-ver-pedidos-clientes').click(); // Recargar lista
+                } else {
+                    showToast('Error al asignar precio', true);
+                }
+            } catch (e) {
+                showToast('Error de conexión', true);
+            }
+        }
+    }
+
+    window.rechazarPedido = async function(id) {
+        if (confirm('¿Estás seguro de que deseas rechazar esta solicitud?')) {
+            try {
+                const res = await fetch(`/api/cotizaciones/${id}/rechazar`, {
+                    method: 'POST'
+                });
+                if (res.ok) {
+                    showToast('Solicitud rechazada');
+                    document.getElementById('btn-ver-pedidos-clientes').click(); // Recargar lista
+                } else {
+                    showToast('Error al rechazar', true);
+                }
+            } catch (e) {
+                showToast('Error de conexión', true);
+            }
+        }
+    }
+
     // Lógica del Botón "Pastel Personalizado"
     const btnPastelPersonalizado = document.getElementById('btn-pastel-personalizado');
     const pastelPersonalizadoModal = document.getElementById('pastel-personalizado-modal');
@@ -308,52 +461,80 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputSaldo = document.getElementById('modal-saldo');
     const inputTotalModal = document.getElementById('modal-total');
 
-    btnFacturar.addEventListener('click', () => {
-        const tieneEncargos = carrito.some(item => item.categoria === 'Reposteria');
+    window.abrirModalEncargo = function(esClienteOnline = false) {
+        const total = calcularTotal();
+        document.getElementById('modal-total').value = `C$${total.toFixed(2)}`;
+        document.getElementById('modal-adelanto').value = esClienteOnline ? 0 : (total / 2).toFixed(2);
         
-        if (tieneEncargos) {
-            const total = calcularTotal();
-            inputTotalModal.value = `$${total.toFixed(2)}`;
-            inputAdelanto.value = (total / 2).toFixed(2);
-            
-            document.getElementById('modal-efectivo-encargo').value = '';
-            document.getElementById('modal-cambio-encargo').value = '';
-            document.getElementById('desglose-cambio-encargo').innerHTML = '';
-            
-            const metodoPago = document.getElementById('modal-metodo-pago');
-            if (metodoPago) metodoPago.value = 'Efectivo';
-            
-            const efectivoContainer = document.getElementById('encargo-efectivo-container');
-            if (efectivoContainer) efectivoContainer.style.display = 'block';
-            
-            const nombreInput = document.getElementById('modal-nombre-cliente');
-            const telefonoInput = document.getElementById('modal-telefono-cliente');
-            if (nombreInput && nombreInput.type !== 'hidden') nombreInput.value = '';
-            if (telefonoInput && telefonoInput.type !== 'hidden') telefonoInput.value = '';
-            
-            const customItem = carrito.find(item => item.es_custom);
-            const fechaContainer = document.getElementById('encargo-fecha-container');
-            const fechaInput = document.getElementById('modal-fecha');
-            
-            if (customItem) {
-                if (fechaContainer) fechaContainer.style.display = 'none';
-                if (fechaInput) fechaInput.value = customItem.encargo_detalles.fecha_entrega;
-            } else {
-                if (fechaContainer) fechaContainer.style.display = 'block';
-                if (fechaInput) fechaInput.value = '';
-            }
-
-            modal.classList.remove('hidden');
-        } else {
-            // Abrir Modal de Pago Normal
-            const pagoModal = document.getElementById('pago-modal');
-            document.getElementById('pago-total').value = `$${calcularTotal().toFixed(2)}`;
-            document.getElementById('pago-efectivo').value = '';
-            document.getElementById('pago-cambio').value = '';
-            document.getElementById('desglose-cambio-normal').innerHTML = 'Ingrese efectivo para ver el desglose del cambio...';
-            pagoModal.classList.remove('hidden');
+        // Si es cliente online, ocultar adelanto requerido y efectivo
+        const adelantoContainer = document.getElementById('modal-adelanto').closest('.form-group');
+        if (adelantoContainer) {
+            adelantoContainer.style.display = esClienteOnline ? 'none' : 'block';
         }
-    });
+        
+        const efectivoContainer = document.getElementById('encargo-efectivo-container');
+        if (efectivoContainer) {
+            efectivoContainer.style.display = esClienteOnline ? 'none' : 'block';
+        }
+
+        // Si es cliente online, forzar 'Transferencia' o 'Efectivo contra entrega' (usaremos Efectivo pero sin recibir caja)
+        const metodoPago = document.getElementById('modal-metodo-pago');
+        if (metodoPago && esClienteOnline) {
+            // Opcionalmente se puede bloquear o ajustar
+        }
+        
+        const dateInput = document.getElementById('modal-fecha');
+        if (dateInput) {
+            const tzOffset = (new Date()).getTimezoneOffset() * 60000; 
+            const today = (new Date(Date.now() - tzOffset)).toISOString().split('T')[0];
+            dateInput.min = today;
+            dateInput.value = today;
+        }
+
+        const fechaContainer = document.getElementById('encargo-fecha-container');
+        if (fechaContainer) {
+            fechaContainer.style.display = 'block';
+        }
+
+        modal.classList.remove('hidden');
+    }
+
+    if (btnFacturar) {
+        btnFacturar.addEventListener('click', () => {
+            if (carrito.length === 0) {
+                showToast('El carrito está vacío', true);
+                return;
+            }
+            
+            const hayEncargos = carrito.some(item => 
+                item.categoria === 'Reposteria' || item.es_custom
+            );
+            
+            if (hayEncargos) {
+                abrirModalEncargo();
+            } else {
+                document.getElementById('pago-total').textContent = `Total a Pagar: $${calcularTotal().toFixed(2)}`;
+                document.getElementById('pago-efectivo').value = '';
+                document.getElementById('pago-cambio').value = '';
+                document.getElementById('desglose-cambio-normal').innerHTML = '';
+                document.getElementById('pago-modal').classList.remove('hidden');
+                setTimeout(() => document.getElementById('pago-efectivo').focus(), 100);
+            }
+        });
+    }
+
+    // Lógica del Botón Realizar Pedido (Clientes / Invitados)
+    const btnRealizarPedido = document.getElementById('btn-realizar-pedido');
+    if (btnRealizarPedido) {
+        btnRealizarPedido.addEventListener('click', () => {
+            if (carrito.length === 0) {
+                showToast('El carrito está vacío', true);
+                return;
+            }
+            // Para clientes, todo el pedido es un encargo (delivery/pickup)
+            abrirModalEncargo(true); 
+        });
+    }
 
     const metodoPagoSelect = document.getElementById('modal-metodo-pago');
     if (metodoPagoSelect) {
@@ -402,17 +583,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const total = calcularTotal();
         const metodoPago = document.getElementById('modal-metodo-pago') ? document.getElementById('modal-metodo-pago').value : 'Efectivo';
         
-        if (isNaN(adelanto) || !fecha) {
-            showToast('Por favor, revisa el adelanto y la fecha de entrega', true);
-            return;
-        }
+        // Verificar si es cliente online (adelanto oculto)
+        const adelantoContainer = document.getElementById('modal-adelanto').closest('.form-group');
+        const esClienteOnline = adelantoContainer && adelantoContainer.style.display === 'none';
         
-        if (metodoPago === 'Efectivo') {
-            const efectivo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
-            if (efectivo < adelanto && adelanto > 0) {
-                showToast('El efectivo recibido es menor al adelanto', true);
+        let adelantoReal = adelanto;
+        if (esClienteOnline) {
+            adelantoReal = 0; // Clientes online no pagan adelanto físico en el POS
+        } else {
+            if (isNaN(adelantoReal) || !fecha) {
+                showToast('Por favor, revisa el adelanto y la fecha de entrega', true);
                 return;
             }
+            if (metodoPago === 'Efectivo') {
+                const efectivo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
+                if (efectivo < adelantoReal && adelantoReal > 0) {
+                    showToast('El efectivo recibido es menor al adelanto', true);
+                    return;
+                }
+            }
+        }
+        
+        if (!fecha) {
+            showToast('Por favor, selecciona una fecha de entrega', true);
+            return;
         }
         
         let especificaciones = null;
@@ -430,8 +624,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         cerrarModal();
         procesarFactura(true, {
-            adelanto: adelanto,
-            saldo: total - adelanto,
+            adelanto: adelantoReal,
+            saldo: total - adelantoReal,
             metodo_adelanto: metodoPago,
             fecha_entrega: fechaCustom ? fechaCustom : fecha,
             nombre_cliente: nombreCliente,
@@ -533,6 +727,7 @@ function renderizarCarrito() {
     const ivaDisplay = document.getElementById('iva-display');
     const totalDisplay = document.getElementById('total-display');
     const btnFacturar = document.getElementById('btn-facturar');
+    const btnRealizarPedido = document.getElementById('btn-realizar-pedido');
 
     cartItemsContainer.innerHTML = '';
 
@@ -541,7 +736,8 @@ function renderizarCarrito() {
         subtotalDisplay.textContent = '$0.00';
         if (ivaDisplay) ivaDisplay.textContent = '$0.00';
         totalDisplay.textContent = '$0.00';
-        btnFacturar.disabled = true;
+        if (btnFacturar) btnFacturar.disabled = true;
+        if (btnRealizarPedido) btnRealizarPedido.disabled = true;
         return;
     }
 
@@ -572,7 +768,8 @@ function renderizarCarrito() {
     subtotalDisplay.textContent = `$${subtotal.toFixed(2)}`;
     if (ivaDisplay) ivaDisplay.textContent = `$${iva.toFixed(2)}`;
     totalDisplay.textContent = `$${total.toFixed(2)}`;
-    btnFacturar.disabled = false;
+    if (btnFacturar) btnFacturar.disabled = false;
+    if (btnRealizarPedido) btnRealizarPedido.disabled = false;
 }
 
 function calcularSubtotal() {

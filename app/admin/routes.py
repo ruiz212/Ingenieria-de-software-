@@ -443,3 +443,81 @@ def toggle_vale(vale_id):
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
+
+# ============================================================
+# MÓDULO DE CONFIGURACIÓN
+# ============================================================
+
+@admin_bp.route('/configuracion')
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def configuracion():
+    """Panel de Configuración del Sistema."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Leer todas las configuraciones
+    cursor.execute("SELECT Clave, Valor, Descripcion FROM ConfiguracionSistema ORDER BY Clave")
+    config_rows = cursor.fetchall()
+    config = {row.Clave: {'valor': row.Valor, 'descripcion': row.Descripcion} for row in config_rows}
+
+    # Usuarios y su estado TOTP
+    cursor.execute(
+        "SELECT u.ID, u.NombreCompleto, u.Username, r.Nombre AS Rol, u.TOTPEnabled "
+        "FROM Usuarios u JOIN Roles r ON u.RolID = r.ID "
+        "WHERE u.Activo = 1 ORDER BY u.NombreCompleto"
+    )
+    usuarios_totp = [
+        {'id': row.ID, 'nombre': row.NombreCompleto, 'username': row.Username,
+         'rol': row.Rol, 'totp_enabled': bool(row.TOTPEnabled)}
+        for row in cursor.fetchall()
+    ]
+
+    conn.close()
+    return render_template('admin/configuracion.html', user=current_user, config=config, usuarios_totp=usuarios_totp)
+
+
+@admin_bp.route('/api/configuracion', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def guardar_configuracion():
+    """API para guardar configuraciones del sistema."""
+    datos = request.json
+    if not datos:
+        return jsonify({'error': 'No se recibieron datos'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        for clave, valor in datos.items():
+            cursor.execute(
+                "UPDATE ConfiguracionSistema SET Valor = ? WHERE Clave = ?",
+                str(valor), clave
+            )
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': 'Configuración guardada'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/usuarios/<int:user_id>/reset_totp', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def reset_totp_usuario(user_id):
+    """API para desactivar el TOTP de un usuario (en caso de pérdida del dispositivo)."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE Usuarios SET TOTPSecret = NULL, TOTPEnabled = 0 WHERE ID = ?", user_id)
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': 'TOTP desactivado para el usuario'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
