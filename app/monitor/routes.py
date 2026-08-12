@@ -86,7 +86,7 @@ def seguimiento(codigo):
 
 @monitor_bp.route('/monitor')
 @login_required
-@roles_required('Empleado Estandar', 'Admin', 'SuperAdmin')
+@roles_required('Estandar', 'Admin', 'SuperAdmin')
 def monitor_pedidos():
     """Panel interno para que la panadería vea y actualice los pedidos."""
     conn = get_db_connection()

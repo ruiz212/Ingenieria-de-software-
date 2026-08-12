@@ -235,12 +235,26 @@ def registrar_factura():
                 factura_id, fecha_entrega, datos_encargo.get('notas', ''), especificaciones, ruta_imagen, telefono_contacto_encargo
             )
         else:
-            # Venta de mostrador: pago completo
             cursor.execute(
                 "INSERT INTO Pagos (FacturaID, MetodoPago, Monto, NombreTransferente) VALUES (?, ?, ?, ?)",
                 factura_id, metodo_pago, total,
                 nombre_transferente if metodo_pago == 'Transferencia' else None
             )
+
+        # 5b. Fidelización: Sumar compra al cliente y subirlo de nivel si corresponde
+        if cliente_id > 1:  # Ignoramos al Cliente General (ID 1)
+            cursor.execute("UPDATE Clientes SET TotalCompras = ISNULL(TotalCompras, 0) + 1 WHERE ID = ?", cliente_id)
+            cursor.execute("SELECT TotalCompras FROM Clientes WHERE ID = ?", cliente_id)
+            compras_actuales = cursor.fetchone()[0]
+            
+            # 1: Nuevo, 2: Frecuente (>=3), 3: VIP (>=10)
+            nuevo_nivel = 1
+            if compras_actuales >= 10:
+                nuevo_nivel = 3
+            elif compras_actuales >= 3:
+                nuevo_nivel = 2
+                
+            cursor.execute("UPDATE Clientes SET NivelConfianzaID = ? WHERE ID = ?", nuevo_nivel, cliente_id)
 
         conn.commit()
 

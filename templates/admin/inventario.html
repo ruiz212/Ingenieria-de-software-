@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario | Panadería Amada</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="admin-layout">
+    {% include 'admin/navbar.html' %}
+    
+    <main class="admin-main">
+        <div class="admin-header">
+            <div>
+                <h1 class="admin-title">Gestión de Inventario 📦</h1>
+                <p class="admin-subtitle">Control de materia prima, proveedores y registro de compras.</p>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 2rem; border-bottom: 1px solid var(--border);">
+            <button class="tab-btn active" id="btn-materia" onclick="openTab('materia', this)">📦 Materia Prima</button>
+            <button class="tab-btn" id="btn-compras" onclick="openTab('compras', this)">🛒 Compras</button>
+            <button class="tab-btn" id="btn-proveedores" onclick="openTab('proveedores', this)">🏢 Proveedores</button>
+        </div>
+
+        <!-- TAB: MATERIA PRIMA -->
+        <div id="materia" class="tab-content active">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 style="font-size: 1.25rem; font-weight: 700;">Stock Actual</h2>
+                <button class="btn btn-primary" onclick="abrirModal('modal-materia')">+ Nueva Materia Prima</button>
+            </div>
+            
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Ingrediente</th>
+                            <th>Stock Actual</th>
+                            <th>Mínimo Requerido</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in materias %}
+                        <tr>
+                            <td style="font-weight: 600;">{{ m.nombre }}</td>
+                            <td>{{ m.stock }} {{ m.unidad }}</td>
+                            <td>{{ m.minimo }} {{ m.unidad }}</td>
+                            <td>
+                                {% if m.stock <= m.minimo %}
+                                <span style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Stock Bajo</span>
+                                {% else %}
+                                <span style="background: rgba(16, 185, 129, 0.1); color: #059669; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Óptimo</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No hay materias primas registradas.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB: COMPRAS -->
+        <div id="compras" class="tab-content" style="display:none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 style="font-size: 1.25rem; font-weight: 700;">Historial de Compras</h2>
+                <button class="btn btn-primary" onclick="abrirModal('modal-compra')">+ Registrar Compra</button>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Materia Prima</th>
+                            <th>Proveedor</th>
+                            <th>Cantidad Ingresada</th>
+                            <th>Costo Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in compras %}
+                        <tr>
+                            <td>{{ c.fecha }}</td>
+                            <td style="font-weight: 600;">{{ c.materia }}</td>
+                            <td>{{ c.proveedor }}</td>
+                            <td>+{{ c.cantidad }}</td>
+                            <td style="color: #ef4444; font-weight: 600;">C$ {{ "%.2f"|format(c.costo) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No hay compras registradas.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB: PROVEEDORES -->
+        <div id="proveedores" class="tab-content" style="display:none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 style="font-size: 1.25rem; font-weight: 700;">Directorio de Proveedores</h2>
+                <button class="btn btn-primary" onclick="abrirModal('modal-proveedor')">+ Nuevo Proveedor</button>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Teléfono</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in proveedores %}
+                        <tr>
+                            <td style="font-weight: 600;">{{ p.nombre }}</td>
+                            <td>{{ p.telefono }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">No hay proveedores registrados.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- MODAL: NUEVA MATERIA PRIMA -->
+<div id="modal-materia" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Nueva Materia Prima</h3>
+            <button class="close-modal" onclick="cerrarModal('modal-materia')">&times;</button>
+        </div>
+        <form id="form-materia" class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Nombre del Ingrediente</label>
+                <input type="text" id="materia_nombre" class="form-control" required placeholder="Ej: Harina Fuerte">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Unidad de Medida</label>
+                <select id="materia_unidad" class="form-control" required>
+                    <option value="">Seleccione...</option>
+                    {% for u in unidades %}
+                    <option value="{{ u.id }}">{{ u.nombre }} ({{ u.abreviatura }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Stock Mínimo Alerta</label>
+                <input type="number" id="materia_minimo" class="form-control" required step="0.01" min="0" placeholder="Ej: 10.5">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Guardar</button>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: NUEVO PROVEEDOR -->
+<div id="modal-proveedor" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Nuevo Proveedor</h3>
+            <button class="close-modal" onclick="cerrarModal('modal-proveedor')">&times;</button>
+        </div>
+        <form id="form-proveedor" class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Nombre Comercial</label>
+                <input type="text" id="prov_nombre" class="form-control" required placeholder="Ej: Distribuidora El Trigo">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Teléfono de Contacto</label>
+                <input type="text" id="prov_telefono" class="form-control" placeholder="Opcional">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Guardar</button>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: REGISTRAR COMPRA -->
+<div id="modal-compra" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Registrar Compra a Proveedor</h3>
+            <button class="close-modal" onclick="cerrarModal('modal-compra')">&times;</button>
+        </div>
+        <form id="form-compra" class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Materia Prima Adquirida</label>
+                <select id="compra_materia" class="form-control" required>
+                    <option value="">Seleccione...</option>
+                    {% for m in materias %}
+                    <option value="{{ m.id }}">{{ m.nombre }} ({{ m.unidad }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Proveedor</label>
+                <select id="compra_proveedor" class="form-control" required>
+                    <option value="">Seleccione...</option>
+                    {% for p in proveedores %}
+                    <option value="{{ p.id }}">{{ p.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Cantidad (en la unidad correspondiente)</label>
+                <input type="number" id="compra_cantidad" class="form-control" required step="0.01" min="0.01">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Costo Total (C$)</label>
+                <input type="number" id="compra_costo" class="form-control" required step="0.01" min="0">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Guardar Compra e Ingresar al Stock</button>
+        </form>
+    </div>
+</div>
+
+
+
+<script>
+    function openTab(tabId, btn) {
+        document.querySelectorAll('.tab-content').forEach(el => { el.classList.remove('active'); el.style.display = 'none'; });
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        const tab = document.getElementById(tabId);
+        tab.classList.add('active');
+        tab.style.display = 'block';
+        btn.classList.add('active');
+    }
+
+    function abrirModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function cerrarModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    // Cerrar al click en el overlay
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', function(e) {
+            if (e.target === this) cerrarModal(this.id);
+        });
+    });
+
+    // Handlers para formularios con fetch API
+    document.getElementById('form-materia').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = {
+            nombre: document.getElementById('materia_nombre').value,
+            unidad_id: document.getElementById('materia_unidad').value,
+            stock_minimo: document.getElementById('materia_minimo').value
+        };
+        const res = await fetch('/api/inventario/materia_prima', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        if(res.ok) window.location.reload();
+        else alert((await res.json()).error);
+    });
+
+    document.getElementById('form-proveedor').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = {
+            nombre: document.getElementById('prov_nombre').value,
+            telefono: document.getElementById('prov_telefono').value
+        };
+        const res = await fetch('/api/inventario/proveedor', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        if(res.ok) window.location.reload();
+        else alert((await res.json()).error);
+    });
+
+    document.getElementById('form-compra').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = {
+            materia_id: document.getElementById('compra_materia').value,
+            proveedor_id: document.getElementById('compra_proveedor').value,
+            cantidad: document.getElementById('compra_cantidad').value,
+            costo: document.getElementById('compra_costo').value
+        };
+        const res = await fetch('/api/inventario/compra', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        if(res.ok) window.location.reload();
+        else alert((await res.json()).error);
+    });
+</script>
+</body>
+</html>
+

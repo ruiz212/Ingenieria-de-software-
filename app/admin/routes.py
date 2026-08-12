@@ -521,3 +521,338 @@ def reset_totp_usuario(user_id):
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
+
+# ============================================================
+# MÓDULO DE INVENTARIO Y MATERIA PRIMA
+# ============================================================
+
+@admin_bp.route('/inventario')
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def inventario():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Materia Prima
+    cursor.execute(
+        "SELECT m.ID, m.Nombre, u.Nombre AS Unidad, m.StockActual, m.StockMinimo "
+        "FROM MateriaPrima m JOIN UnidadesMedida u ON m.UnidadMedidaID = u.ID "
+        "ORDER BY m.Nombre"
+    )
+    materias = [{'id': r.ID, 'nombre': r.Nombre, 'unidad': r.Unidad, 'stock': float(r.StockActual), 'minimo': float(r.StockMinimo)} for r in cursor.fetchall()]
+
+    # Proveedores
+    cursor.execute("SELECT ID, Nombre, Telefono FROM Proveedores WHERE Activo = 1 ORDER BY Nombre")
+    proveedores = [{'id': r.ID, 'nombre': r.Nombre, 'telefono': r.Telefono or ''} for r in cursor.fetchall()]
+
+    # Unidades de Medida
+    cursor.execute("SELECT ID, Nombre, Abreviatura FROM UnidadesMedida ORDER BY Nombre")
+    unidades = [{'id': r.ID, 'nombre': r.Nombre, 'abreviatura': r.Abreviatura} for r in cursor.fetchall()]
+
+    # Historial de Compras (Últimas 50)
+    cursor.execute(
+        "SELECT TOP 50 c.ID, m.Nombre AS Materia, p.Nombre AS Proveedor, c.Cantidad, c.CostoTotal, c.Fecha "
+        "FROM ComprasMateriaPrima c "
+        "JOIN MateriaPrima m ON c.MateriaPrimaID = m.ID "
+        "JOIN Proveedores p ON c.ProveedorID = p.ID "
+        "ORDER BY c.Fecha DESC"
+    )
+    compras = [{'id': r.ID, 'materia': r.Materia, 'proveedor': r.Proveedor, 'cantidad': float(r.Cantidad), 'costo': float(r.CostoTotal), 'fecha': r.Fecha.strftime('%d/%m/%Y %H:%M')} for r in cursor.fetchall()]
+
+    conn.close()
+    return render_template('admin/inventario.html', user=current_user, materias=materias, proveedores=proveedores, unidades=unidades, compras=compras)
+
+
+@admin_bp.route('/api/inventario/materia_prima', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def crear_materia_prima():
+    datos = request.json
+    if not datos.get('nombre') or not datos.get('unidad_id') or not datos.get('stock_minimo'):
+        return jsonify({'error': 'Faltan datos requeridos'}), 400
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO MateriaPrima (Nombre, UnidadMedidaID, StockMinimo, StockActual) VALUES (?, ?, ?, 0.0)",
+            datos.get('nombre'), int(datos.get('unidad_id')), float(datos.get('stock_minimo'))
+        )
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': 'Materia prima creada con éxito'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/inventario/proveedor', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def crear_proveedor():
+    datos = request.json
+    if not datos.get('nombre'):
+        return jsonify({'error': 'Faltan datos requeridos'}), 400
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO Proveedores (Nombre, Telefono) VALUES (?, ?)",
+            datos.get('nombre'), datos.get('telefono', '')
+        )
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': 'Proveedor creado con éxito'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/inventario/compra', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def registrar_compra():
+    datos = request.json
+    if not all([datos.get('materia_id'), datos.get('proveedor_id'), datos.get('cantidad'), datos.get('costo')]):
+        return jsonify({'error': 'Faltan datos requeridos'}), 400
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Registrar compra
+        cursor.execute(
+            "INSERT INTO ComprasMateriaPrima (MateriaPrimaID, ProveedorID, Cantidad, CostoTotal) VALUES (?, ?, ?, ?)",
+            int(datos.get('materia_id')), int(datos.get('proveedor_id')), float(datos.get('cantidad')), float(datos.get('costo'))
+        )
+        # Sumar stock
+        cursor.execute(
+            "UPDATE MateriaPrima SET StockActual = StockActual + ? WHERE ID = ?",
+            float(datos.get('cantidad')), int(datos.get('materia_id'))
+        )
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': 'Compra registrada y stock actualizado'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+# ============================================================
+# MÓDULO DE PRODUCCIÓN Y RECETAS
+# ============================================================
+
+@admin_bp.route('/produccion')
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def produccion():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Productos
+    cursor.execute("SELECT ID, Nombre FROM Productos WHERE Activo = 1 ORDER BY Nombre")
+    productos = [{'id': r.ID, 'nombre': r.Nombre} for r in cursor.fetchall()]
+
+    # Materias Primas para agregar a receta
+    cursor.execute(
+        "SELECT m.ID, m.Nombre, u.Abreviatura "
+        "FROM MateriaPrima m JOIN UnidadesMedida u ON m.UnidadMedidaID = u.ID "
+        "ORDER BY m.Nombre"
+    )
+    materias = [{'id': r.ID, 'nombre': f"{r.Nombre} ({r.Abreviatura})" } for r in cursor.fetchall()]
+
+    # Recetas agrupadadas por producto
+    cursor.execute(
+        "SELECT r.ID, p.Nombre AS Producto, m.Nombre AS Materia, r.CantidadNecesaria, u.Abreviatura "
+        "FROM RecetaProducto r "
+        "JOIN Productos p ON r.ProductoID = p.ID "
+        "JOIN MateriaPrima m ON r.MateriaPrimaID = m.ID "
+        "JOIN UnidadesMedida u ON m.UnidadMedidaID = u.ID "
+        "ORDER BY p.Nombre, m.Nombre"
+    )
+    recetas_raw = cursor.fetchall()
+    recetas_agrupadas = {}
+    for r in recetas_raw:
+        if r.Producto not in recetas_agrupadas:
+            recetas_agrupadas[r.Producto] = []
+        recetas_agrupadas[r.Producto].append({'id': r.ID, 'materia': r.Materia, 'cantidad': float(r.CantidadNecesaria), 'abreviatura': r.Abreviatura})
+
+    # Historial de Producción (Últimos 50 lotes)
+    cursor.execute(
+        "SELECT TOP 50 pl.ID, p.Nombre AS Producto, pl.CantidadProducida, pl.Fecha "
+        "FROM ProduccionLotes pl "
+        "JOIN Productos p ON pl.ProductoID = p.ID "
+        "ORDER BY pl.Fecha DESC"
+    )
+    lotes = [{'id': r.ID, 'producto': r.Producto, 'cantidad': r.CantidadProducida, 'fecha': r.Fecha.strftime('%d/%m/%Y %H:%M')} for r in cursor.fetchall()]
+
+    conn.close()
+    return render_template('admin/produccion.html', user=current_user, productos=productos, materias=materias, recetas_agrupadas=recetas_agrupadas, lotes=lotes)
+
+
+@admin_bp.route('/api/produccion/receta', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def crear_receta():
+    datos = request.json
+    if not all([datos.get('producto_id'), datos.get('materia_id'), datos.get('cantidad')]):
+        return jsonify({'error': 'Faltan datos requeridos'}), 400
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Verificar si ya existe para actualizar o insertar
+        cursor.execute("SELECT ID FROM RecetaProducto WHERE ProductoID = ? AND MateriaPrimaID = ?", int(datos.get('producto_id')), int(datos.get('materia_id')))
+        existente = cursor.fetchone()
+        
+        if existente:
+            cursor.execute("UPDATE RecetaProducto SET CantidadNecesaria = ? WHERE ID = ?", float(datos.get('cantidad')), existente.ID)
+        else:
+            cursor.execute(
+                "INSERT INTO RecetaProducto (ProductoID, MateriaPrimaID, CantidadNecesaria) VALUES (?, ?, ?)",
+                int(datos.get('producto_id')), int(datos.get('materia_id')), float(datos.get('cantidad'))
+            )
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': 'Receta actualizada con éxito'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/produccion/receta/<int:receta_id>/delete', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def eliminar_receta(receta_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM RecetaProducto WHERE ID = ?", receta_id)
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': 'Ingrediente removido de la receta'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/produccion/lote', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def registrar_lote():
+    datos = request.json
+    producto_id = datos.get('producto_id')
+    cantidad = datos.get('cantidad')
+    
+    if not producto_id or not cantidad or int(cantidad) <= 0:
+        return jsonify({'error': 'Datos inválidos'}), 400
+        
+    cantidad = int(cantidad)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Obtener receta
+        cursor.execute("SELECT MateriaPrimaID, CantidadNecesaria FROM RecetaProducto WHERE ProductoID = ?", int(producto_id))
+        receta = cursor.fetchall()
+        
+        if not receta:
+            return jsonify({'error': 'El producto no tiene receta definida. Imposible producir sin receta.'}), 400
+            
+        # Verificar stock
+        materiales_requeridos = []
+        for r in receta:
+            req_qty = float(r.CantidadNecesaria) * cantidad
+            cursor.execute("SELECT Nombre, StockActual FROM MateriaPrima WHERE ID = ?", r.MateriaPrimaID)
+            mat = cursor.fetchone()
+            if mat.StockActual < req_qty:
+                return jsonify({'error': f'Stock insuficiente de {mat.Nombre}. Se requieren {req_qty} y hay {mat.StockActual}.'}), 400
+            materiales_requeridos.append((r.MateriaPrimaID, req_qty))
+            
+        # Todo bien, insertar lote
+        cursor.execute("INSERT INTO ProduccionLotes (ProductoID, CantidadProducida) OUTPUT INSERTED.ID VALUES (?, ?)", int(producto_id), cantidad)
+        lote_id = cursor.fetchone().ID
+        
+        # Descontar stock e insertar consumo
+        for mat_id, req_qty in materiales_requeridos:
+            cursor.execute("UPDATE MateriaPrima SET StockActual = StockActual - ? WHERE ID = ?", req_qty, mat_id)
+            cursor.execute("INSERT INTO ConsumoLote (LoteID, MateriaPrimaID, CantidadUsada) VALUES (?, ?, ?)", lote_id, mat_id, req_qty)
+            
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': f'Lote producido con éxito. Se crearon {cantidad} unidades.'})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+# ============================================================
+# MÓDULO DE FIDELIZACIÓN (CRM)
+# ============================================================
+
+@admin_bp.route('/fidelizacion')
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def fidelizacion():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Métricas Globales
+    cursor.execute("SELECT COUNT(ID) FROM Clientes WHERE ID > 1")
+    total_clientes = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(ID) FROM Clientes WHERE NivelConfianzaID = 3")
+    total_vip = cursor.fetchone()[0]
+    
+    porcentaje_vip = int((total_vip / total_clientes * 100)) if total_clientes > 0 else 0
+
+    # Promedio de ventas por nivel
+    cursor.execute(
+        "SELECT nc.Nombre, ISNULL(AVG(f.Total), 0) AS Promedio "
+        "FROM Facturas f "
+        "JOIN Clientes c ON f.ClienteID = c.ID "
+        "JOIN NivelesConfianza nc ON c.NivelConfianzaID = nc.ID "
+        "GROUP BY nc.Nombre"
+    )
+    promedios_nivel = {r.Nombre: float(r.Promedio) for r in cursor.fetchall()}
+
+    # Listado de clientes con gasto total
+    cursor.execute(
+        "SELECT c.ID, c.Nombre, c.Telefono, c.TotalCompras, nc.Nombre AS Nivel, "
+        "ISNULL(SUM(f.Total), 0) AS TotalGastado, MAX(f.FechaHora) AS UltimaCompra "
+        "FROM Clientes c "
+        "JOIN NivelesConfianza nc ON c.NivelConfianzaID = nc.ID "
+        "LEFT JOIN Facturas f ON f.ClienteID = c.ID "
+        "WHERE c.ID > 1 "
+        "GROUP BY c.ID, c.Nombre, c.Telefono, c.TotalCompras, nc.Nombre "
+        "ORDER BY c.TotalCompras DESC"
+    )
+    clientes = [{
+        'id': r.ID,
+        'nombre': r.Nombre,
+        'telefono': r.Telefono or 'No registrado',
+        'total_compras': r.TotalCompras,
+        'nivel': r.Nivel,
+        'total_gastado': float(r.TotalGastado),
+        'ultima_compra': r.UltimaCompra.strftime('%d/%m/%Y') if r.UltimaCompra else 'N/A'
+    } for r in cursor.fetchall()]
+
+    conn.close()
+    
+    metricas = {
+        'total_clientes': total_clientes,
+        'porcentaje_vip': porcentaje_vip,
+        'promedios_nivel': promedios_nivel
+    }
+
+    return render_template('admin/fidelizacion.html', user=current_user, clientes=clientes, metricas=metricas)

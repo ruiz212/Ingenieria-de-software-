@@ -1,0 +1,340 @@
+/* ============================================================
+   POS LAYOUT (index.html)
+   ============================================================ */
+.pos-body {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--background);
+}
+
+.pos-layout {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    flex: 1;
+    overflow: hidden;
+}
+
+.pos-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    overflow: hidden;
+}
+
+/* POS Categories */
+.category-tabs {
+    display: flex;
+    gap: 0.75rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    scrollbar-width: none;
+}
+.category-tabs::-webkit-scrollbar { display: none; }
+
+.category-btn {
+    padding: 0.75rem 1.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--transition-smooth);
+    box-shadow: var(--shadow-xs);
+}
+
+.category-btn:hover {
+    border-color: var(--border-interactive);
+    color: var(--secondary);
+    transform: translateY(-2px);
+}
+
+.category-btn.active {
+    background: var(--secondary);
+    color: white;
+    border-color: var(--secondary);
+    box-shadow: 0 4px 10px rgba(63, 41, 21, 0.2);
+}
+
+/* POS Catalog */
+.catalog-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.25rem;
+    padding-bottom: 2rem;
+}
+
+.product-card {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    border: 1.5px solid var(--border);
+    transition: all var(--transition-smooth);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+}
+
+.product-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0; height: 3px;
+    background: var(--primary-color);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--transition-smooth);
+}
+
+.product-card:hover {
+    border-color: transparent;
+    box-shadow: var(--shadow-md);
+    transform: translateY(-3px);
+}
+
+.product-card:hover::after {
+    transform: scaleX(1);
+}
+
+.product-card .category-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.5rem;
+}
+
+.product-card h3 {
+    font-size: 1.05rem;
+    margin-bottom: 0.75rem;
+    color: var(--secondary);
+}
+
+.product-card .price {
+    font-size: 1.2rem;
+    color: var(--primary-hover);
+    font-weight: 800;
+    font-family: 'Outfit', sans-serif;
+}
+
+/* POS Invoice Sidebar */
+.invoice-panel {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-md);
+    height: 100%;
+    overflow: hidden;
+}
+
+.invoice-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-sunken);
+}
+
+.invoice-header h2 {
+    font-size: 1.25rem;
+    margin: 0;
+}
+
+.cart-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.empty-cart {
+    text-align: center;
+    color: var(--text-muted);
+    margin-top: 4rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.cart-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: var(--surface-sunken);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--border-light);
+    animation: slideInLeft 0.3s ease;
+}
+
+@keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-10px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+.item-details h4 {
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+    color: var(--secondary);
+}
+.item-details p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.item-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-qty {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    width: 28px; height: 28px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--secondary);
+    transition: all 0.2s;
+}
+
+.btn-qty:hover {
+    background: var(--surface-sunken);
+    border-color: var(--border-interactive);
+}
+
+.invoice-footer {
+    border-top: 1px solid var(--border);
+    padding: 1.5rem;
+    background: var(--surface-sunken);
+}
+
+.invoice-summary {
+    background: var(--surface);
+    padding: 1.25rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1.25rem;
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-xs);
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.total-row {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--secondary);
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--border);
+    font-family: 'Outfit', sans-serif;
+}
+
+/* Modals POS */
+.ingredientes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 250px;
+    overflow-y: auto;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-sunken);
+}
+
+.ingrediente-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: 1px solid var(--border-light);
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.ingrediente-option:hover {
+    border-color: var(--primary-color);
+}
+
+.ingrediente-option input[type='checkbox'] {
+    width: 1.1rem; height: 1.1rem;
+    accent-color: var(--primary-color);
+}
+
+.ing-precio {
+    font-weight: 700;
+    color: var(--primary-hover);
+    margin-left: auto;
+}
+
+/* ============================================================
+   TICKET / FACTURA
+   ============================================================ */
+.ticket-modal { max-width: 360px; padding: 0; background: #fff; }
+.ticket-content {
+    padding: 1.5rem;
+    background: white;
+    font-family: 'Courier New', Courier, monospace;
+    color: black;
+}
+.ticket-header { text-align: center; padding-bottom: 1rem; }
+.ticket-header h2 { font-size: 1.4rem; margin-bottom: 0.25rem; font-weight: 800; font-family: 'Outfit', sans-serif; }
+.ticket-subtitle, .ticket-info { font-size: 0.85rem; margin-bottom: 0.15rem; }
+.ticket-divider { border: none; border-top: 1px dashed #000; margin: 0.75rem 0; }
+.ticket-meta-row { display: flex; justify-content: space-between; font-size: 0.9rem; padding: 0.2rem 0; }
+.ticket-product-row { display: flex; justify-content: space-between; font-size: 0.9rem; padding: 0.3rem 0; }
+.ticket-total-row { font-size: 1.2rem; font-weight: bold; padding-top: 0.75rem; margin-top: 0.5rem; border-top: 1px dashed #000; }
+.ticket-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1.25rem;
+    border-top: 1px solid var(--border);
+    background: var(--surface-sunken);
+    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+
+/* ============================================================
+   PRINT STYLES
+   ============================================================ */
+@media print {
+    body { overflow: visible; height: auto; background: white; }
+    .app-header, .pos-layout, .loading-overlay, .toast-container,
+    .no-print, #encargo-modal, #ingredientes-modal, .ambient-bg { display: none !important; }
+    .modal-overlay { position: static; background: none; backdrop-filter: none; }
+    .modal-content.ticket-modal { box-shadow: none; max-width: 100%; width: 80mm; margin: 0 auto; padding: 0; transform: none; animation: none; }
+    .ticket-actions { display: none !important; }
+}
+

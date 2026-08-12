@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Producción | Panadería Amada</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+</head>
+<body>
+<div class="admin-layout">
+    {% include 'admin/navbar.html' %}
+    
+    <main class="admin-main">
+        <div class="admin-header">
+            <div>
+                <h1 class="admin-title">Módulo de Producción 👨‍🍳</h1>
+                <p class="admin-subtitle">Registro de lotes diarios y definición de recetas.</p>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 2rem; border-bottom: 1px solid var(--border);">
+            <button class="tab-btn active" id="btn-lotes" onclick="openTab('lotes', this)">🧺 Lotes Producidos</button>
+            <button class="tab-btn" id="btn-recetas" onclick="openTab('recetas', this)">📋 Recetario</button>
+        </div>
+
+        <!-- TAB: LOTES -->
+        <div id="lotes" class="tab-content active">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 style="font-size: 1.25rem; font-weight: 700;">Historial de Producción</h2>
+                <button class="btn btn-primary" onclick="abrirModal('modal-lote')">+ Registrar Producción</button>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Producto</th>
+                            <th>Cantidad Elaborada</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for l in lotes %}
+                        <tr>
+                            <td>{{ l.fecha }}</td>
+                            <td style="font-weight: 600;">{{ l.producto }}</td>
+                            <td><span style="background: var(--primary-subtle); color: var(--primary-color); padding: 0.25rem 0.6rem; border-radius: 4px; font-weight: 700;">{{ l.cantidad }} uds.</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" style="text-align:center; color: var(--text-muted); padding: 2rem;">No hay lotes de producción registrados.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB: RECETAS -->
+        <div id="recetas" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 style="font-size: 1.25rem; font-weight: 700;">Fórmulas y Recetas</h2>
+                <button class="btn btn-primary" onclick="abrirModal('modal-receta')">+ Añadir Ingrediente</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
+                {% for producto, ingredientes in recetas_agrupadas.items() %}
+                <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-xs);">
+                    <h3 style="font-size: 1rem; color: var(--secondary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);">🍞 {{ producto }}</h3>
+                    <ul style="list-style: none; padding: 0; margin: 0;">
+                        {% for i in ingredientes %}
+                        <li style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px dashed var(--border);">
+                            <span style="font-size: 0.9rem; font-weight: 500;">{{ i.materia }}</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="color: var(--primary-color); font-weight: 700; font-size: 0.85rem;">{{ i.cantidad }} {{ i.abreviatura }}</span>
+                                <button onclick="eliminarIngrediente({{ i.id }})" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1.1rem; line-height:1;" title="Quitar">&times;</button>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% else %}
+                <div style="grid-column: 1/-1; text-align:center; color: var(--text-muted); padding: 3rem;">
+                    No hay recetas definidas. Añade ingredientes a un producto para empezar.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- MODAL: REGISTRAR LOTE -->
+<div id="modal-lote" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Registrar Producción Diaria</h3>
+            <button class="close-modal" onclick="cerrarModal('modal-lote')">&times;</button>
+        </div>
+        <form id="form-lote" class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Producto Elaborado</label>
+                <select id="lote_producto" class="form-control" required>
+                    <option value="">Seleccione el producto...</option>
+                    {% for p in productos %}
+                    <option value="{{ p.id }}">{{ p.nombre }}</option>
+                    {% endfor %}
+                </select>
+                <small style="color: var(--text-muted); font-size: 0.8rem; margin-top: 0.25rem; display:block;">Solo puede producir productos con receta definida.</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Cantidad (Unidades/Piezas)</label>
+                <input type="number" id="lote_cantidad" class="form-control" required min="1" step="1" placeholder="Ej: 100">
+            </div>
+            <div style="background: var(--primary-subtle); border-left: 3px solid var(--primary-color); padding: 0.85rem 1rem; border-radius: 6px; margin-top: 1rem;">
+                <p style="font-size: 0.82rem; color: var(--secondary); margin: 0;"><strong>Importante:</strong> Al registrar este lote, el sistema automáticamente descontará del inventario todos los ingredientes necesarios según la receta. Si no hay stock suficiente, la operación se cancelará.</p>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:1.5rem;">Horneado y Listo 🎉</button>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: AÑADIR INGREDIENTE A RECETA -->
+<div id="modal-receta" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Añadir Ingrediente a Receta</h3>
+            <button class="close-modal" onclick="cerrarModal('modal-receta')">&times;</button>
+        </div>
+        <form id="form-receta" class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Producto (Pan/Pastel)</label>
+                <select id="receta_producto" class="form-control" required>
+                    <option value="">Seleccione...</option>
+                    {% for p in productos %}
+                    <option value="{{ p.id }}">{{ p.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Ingrediente</label>
+                <select id="receta_materia" class="form-control" required>
+                    <option value="">Seleccione...</option>
+                    {% for m in materias %}
+                    <option value="{{ m.id }}">{{ m.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Cantidad necesaria (por cada 1 unidad del producto)</label>
+                <input type="number" id="receta_cantidad" class="form-control" required min="0.0001" step="0.0001" placeholder="Ej: 0.05">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:1rem;">Guardar Ingrediente</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openTab(id, btn) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        btn.classList.add('active');
+    }
+
+    function abrirModal(id) {
+        document.getElementById(id).classList.remove('hidden');
+    }
+    function cerrarModal(id) {
+        document.getElementById(id).classList.add('hidden');
+    }
+
+    // Cerrar modal al hacer click en el overlay
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', function(e) {
+            if (e.target === this) cerrarModal(this.id);
+        });
+    });
+
+    document.getElementById('form-lote').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        btn.disabled = true; btn.textContent = 'Procesando...';
+        const res = await fetch('/api/produccion/lote', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                producto_id: document.getElementById('lote_producto').value,
+                cantidad: document.getElementById('lote_cantidad').value
+            })
+        });
+        const data = await res.json();
+        if (res.ok) { alert(data.mensaje); window.location.reload(); }
+        else { alert(data.error); btn.disabled = false; btn.textContent = 'Horneado y Listo 🎉'; }
+    });
+
+    document.getElementById('form-receta').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const res = await fetch('/api/produccion/receta', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                producto_id: document.getElementById('receta_producto').value,
+                materia_id: document.getElementById('receta_materia').value,
+                cantidad: document.getElementById('receta_cantidad').value
+            })
+        });
+        if (res.ok) window.location.reload();
+        else alert((await res.json()).error);
+    });
+
+    async function eliminarIngrediente(id) {
+        if (!confirm('¿Quitar este ingrediente de la receta?')) return;
+        const res = await fetch(`/api/produccion/receta/${id}/delete`, { method: 'POST' });
+        if (res.ok) window.location.reload();
+        else alert((await res.json()).error);
+    }
+</script>
+</body>
+</html>
+
