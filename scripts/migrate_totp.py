@@ -4,6 +4,10 @@ import pyodbc
 
 # Add parent directory to path so we can import config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env'))
+
 from config import Config
 
 def migrate():
