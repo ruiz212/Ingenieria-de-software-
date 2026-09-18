@@ -1,0 +1,386 @@
+{% extends 'admin_base.html' %}
+
+{% block title %}Recursos Humanos | Brajher's Cake{% endblock %}
+{% block page_title %}Recursos Humanos{% endblock %}
+
+{% block content %}
+<div class="page-header" style="flex-direction: row; justify-content: space-between; align-items: center;">
+    <div>
+        <p>Gestión de expedientes de personal y control de nómina y liquidaciones.</p>
+    </div>
+    <div style="display: flex; gap: 0.75rem;">
+        <button class="btn btn-primary" onclick="abrirModalEmpleado()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nuevo Empleado
+        </button>
+        <a href="{{ url_for('admin.kiosco_asistencia') }}" target="_blank" class="btn btn-outline" style="border-color: #9b59b6; color: #9b59b6; text-decoration: none;">⏱️ Kiosco Asistencia</a>
+        <button class="btn btn-outline" onclick="abrirModalPlanilla()" style="border-color: var(--primary-color); color: var(--primary-color);">📝 Generar Planilla Batch</button>
+        <button class="btn btn-outline" onclick="abrirModalNomina()" style="border-color: var(--success); color: var(--success);">💰 Indiv.</button>
+        <button class="btn btn-outline" onclick="abrirModalLiquidacion()" style="border-color: var(--warning); color: var(--warning);">📋 Liquidación</button>
+    </div>
+</div>
+
+<!-- Info Legal -->
+<div class="mb-3" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+    <span class="badge badge-neutral">👥 Expedientes</span>
+    <span class="badge badge-neutral">💰 Nómina General</span>
+    <span class="badge badge-primary">🏥 INSS {{ tasas.get('inss_laboral', '7') }}% Lab / {{ tasas.get('inss_patronal_menos50', '21.5') }}% Pat</span>
+    <span class="badge badge-primary">🎓 INATEC {{ tasas.get('inatec', '2') }}%</span>
+    <span class="badge badge-success">👷 {{ total_activos }} Empleados Activos</span>
+</div>
+
+<!-- Panel de Alertas HR -->
+<div id="alertas-hr" class="panel panel-full panel-accent-warning mb-3 hidden">
+    <div class="panel-header">
+        <h3 style="color: #d35400;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Alertas de Recursos Humanos
+        </h3>
+    </div>
+    <div class="panel-body" style="padding: 10px 20px;">
+        <ul id="alertas-list" style="margin: 0; padding-left: 20px; line-height: 1.8;"></ul>
+    </div>
+</div>
+
+<!-- Empleados Grid -->
+<div class="panel panel-full panel-accent-primary mb-3">
+    <div class="panel-header">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            Expedientes de Empleados
+        </h3>
+    </div>
+    <div class="panel-body">
+        {% if empleados %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+            {% for e in empleados %}
+            <div class="card" style="padding: 1rem;">
+                <div class="flex-between mb-2">
+                    <div>
+                        <div class="fw-700 text-main" style="font-size: 1.1rem;">{{ e.nombre }}</div>
+                        <div class="text-muted" style="font-size: 0.9rem;">{{ e.cargo }} — {{ e.tipo_contrato }}</div>
+                    </div>
+                    <span class="badge {% if e.estado == 'Activo' %}badge-success{% elif e.estado == 'Liquidado' %}badge-danger{% else %}badge-warning{% endif %}">
+                        {{ e.estado }}
+                    </span>
+                </div>
+                <div style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.25rem;">
+                    <span><strong>Cédula:</strong> {{ e.cedula }}</span>
+                    <span><strong>Ingreso:</strong> {{ e.fecha_ingreso }}</span>
+                    <span><strong>Salario:</strong> <span class="text-success fw-600">C${{ "%.2f"|format(e.salario_base) }}</span></span>
+                    <span><strong>Jornada:</strong> {{ e.tipo_jornada }}</span>
+                    {% if e.numero_inss %}<span><strong>INSS:</strong> {{ e.numero_inss }}</span>{% endif %}
+                </div>
+                {% if e.consentimiento %}
+                <div class="text-success fw-600 mt-2" style="font-size: 0.8rem;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align: middle;"><polyline points="20 6 9 17 4 12"/></svg> Expediente Completo (Autorizado)
+                </div>
+                {% else %}
+                <div class="text-warning fw-600 mt-2" style="font-size: 0.8rem;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align: middle;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Faltan firmas en expediente
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">👥</div>
+            <p>No hay empleados registrados.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Nóminas Recientes -->
+<div class="panel panel-full panel-accent-success">
+    <div class="panel-header flex-between">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            Nóminas Recientes
+        </h3>
+        <button class="btn btn-outline btn-sm" onclick="window.location.href='/admin/rrhh/reportes/inss_patronal'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Reporte INSS Mensual
+        </button>
+    </div>
+    <div class="panel-body panel-body-flush">
+        {% if nominas %}
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Empleado</th>
+                        <th>Período</th>
+                        <th style="text-align: right;">Devengado</th>
+                        <th style="text-align: right;">Deducciones</th>
+                        <th style="text-align: right;">Neto</th>
+                        <th style="text-align: center;">Estado</th>
+                        <th style="text-align: center;">Colilla</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for n in nominas %}
+                    <tr>
+                        <td class="cell-bold">{{ n.empleado }}</td>
+                        <td class="cell-muted">{{ n.periodo }}</td>
+                        <td class="cell-money" style="text-align: right;">C${{ "%.2f"|format(n.devengado) }}</td>
+                        <td class="cell-money text-danger" style="text-align: right;">-C${{ "%.2f"|format(n.deducciones) }}</td>
+                        <td class="cell-money text-success fw-700" style="text-align: right;">C${{ "%.2f"|format(n.neto) }}</td>
+                        <td style="text-align: center;">
+                            <span class="badge {% if n.estado == 'Pagada' %}badge-success{% elif n.estado == 'Borrador' %}badge-warning{% else %}badge-danger{% endif %}">{{ n.estado }}</span>
+                        </td>
+                        <td style="text-align: center;">
+                            <a href="{{ url_for('admin.colilla_pago', nomina_id=n.id) }}" target="_blank" class="btn btn-outline btn-sm" title="Ver Colilla PDF">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 3v5h5M16 13H8M16 17H8M10 9H8"/></svg>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">💰</div>
+            <p>No hay nóminas generadas.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal Nuevo Empleado -->
+<div id="modal-nuevo-empleado" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 600px;">
+        <h2>Nuevo Empleado</h2>
+        <p class="subtitle">Registrar un nuevo colaborador en el sistema.</p>
+        <form id="form-nuevo-empleado">
+            <div class="form-group">
+                <label class="form-label">Nombre Completo</label>
+                <input type="text" id="ne-nombre" class="form-input" required>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Cédula</label>
+                    <input type="text" id="ne-cedula" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Teléfono</label>
+                    <input type="text" id="ne-telefono" class="form-input">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Cargo</label>
+                    <input type="text" id="ne-cargo" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fecha de Ingreso</label>
+                    <input type="date" id="ne-ingreso" class="form-input" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Salario Base (C$)</label>
+                    <input type="number" id="ne-salario" class="form-input form-number" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Jornada</label>
+                    <select id="ne-jornada" class="form-select">
+                        <option value="Diurna">Diurna</option>
+                        <option value="Nocturna">Nocturna</option>
+                        <option value="Mixta">Mixta</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Tipo Contrato</label>
+                    <select id="ne-tipo-contrato" class="form-select" onchange="toggleFinContrato()">
+                        <option value="Indefinido">Indefinido</option>
+                        <option value="Determinado">Determinado (Plazo Fijo)</option>
+                    </select>
+                </div>
+                <div class="form-group hidden" id="ne-fin-contrato-group">
+                    <label class="form-label">Fecha Fin de Contrato</label>
+                    <input type="date" id="ne-fin-contrato" class="form-input">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Foto de Rostro (Para Reconocimiento Facial)</label>
+                <input type="file" id="emp-foto" class="form-input" accept="image/*">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="cerrarModalEmpleado()">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Empleado</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- El modal de control de asistencia fue removido para usar el Kiosco -->
+
+<!-- Modal Generar Planilla Batch -->
+<div id="modal-generar-planilla" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+        <h2>Generar Planilla Batch</h2>
+        <p class="subtitle">Este proceso calculará la nómina para todos los <strong>{{ total_activos }}</strong> empleados activos simultáneamente, sin horas extras. Luego podrás editar individualmente si es necesario.</p>
+        <form id="form-generar-planilla">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Período Inicio</label>
+                    <input type="date" id="gp-inicio" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Período Fin</label>
+                    <input type="date" id="gp-fin" class="form-input" required>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="cerrarModalPlanilla()">Cancelar</button>
+                <button type="submit" class="btn btn-primary" id="btn-submit-planilla">Calcular Batch</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function abrirModalEmpleado() { document.getElementById('modal-nuevo-empleado').classList.remove('hidden'); }
+    function cerrarModalEmpleado() { document.getElementById('modal-nuevo-empleado').classList.add('hidden'); }
+    
+    function abrirModalPlanilla() { document.getElementById('modal-generar-planilla').classList.remove('hidden'); }
+    function cerrarModalPlanilla() { document.getElementById('modal-generar-planilla').classList.add('hidden'); }
+
+    // Add overlay closing for the new modal
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                cerrarModalEmpleado();
+                cerrarModalPlanilla();
+            }
+        });
+    });
+
+    function toggleFinContrato() {
+        const tipo = document.getElementById('ne-tipo-contrato').value;
+        const group = document.getElementById('ne-fin-contrato-group');
+        if(tipo === 'Determinado') {
+            group.classList.remove('hidden');
+            document.getElementById('ne-fin-contrato').required = true;
+        } else {
+            group.classList.add('hidden');
+            document.getElementById('ne-fin-contrato').required = false;
+        }
+    }
+
+    function abrirModalNomina() { showToast('Función Nómina Individual en desarrollo', true); }
+    function abrirModalLiquidacion() { showToast('Función Liquidación en desarrollo', true); }
+
+    document.getElementById('form-nuevo-empleado').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoading();
+        
+        let fotoBase64 = null;
+        const fotoInput = document.getElementById('emp-foto');
+        if (fotoInput.files.length > 0) {
+            const file = fotoInput.files[0];
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            await new Promise((resolve) => {
+                reader.onload = () => {
+                    fotoBase64 = reader.result;
+                    resolve();
+                };
+            });
+        }
+
+        const data = {
+            nombre: document.getElementById('ne-nombre').value,
+            cedula: document.getElementById('ne-cedula').value,
+            telefono: document.getElementById('ne-telefono').value,
+            cargo: document.getElementById('ne-cargo').value,
+            fecha_ingreso: document.getElementById('ne-ingreso').value,
+            salario_base: document.getElementById('ne-salario').value,
+            tipo_jornada: document.getElementById('ne-jornada').value,
+            tipo_contrato: document.getElementById('ne-tipo-contrato').value,
+            fecha_fin_contrato: document.getElementById('ne-fin-contrato').value,
+            consentimiento: true,
+            foto: fotoBase64
+        };
+        try {
+            const res = await fetch('/admin/api/rrhh/empleado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            hideLoading();
+            if (res.ok) {
+                showToast('Empleado registrado exitosamente');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast('Error al registrar empleado', true);
+            }
+        } catch(err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
+    });
+
+    document.getElementById('form-generar-planilla').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoading();
+        
+        const data = {
+            periodo_inicio: document.getElementById('gp-inicio').value,
+            periodo_fin: document.getElementById('gp-fin').value
+        };
+        
+        try {
+            const res = await fetch('/admin/api/rrhh/nomina/calcular_batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            hideLoading();
+            
+            const result = await res.json();
+            if (res.ok) {
+                showToast(result.mensaje || 'Planilla generada exitosamente');
+                cerrarModalPlanilla();
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(result.error || 'Error al generar la planilla', true);
+            }
+        } catch(err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
+    });
+
+
+    // Cargar Alertas al inicio
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const res = await fetch('/admin/api/rrhh/alertas');
+            if(res.ok) {
+                const data = await res.json();
+                let alertasHtml = '';
+                
+                data.cumpleanos.forEach(c => {
+                    alertasHtml += `<li>🎂 <strong>${c.nombre}</strong> cumple años el ${c.fecha}</li>`;
+                });
+                
+                data.contratos.forEach(c => {
+                    alertasHtml += `<li>⚠️ Contrato de <strong>${c.nombre}</strong> vence el ${c.fecha}</li>`;
+                });
+                
+                if(alertasHtml !== '') {
+                    document.getElementById('alertas-list').innerHTML = alertasHtml;
+                    document.getElementById('alertas-hr').classList.remove('hidden');
+                }
+            }
+        } catch(e) { console.error('Error cargando alertas'); }
+    });
+</script>
+{% endblock %}

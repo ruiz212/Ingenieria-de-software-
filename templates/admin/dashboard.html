@@ -1,152 +1,152 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Financiero | Panadería Amada</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
-    <div class="ambient-bg">
-        <div class="ambient-shape shape-1"></div>
-        <div class="ambient-shape shape-2"></div>
+{% extends 'admin_base.html' %}
+
+{% block title %}Dashboard | Brajher's Cake{% endblock %}
+{% block page_title %}Dashboard Financiero{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <p>Métricas en tiempo real y estado de las cajas.</p>
+</div>
+
+<!-- Metrics Grid -->
+<div class="metrics-grid">
+    <div class="metric-card">
+        <div class="metric-icon revenue">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Ingresos Brutos</div>
+            <div class="metric-value">C${{ "%.2f"|format(metricas.ventas_hoy) }}</div>
+            <div class="metric-sub">Ventas del día</div>
+        </div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-icon average">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Ticket Promedio</div>
+            <div class="metric-value">C${{ "%.2f"|format(metricas.ticket_promedio) }}</div>
+            <div class="metric-sub">Por factura emitida</div>
+        </div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-icon rate">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Tasa de Completitud</div>
+            <div class="metric-value text-success">{{ metricas.tasa_completitud }}%</div>
+            <div class="metric-sub">{{ metricas.encargos_pendientes }} encargo{{ 's' if metricas.encargos_pendientes != 1 }} pendiente{{ 's' if metricas.encargos_pendientes != 1 }}</div>
+        </div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-icon active">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Cajas Activas</div>
+            <div class="metric-value">{{ metricas.turnos_activos|length }}</div>
+            <div class="metric-sub">Turnos abiertos</div>
+        </div>
+    </div>
+</div>
+
+<!-- Panels — Asymmetric Layout -->
+<div class="panels-grid-asymmetric">
+    <div class="panel panel-accent-primary">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                Productos Más Vendidos
+            </h3>
+            <span class="badge badge-primary">Hoy</span>
+        </div>
+        <div class="panel-body">
+            {% if metricas.top_productos %}
+                {% for p in metricas.top_productos %}
+                <div class="list-row">
+                    <span class="list-row-label">
+                        <span class="rank">{{ loop.index }}</span>
+                        {{ p.nombre }}
+                    </span>
+                    <span class="list-row-value">{{ p.cantidad }} uds.</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">📊</div>
+                    <p>No hay ventas registradas hoy aún.</p>
+                </div>
+            {% endif %}
+        </div>
     </div>
 
-    {% include 'admin/navbar.html' %}
-
-    <main class="admin-layout">
-        <div class="page-header">
-            <h2>Dashboard Financiero</h2>
-            <p>Métricas en tiempo real y estado de las cajas.</p>
+    <div class="panel panel-accent-success">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                Ventas por Categoría
+            </h3>
         </div>
-
-        <!-- Metrics -->
-        <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="metric-icon revenue">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        <div class="panel-body">
+            {% if metricas.ventas_categoria %}
+                {% for c in metricas.ventas_categoria %}
+                <div class="list-row">
+                    <span class="list-row-label">{{ c.categoria }}</span>
+                    <span class="list-row-value cell-money">C${{ "%.2f"|format(c.total) }}</span>
                 </div>
-                <div class="metric-body">
-                    <div class="metric-title">Ingresos Brutos</div>
-                    <div class="metric-value">C${{ "%.2f"|format(metricas.ventas_hoy) }}</div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">📂</div>
+                    <p>No hay datos de categorías.</p>
                 </div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-icon average">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                </div>
-                <div class="metric-body">
-                    <div class="metric-title">Ticket Promedio</div>
-                    <div class="metric-value">C${{ "%.2f"|format(metricas.ticket_promedio) }}</div>
-                </div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-icon rate">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                </div>
-                <div class="metric-body">
-                    <div class="metric-title">Tasa de Completitud</div>
-                    <div class="metric-value text-success">{{ metricas.tasa_completitud }}%</div>
-                    <div class="metric-sub">{{ metricas.encargos_pendientes }} encargo{{ 's' if metricas.encargos_pendientes != 1 }} pendiente{{ 's' if metricas.encargos_pendientes != 1 }}</div>
-                </div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-icon active">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-                </div>
-                <div class="metric-body">
-                    <div class="metric-title">Cajas Activas</div>
-                    <div class="metric-value">{{ metricas.turnos_activos|length }}</div>
-                </div>
-            </div>
+            {% endif %}
         </div>
+    </div>
+</div>
 
-        <!-- Panels — asymmetric layout -->
-        <div class="panels-grid-asymmetric">
-            <div class="panel panel-accent-primary">
-                <div class="panel-header">
-                    <h3>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-                        Productos Más Vendidos
-                    </h3>
-                </div>
-                <div class="panel-body">
-                    {% if metricas.top_productos %}
-                        {% for p in metricas.top_productos %}
-                        <div class="list-row">
-                            <span class="list-row-label">
-                                <span class="rank">{{ loop.index }}</span>
-                                {{ p.nombre }}
-                            </span>
-                            <span class="list-row-value">{{ p.cantidad }} uds.</span>
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📊</div>
-                            <p>No hay ventas registradas hoy aún.</p>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="panel panel-accent-success">
-                <div class="panel-header">
-                    <h3>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                        Ventas por Categoría
-                    </h3>
-                </div>
-                <div class="panel-body">
-                    {% if metricas.ventas_categoria %}
-                        {% for c in metricas.ventas_categoria %}
-                        <div class="list-row">
-                            <span class="list-row-label">{{ c.categoria }}</span>
-                            <span class="list-row-value cell-money">C${{ "%.2f"|format(c.total) }}</span>
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📂</div>
-                            <p>No hay datos de categorías.</p>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
+<!-- Turnos Panel — Full Width -->
+<div style="margin-top: 1.25rem;">
+    <div class="panel panel-full panel-accent-cafe">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Arqueos y Turnos de Caja
+            </h3>
+            {% if metricas.turnos_activos %}
+            <span class="badge badge-success badge-live">{{ metricas.turnos_activos|length }} activo{{ 's' if metricas.turnos_activos|length != 1 }}</span>
+            {% endif %}
         </div>
-
-        <!-- Turnos Panel — full width -->
-        <div style="margin-top: 1.25rem;">
-            <div class="panel panel-full panel-accent-warning">
-                <div class="panel-header">
-                    <h3>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        Arqueos y Turnos de Caja
-                    </h3>
-                </div>
-                <div class="panel-body">
-                    {% if metricas.turnos_activos %}
-                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;">
-                            {% for t in metricas.turnos_activos %}
-                            <div class="turno-card">
-                                <div class="turno-info">
-                                    <h4>{{ t.usuario }}</h4>
-                                    <span>Abierto a las {{ t.apertura }}</span>
-                                </div>
-                                <span class="badge badge-success badge-live">Abierta</span>
-                            </div>
-                            {% endfor %}
+        <div class="panel-body">
+            {% if metricas.turnos_activos %}
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;">
+                    {% for t in metricas.turnos_activos %}
+                    <div class="turno-card">
+                        <div class="turno-info">
+                            <h4>{{ t.usuario }}</h4>
+                            <span>Abierto a las {{ t.apertura }}</span>
                         </div>
-                        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem;">* Los arqueos se generarán automáticamente cuando las cajeras cierren su turno.</p>
-                    {% else %}
-                        <div class="empty-state">
-                            <div class="empty-state-icon">🔒</div>
-                            <p>No hay cajas abiertas en este momento.</p>
-                        </div>
-                    {% endif %}
+                        <span class="badge badge-success badge-live">Abierta</span>
+                    </div>
+                    {% endfor %}
                 </div>
-            </div>
+                <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 1rem;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    Los arqueos se generan automáticamente al cerrar turno desde el Punto de Venta.
+                </p>
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔒</div>
+                    <p>No hay cajas abiertas en este momento.</p>
+                </div>
+            {% endif %}
         </div>
-    </main>
-</body>
-</html>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+{% endblock %}

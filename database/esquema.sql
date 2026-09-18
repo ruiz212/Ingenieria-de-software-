@@ -1,7 +1,8 @@
 -- ============================================================
 -- PANADERÍA AMADA — ESQUEMA DE BASE DE DATOS (3FN Profesional)
 -- SQL Server / LocalDB
--- 21 Tablas | Generado: 2026-08-08
+-- 40+ Tablas | Generado: 2026-09-10
+-- Incluye: POS, Producción, Contabilidad, RRHH (Ley Nicaragua), Estadística
 -- ============================================================
 -- INSTRUCCIONES: Copiar y pegar TODO este archivo en SQL Server
 -- Management Studio (SSMS) y presionar F5 para ejecutar.
@@ -18,6 +19,19 @@ GO
 -- ============================================================
 -- 0. LIMPIEZA (orden inverso para respetar FK)
 -- ============================================================
+DROP TABLE IF EXISTS AuditLog;
+DROP TABLE IF EXISTS IncidentesLaborales;
+DROP TABLE IF EXISTS DeduccionesJudiciales;
+DROP TABLE IF EXISTS LicenciasEmpleados;
+DROP TABLE IF EXISTS DetalleNomina;
+DROP TABLE IF EXISTS Nomina;
+DROP TABLE IF EXISTS FeriadosNacionales;
+DROP TABLE IF EXISTS Empleados;
+DROP TABLE IF EXISTS Mermas;
+DROP TABLE IF EXISTS Cotizaciones;
+DROP TABLE IF EXISTS ConfiguracionSistema;
+DROP TABLE IF EXISTS TipoCambio;
+DROP TABLE IF EXISTS ArqueoCaja;
 DROP TABLE IF EXISTS ConsumoLote;
 DROP TABLE IF EXISTS ProduccionLotes;
 DROP TABLE IF EXISTS RecetaProducto;
@@ -85,6 +99,8 @@ CREATE TABLE Usuarios (
     PasswordHash VARCHAR(255) NOT NULL,
     RolID INT NOT NULL,
     Activo BIT NOT NULL DEFAULT 1,
+    TOTPSecret VARCHAR(32) NULL,
+    TOTPEnabled BIT NOT NULL DEFAULT 0,
     CreadoEn DATETIME NOT NULL DEFAULT GETDATE(),
     CONSTRAINT FK_Usuarios_Roles FOREIGN KEY (RolID) REFERENCES Roles(ID)
 );
@@ -153,7 +169,7 @@ CREATE TABLE Facturas (
     FechaHora DATETIME NOT NULL DEFAULT GETDATE(),
     UsuarioID INT NOT NULL,
     ClienteID INT NULL,
-    TurnoID INT NOT NULL,
+    TurnoID INT NULL,
     Subtotal DECIMAL(10, 2) NOT NULL,
     IVA DECIMAL(10, 2) NOT NULL,
     Total DECIMAL(10, 2) NOT NULL,
@@ -195,7 +211,16 @@ CREATE TABLE Pagos (
     FechaPago DATETIME NOT NULL DEFAULT GETDATE(),
     NombreTransferente VARCHAR(100) NULL,
     CONSTRAINT FK_Pagos_Facturas FOREIGN KEY (FacturaID) REFERENCES Facturas(ID),
-    CONSTRAINT CK_Pagos_MetodoPago CHECK (MetodoPago IN ('Efectivo', 'Transferencia'))
+    CONSTRAINT CK_Pagos_MetodoPago CHECK (MetodoPago IN ('Efectivo', 'Transferencia', 'Efectivo USD'))
+);
+GO
+
+CREATE TABLE FacturasRUC (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    FacturaID INT NOT NULL UNIQUE,
+    RazonSocial VARCHAR(255) NOT NULL,
+    NumeroRUC VARCHAR(50) NOT NULL,
+    CONSTRAINT FK_FacturasRUC_Facturas FOREIGN KEY (FacturaID) REFERENCES Facturas(ID)
 );
 GO
 
@@ -286,6 +311,7 @@ CREATE TABLE ProduccionLotes (
     ID INT PRIMARY KEY IDENTITY(1,1),
     ProductoID INT NOT NULL,
     CantidadProducida INT NOT NULL,
+    CantidadEsperada INT NULL,
     Fecha DATETIME NOT NULL DEFAULT GETDATE(),
     CONSTRAINT FK_ProduccionLotes_Productos FOREIGN KEY (ProductoID) REFERENCES Productos(ID)
 );
@@ -302,7 +328,271 @@ CREATE TABLE ConsumoLote (
 GO
 
 -- ============================================================
--- 6. ÍNDICES DE RENDIMIENTO
+-- 6. MÓDULO DE MERMAS Y PAN FRÍO
+-- ============================================================
+
+CREATE TABLE Mermas (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    ProductoID INT NOT NULL,
+    Cantidad INT NOT NULL,
+    Motivo VARCHAR(50) NOT NULL,
+    Observaciones VARCHAR(200) NULL,
+    UsuarioID INT NOT NULL,
+    Fecha DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_Mermas_Productos FOREIGN KEY (ProductoID) REFERENCES Productos(ID),
+    CONSTRAINT FK_Mermas_Usuarios FOREIGN KEY (UsuarioID) REFERENCES Usuarios(ID),
+    CONSTRAINT CK_Mermas_Motivo CHECK (Motivo IN ('Pan Frio', 'Defectuoso', 'Merma Horneado', 'Vencido', 'Otro'))
+);
+GO
+
+-- ============================================================
+-- 7. TIPO DE CAMBIO Y MULTIMONEDA
+-- ============================================================
+
+CREATE TABLE TipoCambio (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    Fecha DATE NOT NULL UNIQUE,
+    TasaCompra DECIMAL(10, 4) NOT NULL,
+    TasaVenta DECIMAL(10, 4) NOT NULL,
+    Fuente VARCHAR(50) NOT NULL DEFAULT 'Manual'
+);
+GO
+
+-- ============================================================
+-- 8. ARQUEO DE CAJA (Cierre de Turno)
+-- ============================================================
+
+CREATE TABLE ArqueoCaja (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    TurnoID INT NOT NULL,
+    UsuarioID INT NOT NULL,
+    -- Conteo Ciego del Cajero
+    EfectivoContado DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    TransferenciasContadas DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    DolaresContados DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    TipoCambioUsado DECIMAL(10, 4) NULL,
+    -- Valores Calculados por el Sistema
+    EfectivoSistema DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    TransferenciasSistema DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    -- Diferencia
+    DiferenciaEfectivo DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    DiferenciaTransferencias DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    -- Observaciones
+    Observaciones VARCHAR(500) NULL,
+    FechaArqueo DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_ArqueoCaja_TurnosCaja FOREIGN KEY (TurnoID) REFERENCES TurnosCaja(ID),
+    CONSTRAINT FK_ArqueoCaja_Usuarios FOREIGN KEY (UsuarioID) REFERENCES Usuarios(ID)
+);
+GO
+
+-- ============================================================
+-- 9. CONFIGURACIÓN DEL SISTEMA
+-- ============================================================
+
+CREATE TABLE ConfiguracionSistema (
+    Clave VARCHAR(50) PRIMARY KEY NOT NULL,
+    Valor VARCHAR(255) NOT NULL,
+    Descripcion VARCHAR(200) NULL
+);
+GO
+
+-- ============================================================
+-- 10. COTIZACIONES DE PASTELES (Portal Web)
+-- ============================================================
+
+CREATE TABLE Cotizaciones (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    ClienteID INT NULL,
+    SessionID VARCHAR(36) NULL,
+    Especificaciones VARCHAR(MAX) NOT NULL,
+    FechaEntrega DATE NOT NULL,
+    RutaImagenReferencia VARCHAR(255) NULL,
+    TelefonoContacto VARCHAR(20) NULL,
+    Estado VARCHAR(20) NOT NULL DEFAULT 'Pendiente',
+    PrecioCotizado DECIMAL(10, 2) NULL,
+    FechaSolicitud DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_Cotizaciones_Clientes FOREIGN KEY (ClienteID) REFERENCES Clientes(ID),
+    CONSTRAINT CK_Cotizaciones_Estado CHECK (Estado IN ('Pendiente', 'Cotizada', 'Aceptada', 'Rechazada'))
+);
+GO
+
+-- ============================================================
+-- 11. MÓDULO DE RECURSOS HUMANOS (Ley Nicaragua)
+-- ============================================================
+
+-- Empleados: Expediente completo según Ley 787 y Ley 185
+CREATE TABLE Empleados (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    UsuarioID INT NULL,
+    -- Datos Personales
+    NombreCompleto VARCHAR(150) NOT NULL,
+    Cedula VARCHAR(20) NOT NULL UNIQUE,
+    FechaNacimiento DATE NULL,
+    Genero VARCHAR(10) NULL,
+    Direccion VARCHAR(300) NULL,
+    Telefono VARCHAR(20) NULL,
+    CorreoElectronico VARCHAR(100) NULL,
+    NumeroINSS VARCHAR(20) NULL,
+    -- Datos Laborales
+    Cargo VARCHAR(100) NOT NULL,
+    FechaIngreso DATE NOT NULL,
+    FechaEgreso DATE NULL,
+    TipoContrato VARCHAR(30) NOT NULL DEFAULT 'Indefinido',
+    TipoJornada VARCHAR(20) NOT NULL DEFAULT 'Diurna',
+    SalarioBase DECIMAL(10, 2) NOT NULL,
+    FormaPago VARCHAR(20) NOT NULL DEFAULT 'Mensual',
+    -- Estado
+    EstadoEmpleado VARCHAR(20) NOT NULL DEFAULT 'Activo',
+    MotivoEgreso VARCHAR(100) NULL,
+    -- Consentimiento Ley 787
+    ConsentimientoDatos BIT NOT NULL DEFAULT 0,
+    FechaConsentimiento DATETIME NULL,
+    CreadoEn DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_Empleados_Usuarios FOREIGN KEY (UsuarioID) REFERENCES Usuarios(ID),
+    CONSTRAINT CK_Empleados_Contrato CHECK (TipoContrato IN ('Indefinido', 'Determinado', 'Por Obra')),
+    CONSTRAINT CK_Empleados_Jornada CHECK (TipoJornada IN ('Diurna', 'Nocturna', 'Mixta')),
+    CONSTRAINT CK_Empleados_FormaPago CHECK (FormaPago IN ('Semanal', 'Catorcenal', 'Quincenal', 'Mensual')),
+    CONSTRAINT CK_Empleados_Estado CHECK (EstadoEmpleado IN ('Activo', 'Subsidio', 'Licencia', 'Suspendido', 'Liquidado'))
+);
+GO
+
+-- Feriados Nacionales de Nicaragua (Art. 66 Ley 185)
+CREATE TABLE FeriadosNacionales (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    Fecha DATE NOT NULL,
+    Descripcion VARCHAR(100) NOT NULL,
+    Anio INT NOT NULL,
+    EsMovil BIT NOT NULL DEFAULT 0
+);
+GO
+
+-- Nómina: Encabezado de corrida de nómina
+CREATE TABLE Nomina (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    EmpleadoID INT NOT NULL,
+    PeriodoInicio DATE NOT NULL,
+    PeriodoFin DATE NOT NULL,
+    -- Ingresos
+    SalarioBruto DECIMAL(10, 2) NOT NULL,
+    HorasExtras DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    MontoHorasExtras DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    OtrosIngresos DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    TotalDevengado DECIMAL(10, 2) NOT NULL,
+    -- Deducciones de Ley
+    INSSLaboral DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    IRMensual DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    -- Deducciones Voluntarias/Judiciales
+    PensionAlimenticia DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    ValesDescontados DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    OtrasDeducciones DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    TotalDeducciones DECIMAL(10, 2) NOT NULL,
+    -- Resultado
+    SalarioNeto DECIMAL(10, 2) NOT NULL,
+    -- Aportes Patronales (Información)
+    INSSPatronal DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    INATEC DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    -- Metadatos
+    Estado VARCHAR(20) NOT NULL DEFAULT 'Borrador',
+    FechaGeneracion DATETIME NOT NULL DEFAULT GETDATE(),
+    GeneradoPor INT NULL,
+    CONSTRAINT FK_Nomina_Empleados FOREIGN KEY (EmpleadoID) REFERENCES Empleados(ID),
+    CONSTRAINT FK_Nomina_GeneradoPor FOREIGN KEY (GeneradoPor) REFERENCES Usuarios(ID),
+    CONSTRAINT CK_Nomina_Estado CHECK (Estado IN ('Borrador', 'Aprobada', 'Pagada', 'Anulada'))
+);
+GO
+
+-- Detalle de Nómina: Desglose de cálculos para auditoría
+CREATE TABLE DetalleNomina (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    NominaID INT NOT NULL,
+    Concepto VARCHAR(100) NOT NULL,
+    Tipo VARCHAR(10) NOT NULL,
+    Monto DECIMAL(10, 2) NOT NULL,
+    Descripcion VARCHAR(200) NULL,
+    CONSTRAINT FK_DetalleNomina_Nomina FOREIGN KEY (NominaID) REFERENCES Nomina(ID),
+    CONSTRAINT CK_DetalleNomina_Tipo CHECK (Tipo IN ('Ingreso', 'Deduccion', 'Patronal'))
+);
+GO
+
+-- Licencias y Permisos de Empleados
+CREATE TABLE LicenciasEmpleados (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    EmpleadoID INT NOT NULL,
+    TipoLicencia VARCHAR(50) NOT NULL,
+    FechaInicio DATE NOT NULL,
+    FechaFin DATE NOT NULL,
+    DiasOtorgados INT NOT NULL,
+    PagoEmpleador DECIMAL(5, 2) NOT NULL DEFAULT 100.00,
+    PagoINSS DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+    Observaciones VARCHAR(300) NULL,
+    AprobadoPor INT NULL,
+    FechaRegistro DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_LicenciasEmpleados_Empleados FOREIGN KEY (EmpleadoID) REFERENCES Empleados(ID),
+    CONSTRAINT FK_LicenciasEmpleados_Aprobador FOREIGN KEY (AprobadoPor) REFERENCES Usuarios(ID),
+    CONSTRAINT CK_Licencias_Tipo CHECK (TipoLicencia IN (
+        'Vacaciones', 'Enfermedad Comun', 'Maternidad', 'Paternidad',
+        'Matrimonio', 'Luto', 'Riesgo Profesional', 'Permiso Personal', 'Otro'
+    ))
+);
+GO
+
+-- Deducciones Judiciales (Pensiones Alimenticias - Ley 870)
+CREATE TABLE DeduccionesJudiciales (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    EmpleadoID INT NOT NULL,
+    TipoDeduccion VARCHAR(30) NOT NULL,
+    Beneficiario VARCHAR(150) NOT NULL,
+    PorcentajeSalarioNeto DECIMAL(5, 2) NOT NULL,
+    MontoFijo DECIMAL(10, 2) NULL,
+    NumeroJuzgado VARCHAR(50) NULL,
+    FechaInicio DATE NOT NULL,
+    FechaFin DATE NULL,
+    Activa BIT NOT NULL DEFAULT 1,
+    CONSTRAINT FK_DeduccionesJudiciales_Empleados FOREIGN KEY (EmpleadoID) REFERENCES Empleados(ID),
+    CONSTRAINT CK_DeduccionesJudiciales_Tipo CHECK (TipoDeduccion IN ('Pension Alimenticia', 'Embargo Comercial'))
+);
+GO
+
+-- Incidentes Laborales (Ley 618)
+CREATE TABLE IncidentesLaborales (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    EmpleadoID INT NOT NULL,
+    TipoIncidente VARCHAR(30) NOT NULL,
+    Gravedad VARCHAR(20) NOT NULL,
+    Descripcion VARCHAR(MAX) NOT NULL,
+    FechaIncidente DATETIME NOT NULL,
+    FechaReporte DATETIME NOT NULL DEFAULT GETDATE(),
+    NotificadoMITRAB BIT NOT NULL DEFAULT 0,
+    FechaNotificacionMITRAB DATETIME NULL,
+    AccionesCorrectivas VARCHAR(MAX) NULL,
+    RegistradoPor INT NOT NULL,
+    CONSTRAINT FK_IncidentesLaborales_Empleados FOREIGN KEY (EmpleadoID) REFERENCES Empleados(ID),
+    CONSTRAINT FK_IncidentesLaborales_Registrador FOREIGN KEY (RegistradoPor) REFERENCES Usuarios(ID),
+    CONSTRAINT CK_Incidentes_Tipo CHECK (TipoIncidente IN ('Accidente', 'Casi Accidente', 'Enfermedad Ocupacional')),
+    CONSTRAINT CK_Incidentes_Gravedad CHECK (Gravedad IN ('Leve', 'Grave', 'Muy Grave', 'Mortal'))
+);
+GO
+
+-- ============================================================
+-- 12. LOG DE AUDITORÍA
+-- ============================================================
+
+CREATE TABLE AuditLog (
+    ID INT PRIMARY KEY IDENTITY(1,1),
+    UsuarioID INT NULL,
+    Accion VARCHAR(100) NOT NULL,
+    Entidad VARCHAR(50) NOT NULL,
+    EntidadID INT NULL,
+    DatosAntes VARCHAR(MAX) NULL,
+    DatosDespues VARCHAR(MAX) NULL,
+    IP VARCHAR(45) NULL,
+    FechaHora DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT FK_AuditLog_Usuarios FOREIGN KEY (UsuarioID) REFERENCES Usuarios(ID)
+);
+GO
+
+-- ============================================================
+-- 13. ÍNDICES DE RENDIMIENTO
 -- ============================================================
 
 CREATE INDEX IX_Productos_CategoriaID ON Productos(CategoriaID);
@@ -314,11 +604,15 @@ CREATE INDEX IX_DetalleFacturas_FacturaID ON DetalleFacturas(FacturaID);
 CREATE INDEX IX_Pagos_FacturaID ON Pagos(FacturaID);
 CREATE INDEX IX_Encargos_Estado ON Encargos(Estado);
 CREATE INDEX IX_TurnosCaja_UsuarioID ON TurnosCaja(UsuarioID);
+CREATE INDEX IX_Nomina_EmpleadoID ON Nomina(EmpleadoID);
+CREATE INDEX IX_Nomina_Periodo ON Nomina(PeriodoInicio, PeriodoFin);
+CREATE INDEX IX_Mermas_Fecha ON Mermas(Fecha);
+CREATE INDEX IX_AuditLog_FechaHora ON AuditLog(FechaHora);
 CREATE UNIQUE NONCLUSTERED INDEX UQ_Clientes_Telefono ON Clientes(Telefono) WHERE Telefono IS NOT NULL;
 GO
 
 -- ============================================================
--- 7. DATOS INICIALES (Catálogos y Datos de Prueba)
+-- 14. DATOS INICIALES (Catálogos y Datos de Prueba)
 -- ============================================================
 
 -- Roles del sistema
@@ -326,7 +620,7 @@ INSERT INTO Roles (Nombre, Descripcion) VALUES
 ('SuperAdmin', 'Control total del sistema, datos y accesos'),
 ('Admin', 'Gerente: gestiona ajustes, usuarios y contabilidad'),
 ('Estandar', 'Dependienta: acceso al POS y cierre de turno'),
-('Invitado', 'Solo lectura: panaderos y acceso al catalogo');
+('Invitado', 'Panadero/Taller: acceso al monitor de cocina y catálogo');
 GO
 
 -- Categorías de productos
@@ -362,7 +656,7 @@ INSERT INTO Usuarios (NombreCompleto, Username, PasswordHash, RolID) VALUES
 ('Dependienta Turno 2', 'ventas2', 'hashed_pwd_aqui', 3);
 GO
 
--- Productos de prueba (IDs de Categorias: 1=Pan Salado, 2=Pan Dulce, 3=Reposteria, 4=Bebidas, 5=Postres Frios, 6=Galletas)
+-- Productos de prueba
 INSERT INTO Productos (Nombre, CategoriaID, PrecioBase, EsFicticio) VALUES
 ('Bolillo',                          1, 5.00,   0),
 ('Pan Pizza',                        1, 15.00,  0),
@@ -379,7 +673,7 @@ INSERT INTO Productos (Nombre, CategoriaID, PrecioBase, EsFicticio) VALUES
 ('Selva Negra',                      5, 380.00, 0);
 GO
 
--- Ingredientes extra para personalizacion de pasteles
+-- Ingredientes extra para personalización de pasteles
 INSERT INTO Ingredientes (Nombre, PrecioAdicional) VALUES
 ('Relleno de Fresa',           50.00),
 ('Relleno de Cajeta',          40.00),
@@ -389,13 +683,54 @@ INSERT INTO Ingredientes (Nombre, PrecioAdicional) VALUES
 ('Aplicaciones en Relieve',   120.00);
 GO
 
--- Cliente generico de mostrador
+-- Cliente genérico de mostrador
 INSERT INTO Clientes (Nombre, Telefono, NivelConfianzaID, TotalCompras, EsInvitado) VALUES
 ('Cliente General (Mostrador)', NULL, 1, 0, 1);
 GO
 
+-- Configuración del Sistema
+INSERT INTO ConfiguracionSistema (Clave, Valor, Descripcion) VALUES
+('nombre_negocio', 'Panadería Amada Calero Leiva', 'Nombre del negocio'),
+('ruc_negocio', '', 'Número RUC del negocio'),
+('direccion_negocio', '', 'Dirección fiscal del negocio'),
+('telefono_negocio', '', 'Teléfono de contacto'),
+('iva_porcentaje', '15', 'Porcentaje de IVA aplicado (0 si exento)'),
+('moneda_simbolo', 'C$', 'Símbolo de moneda'),
+('tipo_cambio_usd', '36.6243', 'Tipo de cambio oficial USD→C$ (manual)'),
+('totp_obligatorio', '0', 'Verificación en dos pasos obligatoria'),
+('permitir_invitados', '1', 'Permitir acceso como cliente invitado'),
+('max_items_factura', '50', 'Máximo de líneas por factura'),
+('whatsapp_negocio', '50588888888', 'Número de WhatsApp empresarial'),
+('inss_laboral', '7.00', 'Tasa INSS Laboral (%)'),
+('inss_patronal_menos50', '21.50', 'Tasa INSS Patronal (<50 empleados) (%)'),
+('inss_patronal_mas50', '22.50', 'Tasa INSS Patronal (>=50 empleados) (%)'),
+('inatec', '2.00', 'Tasa INATEC (%)');
+GO
+
+-- Feriados Nacionales de Nicaragua 2026 (Art. 66 Ley 185)
+INSERT INTO FeriadosNacionales (Fecha, Descripcion, Anio, EsMovil) VALUES
+('2026-01-01', 'Año Nuevo', 2026, 0),
+('2026-04-02', 'Jueves Santo', 2026, 1),
+('2026-04-03', 'Viernes Santo', 2026, 1),
+('2026-05-01', 'Día del Trabajo', 2026, 0),
+('2026-05-30', 'Día de la Madre', 2026, 0),
+('2026-07-19', 'Día de la Revolución', 2026, 0),
+('2026-08-01', 'Fiesta de Santo Domingo (Managua)', 2026, 0),
+('2026-08-10', 'Fiesta de Santo Domingo (Managua)', 2026, 0),
+('2026-09-14', 'Batalla de San Jacinto', 2026, 0),
+('2026-09-15', 'Día de la Independencia', 2026, 0),
+('2026-12-08', 'Día de la Inmaculada Concepción', 2026, 0),
+('2026-12-25', 'Navidad', 2026, 0);
+GO
+
+-- Tabla progresiva IR (Art. 23, Ley 822) - Rangos anuales en C$
+-- Estos valores se leen desde ConfiguracionSistema como tablas maestras
+INSERT INTO ConfiguracionSistema (Clave, Valor, Descripcion) VALUES
+('ir_tabla', '[{"desde":0,"hasta":100000,"base":0,"tasa":0,"exceso":0},{"desde":100000.01,"hasta":200000,"base":0,"tasa":15,"exceso":100000},{"desde":200000.01,"hasta":350000,"base":15000,"tasa":20,"exceso":200000},{"desde":350000.01,"hasta":500000,"base":45000,"tasa":25,"exceso":350000},{"desde":500000.01,"hasta":999999999,"base":82500,"tasa":30,"exceso":500000}]', 'Tabla progresiva IR Art.23 Ley 822 (JSON)');
+GO
+
 PRINT '============================================================';
 PRINT 'PANADERIA AMADA - Esquema creado exitosamente.';
-PRINT '21 tablas | 9 indices | Datos iniciales cargados.';
+PRINT '40+ tablas | 14 indices | RRHH Ley Nicaragua | Datos iniciales';
 PRINT '============================================================';
 GO

@@ -24,8 +24,14 @@ def index():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Obtener categorías activas
-    cursor.execute("SELECT ID, Nombre FROM Categorias ORDER BY Nombre")
+    # Obtener categorías activas que tengan al menos un producto activo
+    cursor.execute("""
+        SELECT DISTINCT c.ID, c.Nombre 
+        FROM Categorias c
+        JOIN Productos p ON p.CategoriaID = c.ID
+        WHERE p.Activo = 1
+        ORDER BY c.Nombre
+    """)
     categorias = [{'id': row.ID, 'nombre': row.Nombre} for row in cursor.fetchall()]
 
     # Obtener productos activos con su categoría
@@ -51,12 +57,20 @@ def index():
         for row in cursor.fetchall()
     ]
 
+    # Obtener configuración del sistema (IVA, etc)
+    cursor.execute("SELECT Clave, Valor FROM ConfiguracionSistema")
+    configuracion = {row.Clave: row.Valor for row in cursor.fetchall()}
+
     conn.close()
 
-    return render_template('index.html',
+    es_cliente = getattr(current_user, 'rol_nombre', '') in ['Cliente', 'Invitado']
+    template = 'tienda.html' if es_cliente else 'pos.html'
+
+    return render_template(template,
                            productos=productos,
                            ingredientes=ingredientes,
                            categorias=categorias,
+                           configuracion=configuracion,
                            user=current_user,
                            mes_actual=datetime.now().month)
 
@@ -120,8 +134,12 @@ def registrar_factura():
     iva = datos.get('iva', 0)
     es_encargo = datos.get('es_encargo', False)
     datos_encargo = datos.get('encargo_detalles', None)
-    metodo_pago = datos.get('metodo_pago', 'Efectivo')
-    nombre_transferente = datos.get('nombre_transferente', None)
+    pagos_multiples = datos.get('pagos_multiples', [])
+    ruc_datos = datos.get('ruc', None)
+    
+    # Fallbacks por si viene el formato anterior
+    metodo_pago_legacy = datos.get('metodo_pago', 'Efectivo')
+    nombre_transferente_legacy = datos.get('nombre_transferente', None)
 
     if not carrito or total <= 0:
         return jsonify({'error': 'El carrito está vacío o el total es inválido'}), 400
@@ -171,14 +189,22 @@ def registrar_factura():
                     cliente_id = cursor.fetchone()[0]
 
         # 4. Insertar la factura
+        incluye_ruc = 1 if ruc_datos else 0
         cursor.execute(
-            "INSERT INTO Facturas (NumeroFactura, CodigoSeguimiento, UsuarioID, ClienteID, TurnoID, Subtotal, IVA, Total, EsEncargo) "
+            "INSERT INTO Facturas (NumeroFactura, CodigoSeguimiento, UsuarioID, ClienteID, TurnoID, Subtotal, IVA, Total, EsEncargo, IncluyeRUC) "
             "OUTPUT INSERTED.ID "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             numero_factura, codigo_seguimiento, current_user.id, cliente_id, turno_id,
-            subtotal, iva, total, 1 if es_encargo else 0
+            subtotal, iva, total, 1 if es_encargo else 0, incluye_ruc
         )
         factura_id = cursor.fetchone()[0]
+
+        # 4.1 Insertar datos de RUC si aplica
+        if incluye_ruc and ruc_datos:
+            cursor.execute(
+                "INSERT INTO FacturasRUC (FacturaID, RazonSocial, NumeroRUC) VALUES (?, ?, ?)",
+                factura_id, ruc_datos.get('razon_social', ''), ruc_datos.get('numero', '')
+            )
 
         # 4. Insertar detalle de cada producto
         for item in carrito:
@@ -199,30 +225,39 @@ def registrar_factura():
             extras = item.get('detalle_ingredientes')
             if extras and isinstance(extras, dict) and 'ingredientes' in extras:
                 for extra in extras['ingredientes']:
-                    # El extra ahora no tiene ID en pos.js (solo nombre y precio), 
-                    # pero la tabla DetalleIngredientes necesita un IngredienteID.
-                    # Buscamos el ID por nombre o usamos un genérico.
-                    cursor.execute("SELECT ID FROM Ingredientes WHERE Nombre = ?", extra.get('nombre', ''))
+                    nombre_extra = extra.get('nombre', '').strip()
+                    precio_extra = float(extra.get('precio', 0))
+                    
+                    cursor.execute("SELECT ID FROM Ingredientes WHERE Nombre = ?", nombre_extra)
                     ing_row = cursor.fetchone()
-                    ing_id = ing_row.ID if ing_row else 1 # Fallback al primer ingrediente si no se encuentra
+                    
+                    if ing_row:
+                        ing_id = ing_row.ID
+                    else:
+                        cursor.execute(
+                            "INSERT INTO Ingredientes (Nombre, PrecioAdicional, Activo) OUTPUT INSERTED.ID VALUES (?, ?, 1)",
+                            nombre_extra, precio_extra
+                        )
+                        ing_id = cursor.fetchone()[0]
                     
                     cursor.execute(
                         "INSERT INTO DetalleIngredientes (DetalleFacturaID, IngredienteID, PrecioAplicado) "
                         "VALUES (?, ?, ?)",
-                        detalle_id, ing_id, extra.get('precio', 0)
+                        detalle_id, ing_id, precio_extra
                     )
 
-        # 5. Registrar el pago (soporta pago dividido 50/50)
+        # 5. Registrar el pago
+        cambio_restante = float(datos.get('cambio', 0))
+        
         if es_encargo and datos_encargo:
-            adelanto = datos_encargo.get('adelanto', 0)
+            adelanto = float(datos_encargo.get('adelanto', 0))
             metodo_adelanto = datos_encargo.get('metodo_adelanto', 'Efectivo')
 
-            # Pago del adelanto
             if adelanto > 0:
                 cursor.execute(
                     "INSERT INTO Pagos (FacturaID, MetodoPago, Monto, NombreTransferente) VALUES (?, ?, ?, ?)",
                     factura_id, metodo_adelanto, adelanto,
-                    nombre_transferente if metodo_adelanto == 'Transferencia' else None
+                    nombre_transferente_legacy if metodo_adelanto == 'Transferencia' else None
                 )
 
             # Registrar encargo
@@ -235,11 +270,33 @@ def registrar_factura():
                 factura_id, fecha_entrega, datos_encargo.get('notas', ''), especificaciones, ruta_imagen, telefono_contacto_encargo
             )
         else:
-            cursor.execute(
-                "INSERT INTO Pagos (FacturaID, MetodoPago, Monto, NombreTransferente) VALUES (?, ?, ?, ?)",
-                factura_id, metodo_pago, total,
-                nombre_transferente if metodo_pago == 'Transferencia' else None
-            )
+            if pagos_multiples:
+                for p in pagos_multiples:
+                    monto = float(p.get('monto', 0))
+                    metodo = p.get('metodo')
+                    
+                    # Deducir el cambio del efectivo recibido
+                    if cambio_restante > 0 and metodo in ('Efectivo', 'Efectivo USD'):
+                        if monto >= cambio_restante:
+                            monto -= cambio_restante
+                            cambio_restante = 0
+                        else:
+                            cambio_restante -= monto
+                            monto = 0
+                            
+                    if monto > 0:
+                        cursor.execute(
+                            "INSERT INTO Pagos (FacturaID, MetodoPago, Monto, NombreTransferente) VALUES (?, ?, ?, ?)",
+                            factura_id, metodo, monto,
+                            p.get('referencia') if metodo == 'Transferencia' else None
+                        )
+            else:
+                monto = float(total)
+                cursor.execute(
+                    "INSERT INTO Pagos (FacturaID, MetodoPago, Monto, NombreTransferente) VALUES (?, ?, ?, ?)",
+                    factura_id, metodo_pago_legacy, monto,
+                    nombre_transferente_legacy if metodo_pago_legacy == 'Transferencia' else None
+                )
 
         # 5b. Fidelización: Sumar compra al cliente y subirlo de nivel si corresponde
         if cliente_id > 1:  # Ignoramos al Cliente General (ID 1)

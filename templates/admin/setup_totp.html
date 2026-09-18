@@ -1,62 +1,10 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Configurar Autenticador | Panadería Amada</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <style>
-        .totp-setup-container {
-            max-width: 600px;
-            margin: 2rem auto;
-        }
-        
-        .qr-container {
-            text-align: center;
-            background: white;
-            padding: 1rem;
-            border-radius: var(--radius-md);
-            display: inline-block;
-            margin: 1.5rem 0;
-            border: 1px solid var(--border-light);
-        }
-        
-        .secret-key {
-            font-family: monospace;
-            background: var(--surface-sunken);
-            padding: 0.5rem 1rem;
-            border-radius: var(--radius-sm);
-            letter-spacing: 0.1em;
-            font-size: 1.1rem;
-            display: inline-block;
-            margin-bottom: 1rem;
-        }
+{% extends 'admin_base.html' %}
 
-        .step-card {
-            margin-bottom: 1.5rem;
-        }
+{% block title %}Configurar Autenticador | Brajher's Cake{% endblock %}
+{% block page_title %}Configurar Autenticador{% endblock %}
 
-        .totp-input-wrapper input {
-            text-align: center;
-            letter-spacing: 0.5em;
-            font-size: 1.25rem;
-            font-weight: 700;
-            max-width: 200px;
-            margin: 0 auto;
-        }
-    </style>
-</head>
-<body>
-    <div class="ambient-bg">
-        <div class="ambient-shape shape-1"></div>
-        <div class="ambient-shape shape-2"></div>
-    </div>
-
-    {% include 'admin/navbar.html' %}
-
-    <main class="admin-layout">
-        <div class="page-header">
-            <h2>Autenticación en Dos Pasos (TOTP)</h2>
+{% block content %}
+<div class="page-header">
             <p>Protege tu cuenta con una capa extra de seguridad.</p>
         </div>
 
@@ -115,6 +63,10 @@
                 </div>
             </div>
         </div>
-    </main>
-</body>
-</html>
+
+
+{% endblock %}
+
+{% block extra_scripts %}
+
+{% endblock %}

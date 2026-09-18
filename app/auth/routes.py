@@ -26,8 +26,8 @@ def login():
         return redirect(url_for('hub.main_hub'))
 
     if request.method == 'POST':
-        identificador = request.form.get('identificador')
-        password = request.form.get('password')
+        identificador = request.form.get('identificador', '').strip()
+        password = request.form.get('password', '')
 
         # 1. Intentar como Administrador / Empleado
         user, password_hash = User.get_by_username(identificador)

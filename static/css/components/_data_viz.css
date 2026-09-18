@@ -1,0 +1,240 @@
+/* ============================================================
+   DATA VISUALIZATION — Brajher's Cake
+   Progress bars, discrepancy indicators, denomination grids
+   ============================================================ */
+
+/* ── Progress Bar ── */
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--surface-sunken);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+    background: linear-gradient(90deg, var(--brand-dorado), var(--brand-dorado-dark));
+    transition: width 0.6s var(--ease-out);
+}
+
+.progress-bar-fill.success { background: var(--success); }
+.progress-bar-fill.danger  { background: var(--danger); }
+.progress-bar-fill.warning { background: var(--warning); }
+
+/* ── Discrepancy Indicator ── */
+.discrepancy-card {
+    background: var(--surface);
+    border: 2px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.discrepancy-card.cuadrado {
+    border-color: var(--success-border);
+    background: var(--success-bg);
+}
+
+.discrepancy-card.sobrante {
+    border-color: var(--info-border);
+    background: var(--info-bg);
+}
+
+.discrepancy-card.faltante {
+    border-color: var(--danger-border);
+    background: var(--danger-bg);
+    animation: discrepancyPulse 2s ease-in-out infinite;
+}
+
+@keyframes discrepancyPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(196, 69, 54, 0); }
+    50%      { box-shadow: 0 0 0 6px rgba(196, 69, 54, 0.10); }
+}
+
+.discrepancy-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    font-family: 'Outfit', sans-serif;
+    line-height: 1.1;
+    margin-bottom: 0.25rem;
+}
+
+.discrepancy-value.positive { color: var(--success); }
+.discrepancy-value.negative { color: var(--danger); }
+.discrepancy-value.neutral  { color: var(--info); }
+
+.discrepancy-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+}
+
+/* ── Denomination Grid ── */
+.denomination-grid {
+    display: grid;
+    grid-template-columns: 1fr 80px 100px;
+    gap: 0;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.denomination-header {
+    background: var(--surface-sunken);
+    padding: 0.6rem 1rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.denomination-row {
+    display: contents;
+}
+
+.denomination-cell {
+    padding: 0.55rem 1rem;
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+    background: var(--surface);
+}
+
+.denomination-cell:first-child {
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.denomination-cell .form-input {
+    text-align: center;
+    padding: 0.4rem;
+    width: 100%;
+    font-weight: 600;
+}
+
+.denomination-subtotal {
+    font-weight: 700;
+    font-family: 'Outfit', sans-serif;
+    color: var(--brand-dorado-dark);
+}
+
+.denomination-total-row {
+    display: contents;
+}
+
+.denomination-total-row .denomination-cell {
+    background: var(--primary-subtle);
+    font-weight: 800;
+    border-bottom: none;
+}
+
+/* ── Comparison Grid (System vs Counted) ── */
+.comparison-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.comparison-item {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    text-align: center;
+}
+
+.comparison-item-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    margin-bottom: 0.5rem;
+}
+
+.comparison-item-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    font-family: 'Outfit', sans-serif;
+    color: var(--text-main);
+}
+
+.comparison-item.highlight {
+    border-color: var(--brand-dorado);
+    background: var(--primary-subtle);
+}
+
+.comparison-item.highlight .comparison-item-value {
+    color: var(--brand-dorado-dark);
+}
+
+/* ── Sparkline placeholder ── */
+.sparkline-container {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 24px;
+}
+
+.sparkline-bar {
+    width: 4px;
+    background: var(--primary-light);
+    border-radius: 2px;
+    transition: height 0.3s ease;
+}
+
+.sparkline-bar.active {
+    background: var(--brand-dorado);
+}
+
+/* ── Alert Box (High Priority) ── */
+.alert-box {
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+}
+
+.alert-box svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+.alert-box.alert-danger {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    color: var(--danger);
+}
+
+.alert-box.alert-warning {
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    color: var(--warning);
+}
+
+.alert-box.alert-success {
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+    color: var(--success);
+}
+
+.alert-box.alert-info {
+    background: var(--info-bg);
+    border: 1px solid var(--info-border);
+    color: var(--info);
+}

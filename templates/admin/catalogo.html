@@ -1,103 +1,106 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestor de Catálogo | Panadería Amada</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
-    <div class="ambient-bg">
-        <div class="ambient-shape shape-1"></div>
-        <div class="ambient-shape shape-2"></div>
-        <div class="ambient-shape shape-3"></div>
-    </div>
+{% extends 'admin_base.html' %}
 
-    {% include 'admin/navbar.html' %}
+{% block title %}Gestor de Catálogo | Brajher's Cake{% endblock %}
+{% block page_title %}Catálogo de Productos{% endblock %}
 
-    <main class="admin-layout">
-        <div class="page-header">
-            <h2>Productos y Pasteles</h2>
-            <p>Gestiona el catálogo de productos, precios y descuentos.</p>
+{% block content %}
+<div class="page-header">
+    <p>Gestiona el catálogo de productos, precios y descuentos.</p>
+</div>
+
+<div class="panel panel-accent-primary">
+    <div class="panel-header">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+            Listado de Productos
+        </h3>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <input type="text" id="search-catalogo" class="form-input" placeholder="Buscar producto..." style="max-width: 200px;">
+            <button class="btn btn-primary btn-sm" onclick="abrirModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Nuevo Producto
+            </button>
         </div>
-
-        <div class="panel panel-accent-primary">
-            <div class="panel-header">
-                <h3>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-                    Catálogo de Productos
-                </h3>
-                <button class="btn btn-primary btn-sm" onclick="abrirModal()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Nuevo Producto
-                </button>
-            </div>
-            <div class="panel-body-flush">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Nombre</th>
-                            <th>Categoría</th>
-                            <th>Precio (C$)</th>
-                            <th>Descuento</th>
-                            <th>Estado</th>
-                            <th>Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in productos %}
-                        <tr>
-                            <td class="cell-muted">#{{ p.id }}</td>
-                            <td class="cell-bold">{{ p.nombre }}</td>
-                            <td>
-                                <span class="badge badge-neutral">{{ p.categoria }}</span>
-                            </td>
-                            <td class="cell-money">C${{ "%.2f"|format(p.precio) }}</td>
-                            <td>
-                                {% if p.descuento > 0 %}
-                                <span class="badge badge-danger">-{{ "%.0f"|format(p.descuento) }}%</span>
-                                {% else %}
-                                <span class="cell-muted">—</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if p.activo %}
-                                    <span class="badge badge-success">Activo</span>
-                                {% else %}
-                                    <span class="badge badge-danger">Inactivo</span>
-                                {% endif %}
-                            </td>
-                            <td>
+    </div>
+    <div class="panel-body panel-body-flush">
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Categoría</th>
+                        <th>Precio (C$)</th>
+                        <th>Descuento</th>
+                        <th>Estado</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in productos %}
+                    <tr>
+                        <td class="cell-muted">#{{ p.id }}</td>
+                        <td class="cell-bold">{{ p.nombre }}</td>
+                        <td>
+                            <span class="badge badge-neutral">{{ p.categoria }}</span>
+                        </td>
+                        <td class="cell-money">C${{ "%.2f"|format(p.precio) }}</td>
+                        <td>
+                            {% if p.descuento > 0 %}
+                            <span class="badge badge-danger">-{{ "%.0f"|format(p.descuento) }}%</span>
+                            {% else %}
+                            <span class="cell-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if p.activo %}
+                                <span class="badge badge-success">Activo</span>
+                            {% else %}
+                                <span class="badge badge-danger">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group">
                                 <button class="btn btn-outline btn-sm" onclick="toggleProducto({{ p.id }})">
                                     {% if p.activo %}Desactivar{% else %}Activar{% endif %}
                                 </button>
                                 <button class="btn btn-primary btn-sm" onclick="abrirModalEditar({{ p.id }}, '{{ p.nombre|replace("'", "\\'") }}', {{ p.categoria_id }}, {{ p.precio }}, {{ p.descuento }})">
                                     Editar
                                 </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">🎂</div>
+                                <p>No hay productos en el catálogo.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-    </main>
+    </div>
+</div>
 
-    <!-- Modal Nuevo Producto -->
-    <div id="modal-nuevo-producto" class="modal-overlay hidden">
-        <div class="modal-content" style="max-width: 520px;">
-            <h2 id="modal-title">Agregar Producto</h2>
-            <p class="subtitle" id="modal-subtitle">Crea un nuevo producto para tu catálogo de venta.</p>
-            <input type="hidden" id="np-id" value="">
+<!-- Modal Nuevo Producto -->
+<div id="modal-nuevo-producto" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h2 id="modal-title">Agregar Producto</h2>
+        <p class="subtitle" id="modal-subtitle">Crea un nuevo producto para tu catálogo de venta.</p>
+        <input type="hidden" id="np-id" value="">
 
+        <form id="form-producto">
             <div class="form-group">
-                <label for="np-nombre">Nombre del Producto</label>
-                <input type="text" id="np-nombre" class="form-control" placeholder="Ej. Tarta de Fresa" required>
+                <label class="form-label" for="np-nombre">Nombre del Producto</label>
+                <input type="text" id="np-nombre" class="form-input" placeholder="Ej. Tarta de Fresa" required>
             </div>
 
             <div class="form-group">
-                <label for="np-categoria">Categoría</label>
+                <label class="form-label" for="np-categoria">Categoría</label>
                 <select id="np-categoria" class="form-select" required>
                     <option value="" disabled selected>Seleccione...</option>
                     {% for c in categorias %}
@@ -106,130 +109,200 @@
                 </select>
             </div>
 
-            <div style="display: flex; gap: 1rem;">
-                <div class="form-group" style="flex: 1;">
-                    <label for="np-precio">Precio Base (C$)</label>
-                    <input type="number" id="np-precio" class="form-control" step="0.01" min="0" placeholder="Ej. 120.00" required>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="np-precio">Precio Base (C$)</label>
+                    <div class="input-with-suffix">
+                        <input type="number" id="np-precio" class="form-input form-number" step="0.01" min="0" placeholder="0.00" required>
+                        <span class="input-suffix">C$</span>
+                    </div>
                 </div>
-                <div class="form-group" style="flex: 1;">
-                    <label for="np-descuento">Descuento (%)</label>
-                    <input type="number" id="np-descuento" class="form-control" step="1" min="0" max="100" placeholder="Ej. 10" value="0">
+                <div class="form-group">
+                    <label class="form-label" for="np-descuento">Descuento (%)</label>
+                    <div class="input-with-suffix">
+                        <input type="number" id="np-descuento" class="form-input form-number" step="1" min="0" max="100" placeholder="0" value="0">
+                        <span class="input-suffix">%</span>
+                    </div>
                 </div>
             </div>
 
             <div class="modal-actions">
-                <button onclick="cerrarModal()" class="btn btn-outline">Cancelar</button>
-                <button onclick="guardarProducto()" class="btn btn-primary">Guardar Producto</button>
+                <button type="button" onclick="cerrarModal()" class="btn btn-outline">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Producto</button>
             </div>
-        </div>
+        </form>
     </div>
+</div>
 
-    <!-- Toast container -->
-    <div id="toast-container" class="toast-container"></div>
+{% endblock %}
 
-    <script>
-        function abrirModal() {
-            document.getElementById('modal-title').textContent = 'Agregar Producto';
-            document.getElementById('modal-subtitle').textContent = 'Crea un nuevo producto para tu catálogo de venta.';
-            document.getElementById('np-id').value = '';
-            document.getElementById('modal-nuevo-producto').classList.remove('hidden');
-        }
+{% block extra_scripts %}
+<script>
+    function abrirModal() {
+        document.getElementById('modal-title').textContent = 'Agregar Producto';
+        document.getElementById('modal-subtitle').textContent = 'Crea un nuevo producto para tu catálogo de venta.';
+        document.getElementById('np-id').value = '';
+        document.getElementById('modal-nuevo-producto').classList.remove('hidden');
+    }
 
-        function abrirModalEditar(id, nombre, categoriaId, precio, descuento) {
-            document.getElementById('modal-title').textContent = 'Editar Producto';
-            document.getElementById('modal-subtitle').textContent = 'Modifica los detalles del producto seleccionado.';
-            document.getElementById('np-id').value = id;
-            document.getElementById('np-nombre').value = nombre;
-            document.getElementById('np-categoria').value = categoriaId;
-            document.getElementById('np-precio').value = precio;
-            document.getElementById('np-descuento').value = descuento;
-            document.getElementById('modal-nuevo-producto').classList.remove('hidden');
-        }
+    function abrirModalEditar(id, nombre, categoriaId, precio, descuento) {
+        document.getElementById('modal-title').textContent = 'Editar Producto';
+        document.getElementById('modal-subtitle').textContent = 'Modifica los detalles del producto seleccionado.';
+        document.getElementById('np-id').value = id;
+        document.getElementById('np-nombre').value = nombre;
+        document.getElementById('np-categoria').value = categoriaId;
+        document.getElementById('np-precio').value = precio;
+        document.getElementById('np-descuento').value = descuento;
+        document.getElementById('modal-nuevo-producto').classList.remove('hidden');
+    }
 
-        function cerrarModal() {
-            document.getElementById('modal-nuevo-producto').classList.add('hidden');
-            document.getElementById('np-id').value = '';
-            document.getElementById('np-nombre').value = '';
-            document.getElementById('np-precio').value = '';
-            document.getElementById('np-categoria').value = '';
-            document.getElementById('np-descuento').value = '0';
-        }
+    function cerrarModal() {
+        document.getElementById('modal-nuevo-producto').classList.add('hidden');
+        document.getElementById('np-id').value = '';
+        document.getElementById('np-nombre').value = '';
+        document.getElementById('np-precio').value = '';
+        document.getElementById('np-categoria').value = '';
+        document.getElementById('np-descuento').value = '0';
+    }
 
-        // Close modal on overlay click
-        document.querySelectorAll('.modal-overlay').forEach(overlay => {
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) cerrarModal();
-            });
+    // Close modal on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) cerrarModal();
         });
+    });
 
-        function showToast(message, type = 'success') {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            const icon = type === 'success'
-                ? '<svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
-                : '<svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
-            toast.innerHTML = `${icon}<span>${message}</span>`;
-            container.appendChild(toast);
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 400);
-            }, 3000);
+    // Debounce y filtrado
+    function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+    const searchInput = document.getElementById('search-catalogo');
+    if (searchInput) {
+        searchInput.addEventListener('input', debounce(function(e) {
+            const term = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('.data-table tbody tr');
+            rows.forEach(row => {
+                if(row.querySelector('.empty-state')) return;
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(term) ? '' : 'none';
+            });
+        }, 200));
+    }
+
+    document.getElementById('form-producto').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('np-id').value;
+        const nombre = document.getElementById('np-nombre').value;
+        const precio = document.getElementById('np-precio').value;
+        const categoriaElement = document.getElementById('np-categoria');
+        const categoria_id = categoriaElement.value;
+        const categoriaNombre = categoriaElement.options[categoriaElement.selectedIndex].text;
+        const descuento = document.getElementById('np-descuento').value || '0';
+
+        if (!nombre || !precio || !categoria_id) {
+            showToast('Por favor completa los campos requeridos', true);
+            return;
         }
 
-         function guardarProducto() {
-            const id = document.getElementById('np-id').value;
-            const nombre = document.getElementById('np-nombre').value;
-            const precio = document.getElementById('np-precio').value;
-            const categoria_id = document.getElementById('np-categoria').value;
-            const descuento = document.getElementById('np-descuento').value;
+        const url = id ? `/admin/api/productos/${id}/editar` : '/admin/api/productos';
 
-            if (!nombre || !precio || !categoria_id) {
-                showToast('Por favor completa los campos requeridos', 'error');
-                return;
-            }
-
-            const url = id ? `/admin/api/productos/${id}/editar` : '/admin/api/productos';
-
-            fetch(url, {
+        showLoading();
+        try {
+            const resp = await fetchWithTimeout(url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': '{{ csrf_token() }}'
                 },
-                body: JSON.stringify({
-                    nombre, precio, categoria_id, descuento
-                })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    showToast(data.mensaje, 'success');
+                body: JSON.stringify({ nombre, precio, categoria_id, descuento })
+            });
+            const data = await resp.json();
+            hideLoading();
+            
+            if (data.status === 'success') {
+                showToast(data.mensaje);
+                cerrarModal();
+                
+                if (id) {
+                    // Update existing row
+                    // Easier to reload since edit updates multiple fields including buttons
                     setTimeout(() => window.location.reload(), 1000);
                 } else {
-                    showToast(data.error || 'Error desconocido', 'error');
+                    // Create new row
+                    const tbody = document.querySelector('.data-table tbody');
+                    const empty = tbody.querySelector('.empty-state');
+                    if (empty) tbody.innerHTML = '';
+                    const tr = document.createElement('tr');
+                    
+                    const descHTML = parseFloat(descuento) > 0 ? `<span class="badge badge-danger">-${parseFloat(descuento).toFixed(0)}%</span>` : `<span class="cell-muted">—</span>`;
+                    
+                    tr.innerHTML = `
+                        <td class="cell-muted">#${data.id}</td>
+                        <td class="cell-bold">${escapeHTML(nombre)}</td>
+                        <td><span class="badge badge-neutral">${escapeHTML(categoriaNombre)}</span></td>
+                        <td class="cell-money">C$${parseFloat(precio).toFixed(2)}</td>
+                        <td>${descHTML}</td>
+                        <td><span class="badge badge-success">Activo</span></td>
+                        <td>
+                            <div class="btn-group">
+                                <button class="btn btn-outline btn-sm" onclick="toggleProducto(${data.id})">Desactivar</button>
+                                <button class="btn btn-primary btn-sm" onclick="abrirModalEditar(${data.id}, '${escapeHTML(nombre).replace(/'/g, "\\'")}', ${categoria_id}, ${precio}, ${descuento})">Editar</button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.prepend(tr);
                 }
-            })
-            .catch(err => {
-                console.error(err);
-                showToast('Error de conexión', 'error');
-            });
-        }
-
-        async function toggleProducto(id) {
-            try {
-                const res = await fetch(`/admin/api/productos/${id}/toggle`, {
-                    method: 'POST'
-                });
-                if (res.ok) {
-                    location.reload();
-                } else {
-                    showToast('Error al cambiar estado', 'error');
-                }
-            } catch (err) {
-                showToast('Error de conexión', 'error');
+            } else {
+                showToast(data.error || 'Error desconocido', true);
             }
+        } catch (err) {
+            hideLoading();
+            showToast('Error de conexión', true);
         }
-    </script>
-</body>
-</html>
+    });
+
+    // Utilidad escapeHTML
+    function escapeHTML(str) {
+        if (!str) return '';
+        return str.toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    async function toggleProducto(id) {
+        const confirmed = await showConfirm({
+            title: '¿Cambiar estado del producto?',
+            message: 'El producto dejará de estar disponible en el Punto de Venta si lo desactivas.',
+            type: 'warning',
+            confirmText: 'Aceptar',
+            icon: '🔄'
+        });
+        
+        if (!confirmed) return;
+        
+        showLoading();
+        try {
+            const res = await fetch(`/admin/api/productos/${id}/toggle`, {
+                method: 'POST'
+            });
+            if (res.ok) {
+                location.reload();
+            } else {
+                hideLoading();
+                showToast('Error al cambiar estado', true);
+            }
+        } catch (err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
+    }
+</script>
+{% endblock %}

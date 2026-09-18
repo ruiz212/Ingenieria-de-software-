@@ -1,0 +1,247 @@
+{% extends 'admin_base.html' %}
+
+{% block title %}Estadística y Reportes | Brajher's Cake{% endblock %}
+{% block page_title %}Estadística y Reportes{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <p>Análisis avanzado de ventas, producción, mermas y rendimiento — últimos 30 días.</p>
+</div>
+
+<!-- Row 1: Ventas por hora + Ventas diarias -->
+<div class="panels-grid-asymmetric">
+    <div class="panel panel-accent-primary">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Ventas por Hora (Horas Pico)
+            </h3>
+        </div>
+        <div class="panel-body">
+            <div style="position: relative; height: 250px;">
+                <canvas id="chart-ventas-hora"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-accent-success">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                Tendencia Diaria (30 días)
+            </h3>
+        </div>
+        <div class="panel-body">
+            <div style="position: relative; height: 250px;">
+                <canvas id="chart-ventas-diarias"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 2: Rotación de productos + Mermas -->
+<div class="panels-grid-asymmetric mt-3">
+    <div class="panel panel-accent-warning">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Rotación de Productos (Top 15)
+            </h3>
+        </div>
+        <div class="panel-body">
+            {% if rotacion_productos %}
+                {% for p in rotacion_productos %}
+                <div class="list-row">
+                    <span class="list-row-label">
+                        <span class="rank">{{ loop.index }}</span>
+                        {{ p.nombre }}
+                    </span>
+                    <span class="list-row-value">{{ p.vendidos }} uds — C${{ "%.2f"|format(p.ingresos) }}</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">📦</div>
+                    <p>Sin datos de rotación.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="panel panel-accent-danger">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                Mermas del Mes
+            </h3>
+        </div>
+        <div class="panel-body">
+            {% if mermas_mes %}
+                {% for m in mermas_mes %}
+                <div class="list-row">
+                    <span class="list-row-label">{{ m.producto }}</span>
+                    <span class="list-row-value text-danger">{{ m.total }} uds — {{ m.motivo }}</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">✅</div>
+                    <p>Sin mermas registradas este mes.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Row 3: Rendimiento de Lotes -->
+<div class="panel panel-full panel-accent-success mt-3">
+    <div class="panel-header">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Rendimiento de Lotes (Varianza)
+        </h3>
+    </div>
+    <div class="panel-body panel-body-flush">
+        {% if rendimiento_lotes %}
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Producto</th>
+                        <th style="text-align: center;">Producido</th>
+                        <th style="text-align: center;">Esperado</th>
+                        <th style="text-align: center;">Varianza %</th>
+                        <th style="text-align: center;">Estado</th>
+                        <th style="text-align: right;">Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in rendimiento_lotes %}
+                    <tr>
+                        <td class="cell-bold">{{ l.producto }}</td>
+                        <td style="text-align: center;">{{ l.producido }}</td>
+                        <td style="text-align: center;">{{ l.esperado }}</td>
+                        <td style="text-align: center; font-weight: 700; color: {{ 'var(--danger)' if l.alerta else 'var(--success)' }};">
+                            {{ l.varianza }}%
+                        </td>
+                        <td style="text-align: center;">
+                            {% if l.alerta %}
+                            <span class="badge badge-danger">⚠ Alerta</span>
+                            {% else %}
+                            <span class="badge badge-success">✅ Normal</span>
+                            {% endif %}
+                        </td>
+                        <td class="cell-muted" style="text-align: right;">{{ l.fecha }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">🏭</div>
+                <p>No hay lotes con producción esperada registrada.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Row 4: Clientes por nivel + Arqueos -->
+<div class="panels-grid-asymmetric mt-3">
+    <div class="panel panel-accent-primary">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                Clientes por Nivel de Confianza
+            </h3>
+        </div>
+        <div class="panel-body flex-center">
+            <div style="position: relative; height: 280px; width: 100%;">
+                <canvas id="chart-clientes-nivel"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel panel-accent-warning">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                Arqueos de Caja Recientes
+            </h3>
+        </div>
+        <div class="panel-body">
+            {% if arqueos %}
+                {% for a in arqueos %}
+                <div class="list-row">
+                    <span class="list-row-label">
+                        {{ a.usuario }} — <span class="cell-muted" style="font-size: 0.85rem;">{{ a.fecha }}</span>
+                    </span>
+                    <span class="list-row-value {% if a.dif_efectivo < 0 %}text-danger{% elif a.dif_efectivo > 0 %}text-info{% else %}text-success{% endif %}">
+                        Dif: C${{ "%.2f"|format(a.dif_efectivo) }}
+                    </span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <p>Sin arqueos registrados.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Row 5: Pronóstico de Abastecimiento -->
+<div class="panel panel-full panel-accent-cafe mt-3">
+    <div class="panel-header flex-between">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+            Pronóstico de Abastecimiento (Inteligencia)
+        </h3>
+        <span class="text-muted" style="font-size: 0.85rem; font-weight: normal;">Predicción basada en el historial de consumo por lote</span>
+    </div>
+    <div class="panel-body panel-body-flush">
+        {% if pronostico %}
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Insumo</th>
+                        <th>Stock Actual</th>
+                        <th>Consumo Diario Prom.</th>
+                        <th>Días Restantes</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in pronostico %}
+                    <tr>
+                        <td class="cell-bold">{{ p.nombre }}</td>
+                        <td>{{ p.stock }}</td>
+                        <td>{{ p.consumo_diario }}</td>
+                        <td class="fw-700 {% if p.alerta %}text-danger{% endif %}">{{ p.dias_restantes }} días</td>
+                        <td>
+                            {% if p.alerta %}
+                            <span class="badge badge-danger">Comprar Urgente</span>
+                            {% else %}
+                            <span class="badge badge-success">Suficiente</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">📊</div>
+            <p>Hornea algunos lotes de producción para que el sistema calcule tu pronóstico de compras.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Keep existing scripts, Chart.js handles its own canvas layout -->
+{% endblock %}

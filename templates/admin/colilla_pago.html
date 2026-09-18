@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Colilla de Pago - {{ nomina.NombreCompleto }}</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; color: #333; margin: 0; padding: 20px; }
+        .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); font-size: 16px; line-height: 24px; color: #555; }
+        .invoice-box table { width: 100%; line-height: inherit; text-align: left; border-collapse: collapse; }
+        .invoice-box table td { padding: 5px; vertical-align: top; }
+        .invoice-box table tr td:nth-child(2) { text-align: right; }
+        .invoice-box table tr.top table td { padding-bottom: 20px; }
+        .invoice-box table tr.information table td { padding-bottom: 40px; }
+        .invoice-box table tr.heading td { background: #eee; border-bottom: 1px solid #ddd; font-weight: bold; }
+        .invoice-box table tr.details td { padding-bottom: 20px; }
+        .invoice-box table tr.item td { border-bottom: 1px solid #eee; }
+        .invoice-box table tr.item.last td { border-bottom: none; }
+        .invoice-box table tr.total td:nth-child(2) { border-top: 2px solid #eee; font-weight: bold; font-size: 18px; color: #2ecc71; }
+        .header-title { font-size: 24px; font-weight: bold; color: #333; }
+        .text-danger { color: #e74c3c; }
+        .text-info { color: #3498db; }
+        .patronal-box { margin-top: 40px; border-top: 2px dashed #ccc; padding-top: 20px; font-size: 14px; }
+        @media print {
+            body { padding: 0; }
+            .invoice-box { box-shadow: none; border: 0; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+        <button onclick="window.print()" style="padding: 10px 20px; background: #3498db; color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 16px;">🖨️ Imprimir Colilla</button>
+    </div>
+
+    <div class="invoice-box">
+        <table>
+            <tr class="top">
+                <td colspan="2">
+                    <table>
+                        <tr>
+                            <td class="title">
+                                <div class="header-title">Brajher's Cake</div>
+                                <div style="font-size: 14px; color: #888;">Nómina de Pago</div>
+                            </td>
+                            <td>
+                                <strong>Colilla #:</strong> N-{{ "{:04d}".format(nomina.ID) }}<br>
+                                <strong>Generado:</strong> {{ datetime.now().strftime('%d/%m/%Y %H:%M') }}<br>
+                                <strong>Período:</strong> {{ nomina.PeriodoInicio.strftime('%d/%m/%Y') }} al {{ nomina.PeriodoFin.strftime('%d/%m/%Y') }}
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+
+            <tr class="information">
+                <td colspan="2">
+                    <table>
+                        <tr>
+                            <td>
+                                <strong>Empleado:</strong> {{ nomina.NombreCompleto }}<br>
+                                <strong>Cargo:</strong> {{ nomina.Cargo }}<br>
+                                <strong>Cédula:</strong> {{ nomina.Cedula }}<br>
+                                <strong>Nº INSS:</strong> {{ nomina.NumeroINSS or 'No registrado' }}
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+
+            <tr class="heading">
+                <td>Ingresos Devengados</td>
+                <td>Monto (C$)</td>
+            </tr>
+            <tr class="item">
+                <td>Salario Base</td>
+                <td>{{ "%.2f"|format(nomina.SalarioBruto) }}</td>
+            </tr>
+            {% if nomina.HorasExtras > 0 %}
+            <tr class="item">
+                <td>Horas Extras ({{ nomina.HorasExtras }} hrs)</td>
+                <td>{{ "%.2f"|format(nomina.MontoHorasExtras) }}</td>
+            </tr>
+            {% endif %}
+            {% if nomina.OtrosIngresos > 0 %}
+            <tr class="item">
+                <td>Otros Ingresos</td>
+                <td>{{ "%.2f"|format(nomina.OtrosIngresos) }}</td>
+            </tr>
+            {% endif %}
+            <tr class="item last" style="font-weight: bold;">
+                <td>Total Devengado</td>
+                <td>{{ "%.2f"|format(nomina.TotalDevengado) }}</td>
+            </tr>
+
+            <tr class="heading" style="margin-top: 20px;">
+                <td>Deducciones (Retenciones)</td>
+                <td>Monto (C$)</td>
+            </tr>
+            <tr class="item text-danger">
+                <td>INSS Laboral (7%)</td>
+                <td>-{{ "%.2f"|format(nomina.INSSLaboral) }}</td>
+            </tr>
+            {% if nomina.IRMensual > 0 %}
+            <tr class="item text-danger">
+                <td>Impuesto sobre la Renta (IR)</td>
+                <td>-{{ "%.2f"|format(nomina.IRMensual) }}</td>
+            </tr>
+            {% endif %}
+            {% if nomina.PensionAlimenticia > 0 %}
+            <tr class="item text-danger">
+                <td>Pensión Alimenticia / Deducción Judicial</td>
+                <td>-{{ "%.2f"|format(nomina.PensionAlimenticia) }}</td>
+            </tr>
+            {% endif %}
+            {% if nomina.ValesDescontados > 0 %}
+            <tr class="item text-danger">
+                <td>Vales Descontados</td>
+                <td>-{{ "%.2f"|format(nomina.ValesDescontados) }}</td>
+            </tr>
+            {% endif %}
+            <tr class="item last text-danger" style="font-weight: bold;">
+                <td>Total Deducciones</td>
+                <td>-{{ "%.2f"|format(nomina.TotalDeducciones) }}</td>
+            </tr>
+
+            <tr class="total">
+                <td style="text-align: right; padding-right: 20px;">Neto a Recibir:</td>
+                <td>C$ {{ "%.2f"|format(nomina.SalarioNeto) }}</td>
+            </tr>
+        </table>
+
+
+        <div style="margin-top: 60px; display: flex; justify-content: space-between; text-align: center;">
+            <div style="width: 40%; border-top: 1px solid #333; padding-top: 5px;">Firma del Empleador</div>
+            <div style="width: 40%; border-top: 1px solid #333; padding-top: 5px;">Recibí Conforme (Empleado)</div>
+        </div>
+    </div>
+</body>
+</html>

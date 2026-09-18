@@ -1,36 +1,33 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Producción | Panadería Amada</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    
-</head>
-<body>
-<div class="admin-layout">
-    {% include 'admin/navbar.html' %}
-    
-    <main class="admin-main">
-        <div class="admin-header">
-            <div>
-                <h1 class="admin-title">Módulo de Producción 👨‍🍳</h1>
-                <p class="admin-subtitle">Registro de lotes diarios y definición de recetas.</p>
-            </div>
-        </div>
+{% extends 'admin_base.html' %}
 
-        <div style="margin-bottom: 2rem; border-bottom: 1px solid var(--border);">
-            <button class="tab-btn active" id="btn-lotes" onclick="openTab('lotes', this)">🧺 Lotes Producidos</button>
-            <button class="tab-btn" id="btn-recetas" onclick="openTab('recetas', this)">📋 Recetario</button>
-        </div>
+{% block title %}Producción | Brajher's Cake{% endblock %}
+{% block page_title %}Producción Diaria{% endblock %}
 
-        <!-- TAB: LOTES -->
-        <div id="lotes" class="tab-content active">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h2 style="font-size: 1.25rem; font-weight: 700;">Historial de Producción</h2>
-                <button class="btn btn-primary" onclick="abrirModal('modal-lote')">+ Registrar Producción</button>
-            </div>
-            <div class="table-container">
+{% block content %}
+<div class="page-header">
+    <p>Registro de lotes diarios y definición de recetas.</p>
+</div>
+
+<div class="tab-nav">
+    <button class="tab-item active" id="btn-lotes" onclick="openTab('lotes', this)">🧺 Lotes Producidos</button>
+    <button class="tab-item" id="btn-recetas" onclick="openTab('recetas', this)">📋 Recetario</button>
+</div>
+
+<!-- TAB: LOTES -->
+<div id="lotes" class="tab-content active">
+    <div class="panel panel-accent-primary">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Historial de Producción
+            </h3>
+            <button class="btn btn-primary btn-sm" onclick="abrirModal('modal-lote')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Registrar Producción
+            </button>
+        </div>
+        <div class="panel-body panel-body-flush">
+            <div class="table-responsive">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -42,77 +39,101 @@
                     <tbody>
                         {% for l in lotes %}
                         <tr>
-                            <td>{{ l.fecha }}</td>
-                            <td style="font-weight: 600;">{{ l.producto }}</td>
-                            <td><span style="background: var(--primary-subtle); color: var(--primary-color); padding: 0.25rem 0.6rem; border-radius: 4px; font-weight: 700;">{{ l.cantidad }} uds.</span></td>
+                            <td class="cell-muted">{{ l.fecha }}</td>
+                            <td class="cell-bold">{{ l.producto }}</td>
+                            <td><span class="badge badge-primary">{{ l.cantidad }} uds.</span></td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="3" style="text-align:center; color: var(--text-muted); padding: 2rem;">No hay lotes de producción registrados.</td></tr>
+                        <tr>
+                            <td colspan="3">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">🥐</div>
+                                    <p>No hay lotes de producción registrados.</p>
+                                </div>
+                            </td>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
+    </div>
+</div>
 
-        <!-- TAB: RECETAS -->
-        <div id="recetas" class="tab-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h2 style="font-size: 1.25rem; font-weight: 700;">Fórmulas y Recetas</h2>
-                <button class="btn btn-primary" onclick="abrirModal('modal-receta')">+ Añadir Ingrediente</button>
+<!-- TAB: RECETAS -->
+<div id="recetas" class="tab-content">
+    <div class="d-flex flex-between mb-3">
+        <h2 style="font-size: 1.15rem; font-weight: 700; font-family: 'Playfair Display', serif;">Fórmulas y Recetas</h2>
+        <button class="btn btn-primary" onclick="abrirModal('modal-receta')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Añadir Ingrediente
+        </button>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem;">
+        {% for producto, ingredientes in recetas_agrupadas.items() %}
+        <div class="card">
+            <div class="card-header">
+                <h3 style="font-family: 'Inter', sans-serif;">{{ producto }}</h3>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
-                {% for producto, ingredientes in recetas_agrupadas.items() %}
-                <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-xs);">
-                    <h3 style="font-size: 1rem; color: var(--secondary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);">🍞 {{ producto }}</h3>
-                    <ul style="list-style: none; padding: 0; margin: 0;">
-                        {% for i in ingredientes %}
-                        <li style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px dashed var(--border);">
-                            <span style="font-size: 0.9rem; font-weight: 500;">{{ i.materia }}</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                <span style="color: var(--primary-color); font-weight: 700; font-size: 0.85rem;">{{ i.cantidad }} {{ i.abreviatura }}</span>
-                                <button onclick="eliminarIngrediente({{ i.id }})" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1.1rem; line-height:1;" title="Quitar">&times;</button>
-                            </div>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                </div>
-                {% else %}
-                <div style="grid-column: 1/-1; text-align:center; color: var(--text-muted); padding: 3rem;">
-                    No hay recetas definidas. Añade ingredientes a un producto para empezar.
-                </div>
-                {% endfor %}
+            <div class="card-body">
+                <ul style="list-style: none; padding: 0; margin: 0;">
+                    {% for i in ingredientes %}
+                    <li class="list-row">
+                        <span class="list-row-label">{{ i.materia }}</span>
+                        <div class="d-flex flex-center gap-sm">
+                            <span class="list-row-value text-primary">{{ i.cantidad }} {{ i.abreviatura }}</span>
+                            <button onclick="eliminarIngrediente({{ i.id }})" class="btn btn-ghost btn-sm" title="Quitar">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
             </div>
         </div>
-
-    </main>
+        {% else %}
+        <div style="grid-column: 1/-1;">
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <p>No hay recetas definidas. Añade ingredientes a un producto para empezar.</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
 </div>
 
 <!-- MODAL: REGISTRAR LOTE -->
 <div id="modal-lote" class="modal-overlay hidden">
     <div class="modal-content">
-        <div class="modal-header">
-            <h3>Registrar Producción Diaria</h3>
-            <button class="close-modal" onclick="cerrarModal('modal-lote')">&times;</button>
-        </div>
-        <form id="form-lote" class="modal-body">
+        <h2>Registrar Producción Diaria</h2>
+        <p class="subtitle">Ingresa la cantidad producida. Se descontará del stock automáticamente.</p>
+        
+        <form id="form-lote">
             <div class="form-group">
-                <label class="form-label">Producto Elaborado</label>
-                <select id="lote_producto" class="form-control" required>
+                <label class="form-label" for="lote_producto">Producto Elaborado</label>
+                <select id="lote_producto" class="form-select" required>
                     <option value="">Seleccione el producto...</option>
                     {% for p in productos %}
                     <option value="{{ p.id }}">{{ p.nombre }}</option>
                     {% endfor %}
                 </select>
-                <small style="color: var(--text-muted); font-size: 0.8rem; margin-top: 0.25rem; display:block;">Solo puede producir productos con receta definida.</small>
+                <small class="text-muted" style="display:block; margin-top:0.4rem; font-size:0.8rem;">Solo se pueden producir productos con receta definida.</small>
             </div>
             <div class="form-group">
-                <label class="form-label">Cantidad (Unidades/Piezas)</label>
-                <input type="number" id="lote_cantidad" class="form-control" required min="1" step="1" placeholder="Ej: 100">
+                <label class="form-label" for="lote_cantidad">Cantidad (Unidades/Piezas)</label>
+                <input type="number" id="lote_cantidad" class="form-input form-number" required min="1" step="1" placeholder="0">
             </div>
-            <div style="background: var(--primary-subtle); border-left: 3px solid var(--primary-color); padding: 0.85rem 1rem; border-radius: 6px; margin-top: 1rem;">
-                <p style="font-size: 0.82rem; color: var(--secondary); margin: 0;"><strong>Importante:</strong> Al registrar este lote, el sistema automáticamente descontará del inventario todos los ingredientes necesarios según la receta. Si no hay stock suficiente, la operación se cancelará.</p>
+            
+            <div class="alert-box alert-info mt-3">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span><strong>Importante:</strong> Al registrar este lote, el sistema automáticamente descontará del inventario todos los ingredientes necesarios según la receta.</span>
             </div>
-            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:1.5rem;">Horneado y Listo 🎉</button>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="cerrarModal('modal-lote')">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Horneado y Listo</button>
+            </div>
         </form>
     </div>
 </div>
@@ -120,14 +141,13 @@
 <!-- MODAL: AÑADIR INGREDIENTE A RECETA -->
 <div id="modal-receta" class="modal-overlay hidden">
     <div class="modal-content">
-        <div class="modal-header">
-            <h3>Añadir Ingrediente a Receta</h3>
-            <button class="close-modal" onclick="cerrarModal('modal-receta')">&times;</button>
-        </div>
-        <form id="form-receta" class="modal-body">
+        <h2>Añadir Ingrediente a Receta</h2>
+        <p class="subtitle">Asigna materia prima para elaborar este producto.</p>
+        
+        <form id="form-receta">
             <div class="form-group">
-                <label class="form-label">Producto (Pan/Pastel)</label>
-                <select id="receta_producto" class="form-control" required>
+                <label class="form-label" for="receta_producto">Producto (Pan/Pastel)</label>
+                <select id="receta_producto" class="form-select" required>
                     <option value="">Seleccione...</option>
                     {% for p in productos %}
                     <option value="{{ p.id }}">{{ p.nombre }}</option>
@@ -135,8 +155,8 @@
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label">Ingrediente</label>
-                <select id="receta_materia" class="form-control" required>
+                <label class="form-label" for="receta_materia">Ingrediente</label>
+                <select id="receta_materia" class="form-select" required>
                     <option value="">Seleccione...</option>
                     {% for m in materias %}
                     <option value="{{ m.id }}">{{ m.nombre }}</option>
@@ -144,28 +164,30 @@
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label">Cantidad necesaria (por cada 1 unidad del producto)</label>
-                <input type="number" id="receta_cantidad" class="form-control" required min="0.0001" step="0.0001" placeholder="Ej: 0.05">
+                <label class="form-label" for="receta_cantidad">Cantidad necesaria (por 1 unidad)</label>
+                <input type="number" id="receta_cantidad" class="form-input form-number" required min="0.0001" step="0.0001" placeholder="Ej: 0.05">
             </div>
-            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:1rem;">Guardar Ingrediente</button>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="cerrarModal('modal-receta')">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Ingrediente</button>
+            </div>
         </form>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_scripts %}
 <script>
-    function openTab(id, btn) {
+    function openTab(tabId, btn) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
+        document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
         btn.classList.add('active');
     }
 
-    function abrirModal(id) {
-        document.getElementById(id).classList.remove('hidden');
-    }
-    function cerrarModal(id) {
-        document.getElementById(id).classList.add('hidden');
-    }
+    function abrirModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function cerrarModal(id) { document.getElementById(id).classList.add('hidden'); }
 
     // Cerrar modal al hacer click en el overlay
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -176,43 +198,74 @@
 
     document.getElementById('form-lote').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const btn = e.target.querySelector('button[type="submit"]');
-        btn.disabled = true; btn.textContent = 'Procesando...';
-        const res = await fetch('/api/produccion/lote', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                producto_id: document.getElementById('lote_producto').value,
-                cantidad: document.getElementById('lote_cantidad').value
-            })
-        });
-        const data = await res.json();
-        if (res.ok) { alert(data.mensaje); window.location.reload(); }
-        else { alert(data.error); btn.disabled = false; btn.textContent = 'Horneado y Listo 🎉'; }
+        showLoading();
+        try {
+            const res = await fetch('/api/produccion/lote', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    producto_id: document.getElementById('lote_producto').value,
+                    cantidad: document.getElementById('lote_cantidad').value
+                })
+            });
+            const data = await res.json();
+            hideLoading();
+            if (res.ok) { 
+                showToast(data.mensaje); 
+                setTimeout(() => window.location.reload(), 1200); 
+            }
+            else { 
+                showToast(data.error, true); 
+            }
+        } catch (err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
     });
 
     document.getElementById('form-receta').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const res = await fetch('/api/produccion/receta', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                producto_id: document.getElementById('receta_producto').value,
-                materia_id: document.getElementById('receta_materia').value,
-                cantidad: document.getElementById('receta_cantidad').value
-            })
-        });
-        if (res.ok) window.location.reload();
-        else alert((await res.json()).error);
+        showLoading();
+        try {
+            const res = await fetch('/api/produccion/receta', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    producto_id: document.getElementById('receta_producto').value,
+                    materia_id: document.getElementById('receta_materia').value,
+                    cantidad: document.getElementById('receta_cantidad').value
+                })
+            });
+            hideLoading();
+            if (res.ok) window.location.reload();
+            else showToast((await res.json()).error, true);
+        } catch(err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
     });
 
     async function eliminarIngrediente(id) {
-        if (!confirm('¿Quitar este ingrediente de la receta?')) return;
-        const res = await fetch(`/api/produccion/receta/${id}/delete`, { method: 'POST' });
-        if (res.ok) window.location.reload();
-        else alert((await res.json()).error);
+        const confirmed = await showConfirm({
+            title: '¿Quitar ingrediente?',
+            message: 'Al eliminarlo, este ingrediente ya no se descontará del inventario al producir este artículo.',
+            type: 'warning',
+            confirmText: 'Quitar',
+            icon: '🗑️'
+        });
+        
+        if (!confirmed) return;
+        
+        showLoading();
+        try {
+            const res = await fetch(`/api/produccion/receta/${id}/delete`, { method: 'POST' });
+            hideLoading();
+            if (res.ok) window.location.reload();
+            else showToast((await res.json()).error, true);
+        } catch(err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
     }
 </script>
-</body>
-</html>
-
+{% endblock %}

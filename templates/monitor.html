@@ -1,162 +1,188 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monitor de Producción | Panadería Amada</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% extends 'admin_base.html' %}
+
+{% block title %}Monitor KDS | Brajher's Cake{% endblock %}
+{% block page_title %}Monitor de Cocina (KDS){% endblock %}
+
+{% block extra_head %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/monitor.css') }}">
-</head>
-<body>
-    <div class="ambient-bg">
-        <div class="ambient-shape shape-1"></div>
-        <div class="ambient-shape shape-2"></div>
+{% endblock %}
+
+{% block content %}
+<div class="kds-board">
+    <!-- Columna PENDIENTES -->
+    <div class="kds-column" id="col-Pendiente">
+        <div class="kds-column-header header-danger">
+            <h3>🔴 Pendientes</h3>
+            <span class="badge badge-danger" id="count-Pendiente" style="font-size: 1.1rem; padding: 0.2rem 0.6rem;">0</span>
+        </div>
+        <div class="kds-column-body" id="list-Pendiente">
+            <!-- Tarjetas se inyectan aquí -->
+        </div>
     </div>
 
-    <header class="app-header">
-        <div>
-            <a href="/" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 0.75rem;">
-                <span style="font-size: 1.8rem;">🧑‍🍳</span>
-                <h1 style="margin: 0;">Monitor de Producción</h1>
-            </a>
-            <div style="color: var(--text-muted); font-weight: 500; margin-top: 0.25rem; font-size: 0.9rem;">
-                Usuario: {{ user.nombre_completo }}
-            </div>
+    <!-- Columna EN PROCESO -->
+    <div class="kds-column" id="col-En_Proceso">
+        <div class="kds-column-header header-warning">
+            <h3>🟠 Preparando</h3>
+            <span class="badge badge-warning" id="count-En_Proceso" style="font-size: 1.1rem; padding: 0.2rem 0.6rem;">0</span>
         </div>
-        <a href="/logout" class="btn btn-outline" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">Cerrar Sesión</a>
-    </header>
+        <div class="kds-column-body" id="list-En_Proceso">
+            <!-- Tarjetas se inyectan aquí -->
+        </div>
+    </div>
 
-    <div class="toast-container" id="toast-container"></div>
+    <!-- Columna LISTOS -->
+    <div class="kds-column" id="col-Listo">
+        <div class="kds-column-header header-success">
+            <h3>🟢 Listos</h3>
+            <span class="badge badge-success" id="count-Listo" style="font-size: 1.1rem; padding: 0.2rem 0.6rem;">0</span>
+        </div>
+        <div class="kds-column-body" id="list-Listo">
+            <!-- Tarjetas se inyectan aquí -->
+        </div>
+    </div>
+</div>
 
-    <main class="monitor-layout">
-        {% for encargo in encargos %}
-        <div class="kanban-card" id="card-{{ encargo.codigo_seguimiento }}" data-estado="{{ encargo.encargo_detalles.estado | default('Pendiente') }}">
-            <div class="order-header">
-                <span class="order-invoice">{{ encargo.numero_factura }}</span>
-                <span class="order-date">{{ encargo.fecha }} {{ encargo.hora }}</span>
-            </div>
+<!-- Plantilla oculta para las tarjetas de Kanban -->
+<div id="encargos-data" style="display: none;">
+    {{ encargos|tojson|safe }}
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const encargos = JSON.parse(document.getElementById('encargos-data').textContent || '[]');
+    
+    // Renderizado inicial
+    function renderBoard() {
+        // Limpiar columnas
+        document.getElementById('list-Pendiente').innerHTML = '';
+        document.getElementById('list-En_Proceso').innerHTML = '';
+        document.getElementById('list-Listo').innerHTML = '';
+        
+        let counts = { 'Pendiente': 0, 'En Proceso': 0, 'Listo': 0, 'Entregado': 0 };
+
+        encargos.forEach(encargo => {
+            const estado = encargo.encargo_detalles?.estado || 'Pendiente';
+            counts[estado] = (counts[estado] || 0) + 1;
             
-            <div class="order-customer">
-                <strong>{{ encargo.encargo_detalles.nombre_cliente }}</strong>
-                <span>Tel: {{ encargo.encargo_detalles.telefono }}</span>
-                <span class="delivery-date">Entrega: {{ encargo.encargo_detalles.fecha_entrega }}</span>
-                {% if encargo.encargo_detalles.telefono %}
-                <div style="margin-top: 0.75rem;">
-                    <a href="https://wa.me/{{ encargo.encargo_detalles.telefono | replace('-', '') | replace(' ', '') }}" target="_blank" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; padding: 0.3rem 0.6rem; color: #25D366; border-color: rgba(37, 211, 102, 0.4); text-decoration: none;">
-                        💬 Hablar con el cliente
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-
-            <div class="order-products">
-                {% if encargo.encargo_detalles.especificaciones or encargo.encargo_detalles.ruta_imagen_referencia %}
-                <div style="background: #fff9f0; border: 1px solid var(--warning); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 1rem;">
-                    <div style="color: #d97706; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.25rem;">✨ Pastel Personalizado</div>
-                    {% if encargo.encargo_detalles.especificaciones %}
-                        <p style="font-size: 0.85rem; margin: 0 0 0.5rem 0; color: var(--text-main);">{{ encargo.encargo_detalles.especificaciones }}</p>
-                    {% endif %}
-                    {% if encargo.encargo_detalles.ruta_imagen_referencia %}
-                        <a href="{% if encargo.encargo_detalles.ruta_imagen_referencia.startswith('http') %}{{ encargo.encargo_detalles.ruta_imagen_referencia }}{% else %}{{ url_for('static', filename=encargo.encargo_detalles.ruta_imagen_referencia) }}{% endif %}" target="_blank" style="font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.25rem; color: var(--primary); font-weight: 700; text-decoration: none; background: rgba(30, 64, 175, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px;">
-                            <span style="font-size: 1rem;">🖼️</span> Foto Referencia
-                        </a>
-                    {% endif %}
-                </div>
-                {% endif %}
-                <ul>
-                    {% for item in encargo.productos %}
-                    <li>
-                        <div class="product-name">
-                            <span>{{ item.nombre.split(' (')[0] }}</span>
-                            <span style="font-weight: 800; color: var(--primary-color);">x{{ item.cantidad }}</span>
-                        </div>
-                        {% if item.detalle_ingredientes and item.detalle_ingredientes.ingredientes %}
-                        <div class="product-addons">
-                            {% for ing in item.detalle_ingredientes.ingredientes %}
-                            <div>+ {{ ing.nombre }}</div>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-
-            <div class="order-status-actions">
-                <label for="status-{{ encargo.codigo_seguimiento }}" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem; font-weight: 600;">Estado Actual</label>
-                <select class="status-select form-select" 
-                        id="status-{{ encargo.codigo_seguimiento }}" 
-                        data-codigo="{{ encargo.codigo_seguimiento }}" 
-                        onchange="cambiarEstado('{{ encargo.codigo_seguimiento }}', this.value, this, this.closest('.kanban-card'))">
-                    
-                    {% set estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado'] %}
-                    {% set estado_actual = encargo.encargo_detalles.estado | default('Pendiente') %}
-                    {% for estado in estados %}
-                        <option value="{{ estado }}" {% if estado_actual == estado %}selected{% endif %}>
-                            {{ estado }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
-        {% else %}
-        <div class="empty-state">
-            <h2>No hay encargos activos</h2>
-            <p style="color: var(--text-muted);">Los pedidos que registres aparecerán aquí automáticamente.</p>
-        </div>
-        {% endfor %}
-    </main>
-
-    <script>
-        async function cambiarEstado(codigo, nuevoEstado, selectElement, cardElement) {
-            const estadoAnterior = cardElement.getAttribute('data-estado');
-            try {
-                // Actualizar visualmente primero
-                cardElement.setAttribute('data-estado', nuevoEstado);
-
-                const response = await fetch(`/api/seguimiento/${codigo}/estado`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ estado: nuevoEstado })
-                });
-
-                const data = await response.json();
-                
-                if (response.ok) {
-                    showToast(`Estado actualizado a: ${nuevoEstado}`, 'success');
-                } else {
-                    showToast(data.error || 'Error al actualizar', 'error');
-                    // Revertir si falló
-                    selectElement.value = estadoAnterior;
-                    cardElement.setAttribute('data-estado', estadoAnterior);
-                }
-            } catch (error) {
-                console.error(error);
-                showToast('Error de conexión', 'error');
-                selectElement.value = estadoAnterior;
-                cardElement.setAttribute('data-estado', estadoAnterior);
+            // No mostrar entregados en el tablero principal
+            if (estado === 'Entregado') return;
+            
+            // Reemplazar espacios por guiones bajos para el ID de columna
+            let colId = `list-${estado.replace(' ', '_')}`;
+            const col = document.getElementById(colId);
+            
+            if (col) {
+                col.appendChild(createCard(encargo));
             }
+        });
+
+        // Actualizar contadores
+        document.getElementById('count-Pendiente').textContent = counts['Pendiente'];
+        document.getElementById('count-En_Proceso').textContent = counts['En Proceso'];
+        document.getElementById('count-Listo').textContent = counts['Listo'];
+    }
+
+    function createCard(encargo) {
+        const card = document.createElement('div');
+        const estado = encargo.encargo_detalles?.estado || 'Pendiente';
+        card.className = `kds-card card-${estado.replace(' ', '_')}`;
+        card.id = `card-${encargo.codigo_seguimiento}`;
+        
+        let productosHtml = '';
+        encargo.productos.forEach(item => {
+            let addonsHtml = '';
+            if (item.detalle_ingredientes && item.detalle_ingredientes.ingredientes) {
+                addonsHtml = `<div class="kds-addons">` + 
+                             item.detalle_ingredientes.ingredientes.map(ing => `+ ${ing.nombre}`).join('<br>') + 
+                             `</div>`;
+            }
+            productosHtml += `
+                <div class="kds-product-row">
+                    <span class="kds-qty">x${item.cantidad}</span>
+                    <div>
+                        <span class="kds-name">${item.nombre.split(' (')[0]}</span>
+                        ${addonsHtml}
+                    </div>
+                </div>
+            `;
+        });
+
+        let nextActionHtml = '';
+        if (estado === 'Pendiente') {
+            nextActionHtml = `<button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'En Proceso')" class="btn btn-warning w-100" style="font-weight: 800; font-size: 1.05rem; padding: 0.75rem;">▶ PREPARAR</button>`;
+        } else if (estado === 'En Proceso') {
+            nextActionHtml = `<button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'Listo')" class="btn btn-success w-100" style="font-weight: 800; font-size: 1.05rem; padding: 0.75rem;">✔ TERMINADO</button>`;
+        } else if (estado === 'Listo') {
+            nextActionHtml = `<button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'Entregado')" class="btn btn-outline w-100" style="font-weight: 800; font-size: 1.05rem; padding: 0.75rem;">📦 ENTREGAR</button>`;
         }
 
-        function showToast(message, type = 'success') {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            
-            // Icon
-            const icon = type === 'success' 
-                ? '<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
-                : '<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
-            
-            toast.innerHTML = `${icon} <span>${message}</span>`;
-            
-            container.appendChild(toast);
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 400);
-            }, 3000);
+        let customCakeHtml = '';
+        if (encargo.encargo_detalles?.especificaciones) {
+            customCakeHtml = `
+                <div class="kds-alert">
+                    <strong>✨ Personalizado:</strong> ${encargo.encargo_detalles.especificaciones}
+                </div>
+            `;
         }
-    </script>
-</body>
-</html>
 
+        card.innerHTML = `
+            <div class="kds-card-header">
+                <span class="kds-invoice">#${encargo.numero_factura}</span>
+                <span class="kds-time">${encargo.hora}</span>
+            </div>
+            <div class="kds-customer">
+                <strong>${encargo.encargo_detalles?.nombre_cliente || 'Cliente'}</strong>
+                <br>Para: <span class="text-danger fw-700">${encargo.encargo_detalles?.fecha_entrega || ''}</span>
+            </div>
+            ${customCakeHtml}
+            <div class="kds-products">
+                ${productosHtml}
+            </div>
+            <div class="kds-actions mt-3">
+                ${nextActionHtml}
+            </div>
+        `;
+        return card;
+    }
+
+    async function cambiarEstado(codigo, nuevoEstado) {
+        // Encontrar el encargo en el array local y actualizarlo
+        const index = encargos.findIndex(e => e.codigo_seguimiento === codigo);
+        if (index === -1) return;
+        
+        const estadoAnterior = encargos[index].encargo_detalles.estado;
+        encargos[index].encargo_detalles.estado = nuevoEstado;
+        
+        // Re-renderizar el tablero para mover la tarjeta con CSS
+        renderBoard();
+
+        try {
+            const response = await fetch(`/api/seguimiento/${codigo}/estado`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado: nuevoEstado })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                showToast(data.error || 'Error al actualizar', true);
+                // Revertir
+                encargos[index].encargo_detalles.estado = estadoAnterior;
+                renderBoard();
+            }
+        } catch (error) {
+            console.error(error);
+            showToast('Error de conexión', true);
+            // Revertir
+            encargos[index].encargo_detalles.estado = estadoAnterior;
+            renderBoard();
+        }
+    }
+
+    // Inicializar
+    document.addEventListener('DOMContentLoaded', renderBoard);
+</script>
+{% endblock %}

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Interno - Brajher's Cake</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/pos_v2.css') }}">
+</head>
+<body class="pos-body">
+    <!-- Header para el Vendedor -->
+    <header class="app-header">
+        <div>
+            <a href="/" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 0.75rem;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                <h1 style="font-family: 'Playfair Display', serif;">Brajher's Cake | POS</h1>
+            </a>
+            <div class="header-info">
+                Caja: Activa | Vendedor: {{ user.nombre_completo }} | Nivel: {{ user.rol_nombre }}
+            </div>
+        </div>
+        <div class="header-actions">
+            <button id="btn-nuevo-encargo" class="btn-header btn-encargo">📦 Nuevo Encargo</button>
+            <button id="btn-ver-pedidos-clientes" class="btn-header btn-pedidos">
+                🔔 Solicitudes Web
+                <span id="badge-pedidos" style="position: absolute; top: -8px; right: -8px; background: var(--danger); color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 0.75rem; display: none; align-items: center; justify-content: center;">0</span>
+            </button>
+            <button id="btn-cerrar-turno" class="btn-header btn-arqueo">🔒 Arqueo</button>
+            <a href="/logout" style="color: var(--text-muted); text-decoration: none; font-size: 0.9rem; margin-left: 0.5rem;">Salir</a>
+        </div>
+    </header>
+    
+    <main class="pos-layout">
+        <!-- Izquierda: Catálogo -->
+        <section class="pos-main">
+            <!-- Navegación de Categorías Horizontal -->
+            <nav class="category-tabs">
+                <button class="category-btn active" data-filter="Todos">Todos</button>
+                {% for cat in categorias %}
+                <button class="category-btn" data-filter="{{ cat.nombre }}">{{ cat.nombre }}</button>
+                {% endfor %}
+            </nav>
+
+            <div class="catalog-panel">
+                <h2 id="current-category-title">Mostrador - Todos</h2>
+                <div class="products-grid">
+                    {% for producto in productos %}
+                    <article class="product-card filterable-product" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre }}" data-precio="{{ producto.precio }}" data-categoria="{{ producto.categoria }}" data-descuento="{{ producto.descuento }}">
+                        <div class="category-label">{{ producto.categoria }}</div>
+                        {% if producto.descuento > 0 %}
+                            <div style="position: absolute; top: -8px; right: -8px; background: var(--danger); color: white; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; transform: rotate(10deg); box-shadow: var(--shadow-sm);">
+                                -{{ "%.0f"|format(producto.descuento) }}%
+                            </div>
+                        {% endif %}
+                        <h3>{{ producto.nombre }}</h3>
+                        
+                        {% if producto.descuento > 0 %}
+                            <p class="price">
+                                <span style="text-decoration: line-through; color: var(--text-faint); font-size: 0.85rem; margin-right: 0.5rem;">C${{ "%.2f"|format(producto.precio) }}</span>
+                                <span style="color: var(--danger);">C${{ "%.2f"|format(producto.precio - (producto.precio * producto.descuento / 100)) }}</span>
+                            </p>
+                        {% else %}
+                            <p class="price">C${{ "%.2f"|format(producto.precio) }}</p>
+                        {% endif %}
+                    </article>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+
+        <!-- Derecha: Carrito / Factura -->
+        <aside class="invoice-panel">
+            <div class="invoice-header">
+                <h2>Factura Actual</h2>
+            </div>
+            
+            <div class="cart-items" id="cart-items">
+                <div class="empty-cart">
+                    <span style="font-size: 2.5rem; margin-bottom: 0.5rem; display: block;">🛒</span>
+                    Esperando productos...
+                </div>
+            </div>
+            
+            <div class="invoice-footer">
+                <div class="summary-row">
+                    <span>Subtotal:</span>
+                    <span id="subtotal-display">C$0.00</span>
+                </div>
+                <div class="summary-row">
+                    <span>IVA (15%):</span>
+                    <span id="iva-display">C$0.00</span>
+                </div>
+                <div class="summary-row total-row">
+                    <span>Total:</span>
+                    <span id="total-display">C$0.00</span>
+                </div>
+                <button type="button" id="btn-facturar" disabled style="margin-top: 1rem;">
+                    Facturar Venta
+                </button>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Modals Background -->
+    <div id="modal-overlay" class="modal-overlay hidden"></div>
+
+    <!-- Modal para Encargos -->
+    <div id="encargo-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="encargo-modal-title">Registrar Encargo</h2>
+            <p class="subtitle" style="color:var(--text-muted);">Se detectaron productos por encargo en la factura.</p>
+            
+            <div class="form-group" style="margin-top: 1rem;">
+                <label>Nombre del Cliente:</label>
+                <input type="text" id="modal-nombre-cliente" class="form-control" placeholder="Ej. María López" required>
+            </div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Teléfono del Cliente:</label>
+                <input type="tel" id="modal-telefono-cliente" class="form-control" placeholder="Ej. 8888-1234" required>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Total:</label>
+                    <input type="text" id="modal-total" class="form-control" readonly style="background: var(--surface-sunken);">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Adelanto (50% Requerido):</label>
+                    <input type="number" id="modal-adelanto" class="form-control" readonly style="background: var(--surface-sunken); font-weight: bold; color: var(--primary-color);">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Método de Pago:</label>
+                <select id="modal-metodo-pago" class="form-control">
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Transferencia">Transferencia</option>
+                </select>
+            </div>
+            
+            <div id="encargo-efectivo-container" class="form-group" style="background: var(--surface-sunken); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                <label>Efectivo Recibido (C$):</label>
+                <input type="number" id="modal-efectivo-encargo" class="form-control" min="0" step="0.01" placeholder="0.00">
+                <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                    <label style="margin: 0;">Cambio (Vuelto):</label>
+                    <input type="text" id="modal-cambio-encargo" readonly style="color: var(--success); font-weight: 800; border: none; background: transparent; padding: 0; font-size: 1.25rem; text-align: right; width: 120px;">
+                </div>
+                <div id="desglose-cambio-encargo" style="font-size: 0.85rem; color: var(--text-muted); text-align: right; margin-top: 0.25rem;"></div>
+            </div>
+
+            <div class="form-group" style="margin-top: 1rem; display: none;" id="encargo-fecha-container">
+                <label>Fecha de Entrega:</label>
+                <input type="date" id="modal-fecha" class="form-control">
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="modal-btn modal-btn--ghost" id="btn-cerrar-modal">Cancelar</button>
+                <button type="button" class="modal-btn modal-btn--primary" id="btn-confirmar-encargo">Confirmar y Facturar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Cobro Normal -->
+    <div id="pago-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Cobro de Venta</h2>
+            <p class="subtitle" style="color:var(--text-muted);">Seleccione el método de pago.</p>
+            
+            <div class="pago-total-display">
+                <span class="pago-total-label">Total a Cobrar</span>
+                <input type="text" id="pago-total" readonly class="pago-total-value" style="background:transparent; border:none; padding:0; width:100%;">
+            </div>
+
+            <div class="ruc-toggle">
+                <label>
+                    <input type="checkbox" id="factura-ruc-toggle"> Emitir Factura Formal (con RUC)
+                </label>
+            </div>
+            <div id="factura-ruc-container" class="hidden" style="margin-bottom: 1rem; padding: 1rem; background: var(--surface-elevated); border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
+                <div class="form-group" style="margin-bottom:0.5rem;"><label>Razón Social:</label><input type="text" id="ruc-razon-social" class="form-control"></div>
+                <div class="form-group"><label>Nº RUC:</label><input type="text" id="ruc-numero" class="form-control"></div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Método de Pago:</label>
+                <select id="pago-metodo" class="form-control">
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Transferencia">Transferencia</option>
+                    <option value="Mixto">Pago Mixto</option>
+                </select>
+            </div>
+            
+            <div id="pago-efectivo-container" class="pago-grid">
+                <div class="form-group">
+                    <label>Efectivo (C$):</label>
+                    <input type="number" id="pago-efectivo" class="form-control" min="0" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Efectivo (USD): <span style="font-size:0.75rem; color:var(--text-muted);">(TC: <span id="tc-display">36.62</span>)</span></label>
+                    <input type="number" id="pago-dolares" class="form-control" min="0" step="0.01">
+                </div>
+            </div>
+
+            <div id="pago-transferencia-container" class="pago-grid hidden">
+                <div class="form-group">
+                    <label>Transferencia (C$):</label>
+                    <input type="number" id="pago-transferencia" class="form-control" min="0" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Nº Referencia:</label>
+                    <input type="text" id="pago-referencia" class="form-control">
+                </div>
+            </div>
+            
+            <div class="cambio-display">
+                <label>Cambio (Vuelto)</label>
+                <input type="text" id="pago-cambio" readonly style="font-size: 2rem; font-weight: 800; color: var(--success); background: transparent; border: none; padding: 0; text-align: center; width: 100%;">
+                <div id="desglose-cambio-normal" style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted);"></div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="modal-btn modal-btn--ghost" id="btn-cerrar-pago">Cancelar</button>
+                <button type="button" class="modal-btn modal-btn--info" id="btn-confirmar-pago">Facturar Venta</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Seleccionar Base de Pastel -->
+    <div id="base-encargo-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 700px;">
+            <h2>Paso 1: Seleccionar Base</h2>
+            <p class="subtitle" style="color:var(--text-muted);">Elige el tipo de pastel para el encargo.</p>
+            <div class="products-grid" style="margin-top: 1.5rem;">
+                {% for producto in productos if producto.categoria == 'Reposteria' %}
+                <article class="product-card base-encargo-option" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre }}" data-precio="{{ producto.precio }}" data-categoria="{{ producto.categoria }}" data-descuento="{{ producto.descuento }}">
+                    <div class="category-label" style="color: var(--primary-color);">ENCARGO</div>
+                    <h3>{{ producto.nombre }}</h3>
+                    <p class="price">C${{ "%.2f"|format(producto.precio) }}</p>
+                </article>
+                {% endfor %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-btn modal-btn--ghost" id="btn-cerrar-base-encargo">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Seleccionar Ingredientes -->
+    <div id="ingredientes-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="modal-ingredientes-title">Personalizar Encargo</h2>
+            <div class="ingredientes-list" id="ingredientes-list-container" style="margin: 1rem 0; display:flex; flex-direction:column; gap:0.5rem;">
+                {% for ing in ingredientes %}
+                <label style="display:flex; justify-content:space-between; padding:0.5rem; background:rgba(255,255,255,0.05); border-radius:6px; cursor:pointer;">
+                    <span><input type="checkbox" class="ingrediente-cb" value="{{ ing.precio }}" data-nombre="{{ ing.nombre }}"> {{ ing.nombre }}</span>
+                    <span style="color:var(--primary-color);">+C${{ "%.2f"|format(ing.precio) }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <div class="form-group" style="margin-top: 1.5rem; background: var(--surface-sunken); padding: 1rem; border-radius: 8px;">
+                <label>Precio Total del Producto:</label>
+                <input type="text" id="modal-ingredientes-total" readonly style="font-weight: 800; color: var(--primary-color); background: transparent; border: none; font-size: 1.5rem;">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-btn modal-btn--ghost" id="btn-cerrar-ingredientes">Cancelar</button>
+                <button type="button" class="modal-btn modal-btn--primary" id="btn-confirmar-ingredientes">Añadir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Pedidos Clientes (Recepción) -->
+    <div id="pedidos-clientes-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 700px; width: 90%;">
+            <h2>Pedidos Web Pendientes</h2>
+            <div id="cotizaciones-pendientes-list" class="modal-scroll-body" style="margin-top: 1rem;">
+                <p style="text-align: center; color: var(--text-muted);">Cargando...</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-btn modal-btn--ghost" id="btn-cerrar-pedidos-clientes">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Arqueo de Caja -->
+    <div id="arqueo-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>🔒 Arqueo de Caja</h2>
+            <div class="form-group" style="margin-top: 1.5rem;">
+                <label>Efectivo Contado (C$):</label>
+                <input type="number" id="arqueo-efectivo" class="form-control" min="0" step="0.01">
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label>Dólares Contados (USD):</label>
+                <input type="number" id="arqueo-dolares" class="form-control" min="0" step="0.01">
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label>Total Transferencias Contadas (C$):</label>
+                <input type="number" id="arqueo-transferencias" class="form-control" min="0" step="0.01">
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label>Observaciones:</label>
+                <textarea id="arqueo-observaciones" class="form-control" rows="2"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-btn modal-btn--ghost" id="btn-cerrar-arqueo">Cancelar</button>
+                <button type="button" class="modal-btn modal-btn--danger-outline" id="btn-confirmar-arqueo" style="background: var(--danger); color: white;">Cerrar Turno</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spinners y Toasts -->
+    <div id="loading-overlay" class="loading-overlay hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <span style="color:white; font-size:1.2rem; font-weight:bold;">Procesando...</span>
+    </div>
+    <div id="toast-container" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px;"></div>
+
+    <!-- Modal del Ticket / Factura -->
+    <div id="factura-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="background: white !important; color: black !important; max-width: 400px; font-family: monospace;">
+            <div id="ticket-printable" style="padding: 1rem;">
+                <div style="text-align: center; border-bottom: 1px dashed black; padding-bottom: 1rem; margin-bottom: 1rem;">
+                    <h2 style="margin:0; font-size:1.5rem; color:black; font-family: 'Playfair Display', serif;">Brajher's Cake</h2>
+                    <p style="margin:0;">Panadería y Repostería</p>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <div>Factura: <strong id="ticket-numero">FAC-0001</strong></div>
+                    <div>Fecha: <span id="ticket-fecha">01/08/2026</span> <span id="ticket-hora">14:30:00</span></div>
+                </div>
+                <div style="border-bottom: 1px dashed black; margin-bottom: 1rem;"></div>
+                <div id="ticket-productos"></div>
+                <div style="border-top: 1px dashed black; margin-top: 1rem; padding-top: 1rem;">
+                    <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span id="ticket-subtotal">C$0.00</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>IVA (15%):</span><span id="ticket-iva">C$0.00</span></div>
+                    <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:1.2rem; margin-top:0.5rem;"><span>TOTAL:</span><span id="ticket-total">C$0.00</span></div>
+                </div>
+                <div id="ticket-encargo-section" class="hidden" style="margin-top: 1rem; border-top: 1px dashed black; padding-top: 1rem;">
+                    <h3 style="text-align: center; margin: 0; font-size: 1.1rem; color:black;">Datos del Encargo</h3>
+                    <div style="display:flex; justify-content:space-between; margin-top:0.5rem;"><span>Cliente:</span><span id="ticket-cliente">-</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Adelanto:</span><span id="ticket-adelanto">C$0.00</span></div>
+                    <div style="display:flex; justify-content:space-between; font-weight:bold;"><span>Saldo Pendiente:</span><span id="ticket-saldo">C$0.00</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>Fecha Entrega:</span><span id="ticket-fecha-entrega">-</span></div>
+                </div>
+                <div style="text-align: center; margin-top: 1.5rem;">
+                    <img id="ticket-qr-img" src="" alt="QR" style="width: 120px; height: 120px;">
+                    <p style="font-size: 0.8rem; margin: 0;">Escanea para seguimiento</p>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem;" class="no-print">
+                <button type="button" style="padding: 0.5rem 1rem; background:#ccc; border:none; border-radius:4px; cursor:pointer;" id="btn-cerrar-ticket">Cerrar</button>
+                <button type="button" style="padding: 0.5rem 1rem; background:var(--info); color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;" id="btn-imprimir-ticket">Imprimir Ticket</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inject required empty forms to satisfy pos.js logic -->
+    <div style="display:none;">
+        <button id="btn-pastel-personalizado"></button>
+        <button id="btn-mis-cotizaciones"></button>
+        <div id="pastel-personalizado-modal">
+            <form id="form-pastel-personalizado">
+                <textarea id="pastel-especificaciones"></textarea>
+                <input id="pastel-fecha">
+                <input id="pastel-foto">
+                <button id="btn-cerrar-pastel"></button>
+            </form>
+        </div>
+        <div id="mis-cotizaciones-modal">
+            <div id="cotizaciones-cliente-list"></div>
+            <button id="btn-cerrar-mis-cotizaciones"></button>
+        </div>
+    </div>
+
+    <script>
+        window.configuracionGlobal = {{ configuracion|tojson|safe if configuracion else '{}' }};
+        // Dummy overrides so pos.js won't crash when missing user info
+        if (!document.getElementById('modal-nombre-cliente')) {
+            document.body.insertAdjacentHTML('beforeend', '<input type="hidden" id="modal-nombre-cliente" value="">');
+        }
+        if (!document.getElementById('modal-telefono-cliente')) {
+            document.body.insertAdjacentHTML('beforeend', '<input type="hidden" id="modal-telefono-cliente" value="">');
+        }
+    </script>
+    <script src="{{ url_for('static', filename='js/api_services.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pos.js') }}"></script>
+</body>
+</html>

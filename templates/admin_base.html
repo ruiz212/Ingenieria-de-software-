@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Brajher's Cake — Sistema de Gestión | Panadería y Repostería">
+    <title>{% block title %}Brajher's Cake{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Theme System Initialization — Light mode is default (warm bakery) -->
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') {
+            document.documentElement.classList.add('dark-theme');
+        }
+    </script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="app-container">
+    <!-- Global Loading Bar -->
+    <div class="global-loading-bar" id="global-loading-bar"></div>
+
+    <div class="ambient-bg">
+        <div class="ambient-shape shape-1"></div>
+        <div class="ambient-shape shape-2"></div>
+    </div>
+
+    {% include 'admin/sidebar.html' %}
+
+    <div class="main-content">
+        <header class="topbar">
+            <div class="topbar-left">
+                <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+            </div>
+            <div class="topbar-right" style="display: flex; align-items: center; gap: 1.25rem;">
+                <button id="theme-toggle" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--text-main); transition: transform 0.2s; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; background: var(--surface-sunken);">
+                    <span id="theme-icon">☀️</span>
+                </button>
+                <div class="user-profile">
+                    <span class="user-name">{{ current_user.nombre_completo }}</span>
+                    <span class="user-role">{{ current_user.rol_nombre }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="admin-layout">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Global Confirmation Dialog -->
+    <div id="confirm-dialog-overlay" class="confirm-overlay hidden">
+        <div class="confirm-dialog">
+            <div id="confirm-icon" class="confirm-icon warning">⚠️</div>
+            <h3 id="confirm-title" class="confirm-title">¿Estás seguro?</h3>
+            <p id="confirm-message" class="confirm-message">Esta acción no se puede deshacer.</p>
+            <div class="confirm-actions">
+                <button class="btn btn-outline" id="confirm-cancel-btn">Cancelar</button>
+                <button class="btn btn-danger" id="confirm-ok-btn">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ── Toast System ── */
+        function showToast(msg, isError = false) {
+            const container = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = `toast ${isError ? 'error' : 'success'}`;
+            t.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    ${isError
+                        ? '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'
+                        : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
+                </svg>
+                <span>${msg}</span>`;
+            container.appendChild(t);
+            setTimeout(() => {
+                t.style.opacity = '0';
+                t.style.transform = 'translateX(20px)';
+                setTimeout(() => t.remove(), 300);
+            }, 3500);
+        }
+
+        /* ── Global Loading Bar ── */
+        function showLoading() {
+            document.getElementById('global-loading-bar').classList.add('active');
+        }
+        function hideLoading() {
+            document.getElementById('global-loading-bar').classList.remove('active');
+        }
+
+        /* ── Confirmation Dialog ── */
+        let confirmResolve = null;
+
+        function showConfirm({ title = '¿Estás seguro?', message = 'Esta acción no se puede deshacer.', type = 'warning', confirmText = 'Confirmar', icon = '⚠️' } = {}) {
+            return new Promise((resolve) => {
+                confirmResolve = resolve;
+                const overlay = document.getElementById('confirm-dialog-overlay');
+                document.getElementById('confirm-title').textContent = title;
+                document.getElementById('confirm-message').textContent = message;
+                document.getElementById('confirm-icon').className = `confirm-icon ${type}`;
+                document.getElementById('confirm-icon').textContent = icon;
+                document.getElementById('confirm-ok-btn').textContent = confirmText;
+
+                // Set button style based on type
+                const okBtn = document.getElementById('confirm-ok-btn');
+                okBtn.className = type === 'danger' ? 'btn btn-danger' : type === 'success' ? 'btn btn-success' : 'btn btn-primary';
+
+                overlay.classList.remove('hidden');
+            });
+        }
+
+        document.getElementById('confirm-ok-btn').addEventListener('click', () => {
+            document.getElementById('confirm-dialog-overlay').classList.add('hidden');
+            if (confirmResolve) confirmResolve(true);
+        });
+
+        document.getElementById('confirm-cancel-btn').addEventListener('click', () => {
+            document.getElementById('confirm-dialog-overlay').classList.add('hidden');
+            if (confirmResolve) confirmResolve(false);
+        });
+
+        /* ── Global Form Protection (Double Submit) ── */
+        document.addEventListener('submit', (e) => {
+            const form = e.target;
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                if (submitBtn.dataset.submitting === 'true') {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    return;
+                }
+                submitBtn.dataset.submitting = 'true';
+                const originalText = submitBtn.innerHTML;
+                submitBtn.dataset.originalText = originalText;
+                submitBtn.innerHTML = '<span style="opacity: 0.8;">⏳ Procesando...</span>';
+                submitBtn.style.pointerEvents = 'none';
+                
+                // Fallback unlock after 5s in case of unhandled error
+                setTimeout(() => {
+                    if(submitBtn.dataset.submitting === 'true') {
+                        submitBtn.dataset.submitting = 'false';
+                        submitBtn.innerHTML = originalText;
+                        submitBtn.style.pointerEvents = 'auto';
+                    }
+                }, 5000);
+            }
+        });
+
+        /* ── Fetch Helper with Timeout ── */
+        window.fetchWithTimeout = async function(url, options = {}, timeout = 10000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            try {
+                const response = await fetch(url, { ...options, signal: controller.signal });
+                clearTimeout(id);
+                return response;
+            } catch (err) {
+                clearTimeout(id);
+                throw err;
+            }
+        };
+
+        /* ── Theme Toggle ── */
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeToggleBtn = document.getElementById('theme-toggle');
+            const themeIcon = document.getElementById('theme-icon');
+
+            // Sync initial state (light is default)
+            const isDark = document.documentElement.classList.contains('dark-theme');
+            themeIcon.textContent = isDark ? '🌙' : '☀️';
+            if (isDark) document.body.classList.add('dark-theme');
+
+            themeToggleBtn.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark-theme');
+                document.body.classList.toggle('dark-theme');
+
+                const nowDark = document.documentElement.classList.contains('dark-theme');
+                localStorage.setItem('theme', nowDark ? 'dark' : 'light');
+                themeIcon.textContent = nowDark ? '🌙' : '☀️';
+
+                // Mini animation
+                themeIcon.style.transform = 'scale(0.5) rotate(180deg)';
+                setTimeout(() => themeIcon.style.transform = 'scale(1) rotate(0)', 200);
+            });
+        });
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

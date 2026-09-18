@@ -1,101 +1,111 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fidelización de Clientes | Panadería Amada</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
-<div class="admin-layout">
-    {% include 'admin/navbar.html' %}
-    
-    <main class="admin-main">
-        <div class="admin-header">
-            <div>
-                <h1 class="admin-title">Fidelización de Clientes 🌟</h1>
-                <p class="admin-subtitle">Gestión de relaciones, análisis de compras y clientes recurrentes.</p>
-            </div>
-        </div>
+{% extends 'admin_base.html' %}
 
-        <!-- Tarjetas de Métricas -->
-        <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-            
-            <div class="metric-card" style="background: white; padding: 1.5rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
-                <div style="color: var(--text-muted); font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">Total de Clientes</div>
-                <div style="font-size: 2.5rem; font-weight: 800; color: var(--secondary);">{{ metricas.total_clientes }}</div>
-                <div style="color: #059669; font-size: 0.85rem; margin-top: 0.5rem; font-weight: 500;">
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="vertical-align: middle;"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
-                    Clientes registrados
-                </div>
-            </div>
+{% block title %}Fidelización de Clientes | Brajher's Cake{% endblock %}
+{% block page_title %}Fidelización de Clientes{% endblock %}
 
-            <div class="metric-card" style="background: white; padding: 1.5rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
-                <div style="color: var(--text-muted); font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">Porcentaje VIP</div>
-                <div style="font-size: 2.5rem; font-weight: 800; color: var(--primary-color);">{{ metricas.porcentaje_vip }}%</div>
-                <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem; font-weight: 500;">De tu base de clientes</div>
-            </div>
-
-            <div class="metric-card" style="background: linear-gradient(135deg, var(--primary-color), var(--primary-hover)); padding: 1.5rem; border-radius: var(--radius-lg); box-shadow: 0 10px 25px rgba(217, 119, 6, 0.2); color: white;">
-                <div style="color: rgba(255,255,255,0.8); font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">Ticket Promedio VIP</div>
-                <div style="font-size: 2.5rem; font-weight: 800;">C$ {{ "%.2f"|format(metricas.promedios_nivel.get('VIP', 0)) }}</div>
-                <div style="color: rgba(255,255,255,0.9); font-size: 0.85rem; margin-top: 0.5rem; font-weight: 500;">
-                    vs C$ {{ "%.2f"|format(metricas.promedios_nivel.get('Nuevo', 0)) }} de clientes Nuevos
-                </div>
-            </div>
-
-        </div>
-
-        <!-- Tabla de Clientes CRM -->
-        <div style="background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--border); overflow: hidden;">
-            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="font-size: 1.25rem; font-weight: 700; margin: 0;">Directorio de Clientes</h2>
-                <input type="text" id="buscador-clientes" placeholder="🔍 Buscar por nombre o teléfono..." class="form-control" style="width: 300px;">
-            </div>
-            
-            <div class="table-container" style="padding: 0;">
-                <table class="data-table" id="tabla-clientes">
-                    <thead>
-                        <tr>
-                            <th>Nombre Completo</th>
-                            <th>Teléfono</th>
-                            <th>Nivel de Fidelidad</th>
-                            <th>Compras Realizadas</th>
-                            <th>Última Compra</th>
-                            <th>Total Gastado (Histórico)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for c in clientes %}
-                        <tr>
-                            <td style="font-weight: 600;">{{ c.nombre }}</td>
-                            <td style="color: var(--text-muted);">{{ c.telefono }}</td>
-                            <td>
-                                {% if c.nivel == 'VIP' %}
-                                    <span style="background: linear-gradient(135deg, #F59E0B, #D97706); color: white; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">👑 VIP</span>
-                                {% elif c.nivel == 'Frecuente' %}
-                                    <span style="background: rgba(16, 185, 129, 0.1); color: #059669; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700;">⭐ Frecuente</span>
-                                {% else %}
-                                    <span style="background: var(--bg-color); color: var(--text-muted); padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600;">Nuevo</span>
-                                {% endif %}
-                            </td>
-                            <td style="font-weight: 700;">{{ c.total_compras }}</td>
-                            <td style="color: var(--text-muted); font-size: 0.9rem;">{{ c.ultima_compra }}</td>
-                            <td style="font-weight: 800; color: var(--secondary);">C$ {{ "%.2f"|format(c.total_gastado) }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="6" style="text-align: center; padding: 3rem; color: var(--text-muted);">No hay clientes registrados o con compras.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-    </main>
+{% block content %}
+<div class="page-header">
+    <p>Gestión de relaciones, análisis de compras y clientes recurrentes.</p>
 </div>
 
+<!-- Tarjetas de Métricas -->
+<div class="metrics-grid mb-3">
+    <div class="metric-card">
+        <div class="metric-icon active">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Total de Clientes</div>
+            <div class="metric-value">{{ metricas.total_clientes }}</div>
+            <div class="metric-sub text-success">Clientes registrados</div>
+        </div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-icon revenue">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Porcentaje VIP</div>
+            <div class="metric-value text-primary">{{ metricas.porcentaje_vip }}%</div>
+            <div class="metric-sub">De tu base de clientes</div>
+        </div>
+    </div>
+
+    <div class="metric-card" style="background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark)); color: white; border-color: transparent;">
+        <div class="metric-icon" style="background: rgba(255,255,255,0.2); color: white;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title" style="color: rgba(255,255,255,0.8);">Ticket Promedio VIP</div>
+            <div class="metric-value" style="color: white;">C${{ "%.2f"|format(metricas.promedios_nivel.get('VIP', 0)) }}</div>
+            <div class="metric-sub" style="color: rgba(255,255,255,0.9);">vs C${{ "%.2f"|format(metricas.promedios_nivel.get('Nuevo', 0)) }} de clientes Nuevos</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla de Clientes CRM -->
+<div class="panel panel-full panel-accent-primary">
+    <div class="panel-header">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Directorio de Clientes
+        </h3>
+        <div class="form-search" style="width: 300px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="buscador-clientes" class="form-input" placeholder="Buscar por nombre o teléfono...">
+        </div>
+    </div>
+    
+    <div class="panel-body panel-body-flush">
+        <div class="table-responsive">
+            <table class="data-table" id="tabla-clientes">
+                <thead>
+                    <tr>
+                        <th>Nombre Completo</th>
+                        <th>Teléfono</th>
+                        <th>Nivel de Fidelidad</th>
+                        <th>Compras Realizadas</th>
+                        <th>Última Compra</th>
+                        <th>Total Gastado (Histórico)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in clientes %}
+                    <tr>
+                        <td class="cell-bold">{{ c.nombre }}</td>
+                        <td class="cell-muted">{{ c.telefono }}</td>
+                        <td>
+                            {% if c.nivel == 'VIP' %}
+                                <span class="badge badge-warning">👑 VIP</span>
+                            {% elif c.nivel == 'Frecuente' %}
+                                <span class="badge badge-success">⭐ Frecuente</span>
+                            {% else %}
+                                <span class="badge badge-neutral">Nuevo</span>
+                            {% endif %}
+                        </td>
+                        <td class="fw-700">{{ c.total_compras }}</td>
+                        <td class="cell-muted">{{ c.ultima_compra }}</td>
+                        <td class="cell-money">C${{ "%.2f"|format(c.total_gastado) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">👥</div>
+                                <p>No hay clientes registrados con compras.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
 <script>
     // Buscador sencillo
     document.getElementById('buscador-clientes').addEventListener('keyup', function() {
@@ -103,7 +113,7 @@
         const filas = document.querySelectorAll('#tabla-clientes tbody tr');
 
         filas.forEach(fila => {
-            if(fila.cells.length > 1) { // Ignorar fila de "No hay clientes"
+            if(fila.cells.length > 1) { // Ignorar fila de "empty-state"
                 const texto = fila.textContent.toLowerCase();
                 if(texto.includes(filtro)) {
                     fila.style.display = '';
@@ -114,5 +124,4 @@
         });
     });
 </script>
-</body>
-</html>
+{% endblock %}

@@ -71,40 +71,50 @@
 
 .products-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.5rem;
     padding-bottom: 2rem;
 }
 
 .product-card {
-    background: var(--surface);
-    border-radius: var(--radius-lg);
+    background: rgba(253, 251, 247, 0.95);
+    border-radius: var(--radius-xl);
     padding: 1.5rem;
     cursor: pointer;
     box-shadow: var(--shadow-sm);
-    border: 1.5px solid var(--border);
+    border: 1px solid var(--border-light);
     transition: all var(--transition-smooth);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     position: relative;
     overflow: hidden;
+    min-height: 160px;
+}
+
+.product-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%);
+    pointer-events: none;
+    border-radius: inherit;
 }
 
 .product-card::after {
     content: '';
     position: absolute;
-    bottom: 0; left: 0; right: 0; height: 3px;
-    background: var(--primary-color);
+    bottom: 0; left: 0; right: 0; height: 4px;
+    background: linear-gradient(90deg, var(--primary-color), var(--accent));
     transform: scaleX(0);
     transform-origin: left;
     transition: transform var(--transition-smooth);
 }
 
 .product-card:hover {
-    border-color: transparent;
-    box-shadow: var(--shadow-md);
-    transform: translateY(-3px);
+    border-color: var(--primary-light);
+    box-shadow: var(--shadow-md), 0 0 0 1px var(--primary-subtle);
+    transform: translateY(-4px) scale(1.02);
 }
 
 .product-card:hover::after {
@@ -113,34 +123,44 @@
 
 .product-card .category-label {
     font-size: 0.7rem;
-    color: var(--text-muted);
-    font-weight: 700;
+    color: var(--accent);
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     margin-bottom: 0.5rem;
+    position: relative;
+    z-index: 1;
 }
 
 .product-card h3 {
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     margin-bottom: 0.75rem;
     color: var(--secondary);
+    font-weight: 700;
+    position: relative;
+    z-index: 1;
+    line-height: 1.3;
 }
 
 .product-card .price {
-    font-size: 1.2rem;
+    font-size: 1.25rem;
     color: var(--primary-hover);
     font-weight: 800;
     font-family: 'Outfit', sans-serif;
+    position: relative;
+    z-index: 1;
 }
 
 /* POS Invoice Sidebar */
 .invoice-panel {
-    background: var(--surface);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border);
+    background: var(--surface-elevated);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-light);
     display: flex;
     flex-direction: column;
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-lg);
     height: 100%;
     overflow: hidden;
 }

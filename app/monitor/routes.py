@@ -86,7 +86,7 @@ def seguimiento(codigo):
 
 @monitor_bp.route('/monitor')
 @login_required
-@roles_required('Estandar', 'Admin', 'SuperAdmin')
+@roles_required('Estandar', 'Admin', 'SuperAdmin', 'Invitado', 'Operativo')
 def monitor_pedidos():
     """Panel interno para que la panadería vea y actualice los pedidos."""
     conn = get_db_connection()
@@ -130,6 +130,7 @@ def monitor_pedidos():
 @monitor_bp.route('/api/seguimiento/<codigo>/estado', methods=['PUT'])
 @csrf.exempt
 @login_required
+@roles_required('Estandar', 'Admin', 'SuperAdmin', 'Operativo')
 def actualizar_estado(codigo):
     """Actualiza el estado de un encargo en la BD."""
     data = request.get_json()

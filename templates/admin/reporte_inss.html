@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte INSS Patronal - {{ mes }}/{{ anio }}</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 13px; color: #333; margin: 0; padding: 20px; }
+        .report-box { max-width: 1000px; margin: auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); }
+        h1, h2, h3 { text-align: center; margin: 5px 0; }
+        .header-section { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; font-weight: bold; }
+        .money { text-align: right; }
+        .total-row { font-weight: bold; background-color: #e9ecef; }
+        .grand-total-box { margin-top: 30px; padding: 20px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px; }
+        .grand-total-box h3 { text-align: left; color: #2c3e50; border-bottom: 1px solid #ccc; padding-bottom: 10px; margin-bottom: 15px; }
+        .summary-table { width: 50%; margin: 0 auto; }
+        .summary-table th, .summary-table td { border: none; padding: 5px 10px; }
+        .summary-table .money { font-weight: bold; }
+        @media print {
+            body { padding: 0; }
+            .report-box { box-shadow: none; border: 0; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="margin-bottom: 20px; text-align: right;">
+        <button onclick="window.print()" style="padding: 10px 20px; background: #2ecc71; color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 16px;">🖨️ Imprimir Reporte</button>
+    </div>
+
+    <div class="report-box">
+        <div class="header-section">
+            <h1>Brajher's Cake</h1>
+            <h2>Reporte Mensual de Obligaciones INSS e INATEC</h2>
+            <h3>Período: {{ mes }} / {{ anio }}</h3>
+            <p style="text-align: center; color: #777; margin-top: 5px;">Generado el: {{ datetime.now().strftime('%d/%m/%Y %H:%M') }}</p>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Nº</th>
+                    <th>Nombre del Empleado</th>
+                    <th>Nº INSS</th>
+                    <th class="money">Salario Bruto (C$)</th>
+                    <th class="money">INSS Laboral (C$)</th>
+                    <th class="money">INSS Patronal (C$)</th>
+                    <th class="money">INATEC 2% (C$)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in registros %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ r.NombreCompleto }}</td>
+                    <td>{{ r.NumeroINSS or 'S/N' }}</td>
+                    <td class="money">{{ "%.2f"|format(r.TotalDevengado) }}</td>
+                    <td class="money">{{ "%.2f"|format(r.INSSLaboral) }}</td>
+                    <td class="money">{{ "%.2f"|format(r.INSSPatronal) }}</td>
+                    <td class="money">{{ "%.2f"|format(r.INATEC) }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center;">No hay registros de nómina para este período.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% if registros %}
+            <tfoot>
+                <tr class="total-row">
+                    <td colspan="4" style="text-align: right;">TOTALES:</td>
+                    <td class="money">{{ "%.2f"|format(total_laboral) }}</td>
+                    <td class="money">{{ "%.2f"|format(total_patronal) }}</td>
+                    <td class="money">{{ "%.2f"|format(total_inatec) }}</td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+
+        {% if registros %}
+        <div class="grand-total-box">
+            <h3>Resumen Consolidado de Pago al INSS</h3>
+            <table class="summary-table">
+                <tr>
+                    <td>Total INSS Laboral (Retenido a empleados):</td>
+                    <td class="money">C$ {{ "%.2f"|format(total_laboral) }}</td>
+                </tr>
+                <tr>
+                    <td>Total INSS Patronal (Aporte empresa):</td>
+                    <td class="money">C$ {{ "%.2f"|format(total_patronal) }}</td>
+                </tr>
+                <tr>
+                    <td>Total INATEC (Aporte empresa):</td>
+                    <td class="money">C$ {{ "%.2f"|format(total_inatec) }}</td>
+                </tr>
+                <tr style="border-top: 2px solid #2c3e50; font-size: 16px;">
+                    <td style="font-weight: bold; padding-top: 10px;">MONTO TOTAL A PAGAR:</td>
+                    <td class="money" style="padding-top: 10px; color: #e74c3c;">C$ {{ "%.2f"|format(total_general) }}</td>
+                </tr>
+            </table>
+        </div>
+        {% endif %}
+
+        <div style="margin-top: 80px; display: flex; justify-content: space-around; text-align: center;">
+            <div style="width: 30%; border-top: 1px solid #333; padding-top: 5px;">Elaborado Por (RRHH)</div>
+            <div style="width: 30%; border-top: 1px solid #333; padding-top: 5px;">Revisado Por (Contabilidad)</div>
+        </div>
+    </div>
+</body>
+</html>
