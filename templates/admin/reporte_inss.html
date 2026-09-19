@@ -2,111 +2,460 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Reporte INSS Patronal - {{ mes }}/{{ anio }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte INSS e INATEC - {{ mes }}/{{ anio }}</title>
+    <!-- Tipografía Moderna -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    
     <style>
-        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 13px; color: #333; margin: 0; padding: 20px; }
-        .report-box { max-width: 1000px; margin: auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); }
-        h1, h2, h3 { text-align: center; margin: 5px 0; }
-        .header-section { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #333; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f4f4f4; font-weight: bold; }
-        .money { text-align: right; }
-        .total-row { font-weight: bold; background-color: #e9ecef; }
-        .grand-total-box { margin-top: 30px; padding: 20px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px; }
-        .grand-total-box h3 { text-align: left; color: #2c3e50; border-bottom: 1px solid #ccc; padding-bottom: 10px; margin-bottom: 15px; }
-        .summary-table { width: 50%; margin: 0 auto; }
-        .summary-table th, .summary-table td { border: none; padding: 5px 10px; }
-        .summary-table .money { font-weight: bold; }
+        :root {
+            --brand-cafe: #6B3A2A;      /* Color corporativo principal */
+            --brand-cafe-dark: #4E2A1E;
+            --brand-dorado: #D4952B;    /* Color de acento/total */
+            --brand-dorado-dark: #B87D1E;
+            --text-main: #3B2218;       
+            --text-muted: #7A6456;
+            --border-color: #E8DDD0;
+            --zebra-bg: #FDFBF8;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F1F5F9;
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .action-bar {
+            max-width: 1100px;
+            margin: 0 auto 20px auto;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .btn-print {
+            background-color: #2563EB;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s;
+        }
+
+        .btn-print:hover {
+            background-color: #1D4ED8;
+            transform: translateY(-1px);
+        }
+
+        /* ── Contenedor Documento ── */
+        .document-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background-color: #FFFFFF;
+            padding: 40px 50px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            border-radius: 12px;
+            box-sizing: border-box;
+        }
+
+        /* ── Header ── */
+        .doc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--brand-cafe);
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+
+        .header-logo {
+            width: 70px;
+            height: 70px;
+            background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-family: 'Playfair Display', serif;
+            font-weight: 700;
+            font-size: 32px;
+            letter-spacing: -1px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(212, 149, 43, 0.30);
+        }
+
+        .header-title {
+            text-align: center;
+            flex: 1;
+            padding: 0 20px;
+        }
+
+        .header-title h1 {
+            margin: 0;
+            font-family: 'Playfair Display', serif;
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--brand-cafe);
+            letter-spacing: -0.5px;
+        }
+
+        .header-title h2 {
+            margin: 5px 0 0 0;
+            font-size: 14px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+        }
+
+        .header-meta {
+            text-align: right;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .header-meta .meta-row {
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .header-meta .meta-label {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .header-meta .meta-value {
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        /* ── Tabla de Detalles ── */
+        .table-container {
+            width: 100%;
+            margin-bottom: 40px;
+            overflow-x: auto;
+        }
+
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .report-table th, .report-table td {
+            border: 1px solid var(--border-color);
+            padding: 10px 12px;
+        }
+
+        .report-table th {
+            background-color: var(--brand-cafe);
+            color: white;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            font-size: 12px;
+            position: sticky;
+            top: 0;
+        }
+
+        /* Alineación y Numéricos */
+        .col-idx { width: 40px; text-align: center; }
+        .col-name { text-align: left; font-weight: 500; }
+        .col-inss { text-align: center; font-variant-numeric: tabular-nums; }
+        .col-money { 
+            text-align: right; 
+            font-variant-numeric: tabular-nums; 
+            white-space: nowrap;
+        }
+
+        /* Zebra Styling */
+        .report-table tbody tr:nth-child(even) {
+            background-color: var(--zebra-bg);
+        }
+
+        /* Fila de Totales de Tabla */
+        .report-table tfoot .total-row td {
+            background-color: var(--border-color);
+            font-weight: 700;
+            color: var(--brand-cafe);
+            font-size: 14px;
+        }
+
+        /* Evitar cortes en filas al imprimir */
+        .report-table tbody tr {
+            page-break-inside: avoid;
+        }
+
+        /* ── Card Consolidado (Resumen) ── */
+        .summary-card {
+            background-color: #FDFBF8;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px 32px;
+            width: 450px;
+            margin-bottom: 50px;
+            box-shadow: 0 4px 6px -1px rgba(78, 42, 30, 0.05);
+        }
+
+        .summary-card h3 {
+            margin: 0 0 16px 0;
+            font-family: 'Playfair Display', serif;
+            font-size: 18px;
+            color: var(--brand-cafe);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .summary-row .label { color: var(--text-muted); font-weight: 500; }
+        .summary-row .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+        .summary-grand-total {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 2px dashed var(--border-color);
+        }
+
+        .summary-grand-total .label {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--brand-cafe);
+        }
+
+        .summary-grand-total .value {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--brand-dorado);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ── Firmas (Control Interno) ── */
+        .signatures-section {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 40px;
+            margin-top: 60px;
+        }
+
+        .signature-block {
+            text-align: center;
+        }
+
+        .signature-line {
+            border-bottom: 1px solid var(--text-main);
+            margin-bottom: 8px;
+            height: 30px; /* Espacio para firmar */
+        }
+
+        .signature-role {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-main);
+            text-transform: uppercase;
+        }
+        
+        .signature-dept {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* ── Impresión ── */
         @media print {
-            body { padding: 0; }
-            .report-box { box-shadow: none; border: 0; }
-            .no-print { display: none; }
+            @page {
+                size: letter landscape; /* Apaisado para acomodar muchas columnas de dinero sin aplastar texto */
+                margin: 1.2cm;
+            }
+
+            body {
+                background-color: white;
+                padding: 0;
+            }
+
+            .action-bar { display: none !important; }
+
+            .document-container {
+                box-shadow: none;
+                border: none;
+                padding: 0;
+                max-width: 100%;
+            }
+
+            /* Forzar la impresión de los colores de fondo para las cebras, totales y cabeceras */
+            .report-table th, 
+            .report-table tbody tr:nth-child(even), 
+            .report-table tfoot .total-row td, 
+            .header-logo,
+            .summary-card {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            .summary-card {
+                border: 1px solid #CBD5E1;
+                page-break-inside: avoid;
+            }
+
+            .signatures-section {
+                page-break-inside: avoid;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="no-print" style="margin-bottom: 20px; text-align: right;">
-        <button onclick="window.print()" style="padding: 10px 20px; background: #2ecc71; color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 16px;">🖨️ Imprimir Reporte</button>
+
+    <div class="action-bar">
+        <button class="btn-print" onclick="window.print()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+            Imprimir Reporte Oficial
+        </button>
     </div>
 
-    <div class="report-box">
-        <div class="header-section">
-            <h1>Brajher's Cake</h1>
-            <h2>Reporte Mensual de Obligaciones INSS e INATEC</h2>
-            <h3>Período: {{ mes }} / {{ anio }}</h3>
-            <p style="text-align: center; color: #777; margin-top: 5px;">Generado el: {{ datetime.now().strftime('%d/%m/%Y %H:%M') }}</p>
+    <div class="document-container">
+        
+        <!-- Encabezado -->
+        <header class="doc-header">
+            <div class="header-logo">BC</div>
+            <div class="header-title">
+                <h1>Brajher's Cake</h1>
+                <h2>Reporte Mensual de Obligaciones INSS e INATEC</h2>
+            </div>
+            <div class="header-meta">
+                <div class="meta-row">
+                    <span class="meta-label">Período:</span>
+                    <!-- Format user friendly month -->
+                    {% set meses = {'1':'Enero', '2':'Febrero', '3':'Marzo', '4':'Abril', '5':'Mayo', '6':'Junio', '7':'Julio', '8':'Agosto', '9':'Septiembre', '10':'Octubre', '11':'Noviembre', '12':'Diciembre'} %}
+                    <span class="meta-value" style="text-transform: uppercase;">{{ meses.get(mes|string, mes) }} {{ anio }}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">Generación:</span>
+                    <span class="meta-value">{{ datetime.now().strftime('%d/%m/%Y %H:%M') }}</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Tabla Principal -->
+        <div class="table-container">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th class="col-idx">N°</th>
+                        <th class="col-name">Nombre del Empleado</th>
+                        <th class="col-inss">N° INSS</th>
+                        <th class="col-money">Salario Bruto (C$)</th>
+                        <th class="col-money">INSS Laboral 7% (C$)</th>
+                        <th class="col-money">INSS Patronal (C$)</th>
+                        <th class="col-money">INATEC 2% (C$)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set total_bruto = namespace(value=0) %}
+                    {% for r in registros %}
+                        {% set total_bruto.value = total_bruto.value + r.TotalDevengado %}
+                        <tr>
+                            <td class="col-idx">{{ loop.index }}</td>
+                            <td class="col-name">{{ r.NombreCompleto }}</td>
+                            <td class="col-inss">{{ r.NumeroINSS or 'S/N' }}</td>
+                            <td class="col-money">{{ "{:,.2f}".format(r.TotalDevengado) }}</td>
+                            <td class="col-money">{{ "{:,.2f}".format(r.INSSLaboral) }}</td>
+                            <td class="col-money">{{ "{:,.2f}".format(r.INSSPatronal) }}</td>
+                            <td class="col-money">{{ "{:,.2f}".format(r.INATEC) }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 30px; color: #94A3B8;">No hay registros de nómina para este período.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                {% if registros %}
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="3" style="text-align: right; text-transform: uppercase; letter-spacing: 1px;">Totales del Período:</td>
+                        <td class="col-money">{{ "{:,.2f}".format(total_bruto.value) }}</td>
+                        <td class="col-money">{{ "{:,.2f}".format(total_laboral) }}</td>
+                        <td class="col-money">{{ "{:,.2f}".format(total_patronal) }}</td>
+                        <td class="col-money">{{ "{:,.2f}".format(total_inatec) }}</td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
         </div>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>Nº</th>
-                    <th>Nombre del Empleado</th>
-                    <th>Nº INSS</th>
-                    <th class="money">Salario Bruto (C$)</th>
-                    <th class="money">INSS Laboral (C$)</th>
-                    <th class="money">INSS Patronal (C$)</th>
-                    <th class="money">INATEC 2% (C$)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in registros %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td>{{ r.NombreCompleto }}</td>
-                    <td>{{ r.NumeroINSS or 'S/N' }}</td>
-                    <td class="money">{{ "%.2f"|format(r.TotalDevengado) }}</td>
-                    <td class="money">{{ "%.2f"|format(r.INSSLaboral) }}</td>
-                    <td class="money">{{ "%.2f"|format(r.INSSPatronal) }}</td>
-                    <td class="money">{{ "%.2f"|format(r.INATEC) }}</td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="7" style="text-align: center;">No hay registros de nómina para este período.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-            {% if registros %}
-            <tfoot>
-                <tr class="total-row">
-                    <td colspan="4" style="text-align: right;">TOTALES:</td>
-                    <td class="money">{{ "%.2f"|format(total_laboral) }}</td>
-                    <td class="money">{{ "%.2f"|format(total_patronal) }}</td>
-                    <td class="money">{{ "%.2f"|format(total_inatec) }}</td>
-                </tr>
-            </tfoot>
-            {% endif %}
-        </table>
-
         {% if registros %}
-        <div class="grand-total-box">
-            <h3>Resumen Consolidado de Pago al INSS</h3>
-            <table class="summary-table">
-                <tr>
-                    <td>Total INSS Laboral (Retenido a empleados):</td>
-                    <td class="money">C$ {{ "%.2f"|format(total_laboral) }}</td>
-                </tr>
-                <tr>
-                    <td>Total INSS Patronal (Aporte empresa):</td>
-                    <td class="money">C$ {{ "%.2f"|format(total_patronal) }}</td>
-                </tr>
-                <tr>
-                    <td>Total INATEC (Aporte empresa):</td>
-                    <td class="money">C$ {{ "%.2f"|format(total_inatec) }}</td>
-                </tr>
-                <tr style="border-top: 2px solid #2c3e50; font-size: 16px;">
-                    <td style="font-weight: bold; padding-top: 10px;">MONTO TOTAL A PAGAR:</td>
-                    <td class="money" style="padding-top: 10px; color: #e74c3c;">C$ {{ "%.2f"|format(total_general) }}</td>
-                </tr>
-            </table>
+        <!-- Consolidado Financiero -->
+        <div class="summary-card">
+            <h3>Consolidado de Salida a INSS</h3>
+            
+            <div class="summary-row">
+                <span class="label">Total INSS Laboral (Retenido a empleados)</span>
+                <span class="value">C$ {{ "{:,.2f}".format(total_laboral) }}</span>
+            </div>
+            <div class="summary-row">
+                <span class="label">Total INSS Patronal (Aporte empresa)</span>
+                <span class="value">C$ {{ "{:,.2f}".format(total_patronal) }}</span>
+            </div>
+            <div class="summary-row">
+                <span class="label">Total INATEC (Aporte empresa)</span>
+                <span class="value">C$ {{ "{:,.2f}".format(total_inatec) }}</span>
+            </div>
+
+            <div class="summary-grand-total">
+                <span class="label">MONTO TOTAL A PAGAR AL INSS:</span>
+                <span class="value">C$ {{ "{:,.2f}".format(total_general) }}</span>
+            </div>
         </div>
         {% endif %}
 
-        <div style="margin-top: 80px; display: flex; justify-content: space-around; text-align: center;">
-            <div style="width: 30%; border-top: 1px solid #333; padding-top: 5px;">Elaborado Por (RRHH)</div>
-            <div style="width: 30%; border-top: 1px solid #333; padding-top: 5px;">Revisado Por (Contabilidad)</div>
+        <!-- Panel de Firmas (Control Interno) -->
+        <div class="signatures-section">
+            <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-role">Elaborado por</div>
+                <div class="signature-dept">(Recursos Humanos)</div>
+            </div>
+            <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-role">Revisado por</div>
+                <div class="signature-dept">(Contabilidad)</div>
+            </div>
+            <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-role">Autorizado por</div>
+                <div class="signature-dept">(Gerencia)</div>
+            </div>
         </div>
+
     </div>
+
 </body>
 </html>

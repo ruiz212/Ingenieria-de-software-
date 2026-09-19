@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiosco de Marcaje — Brajher's Cake</title>
+    <meta name="description" content="Sistema de marcaje de asistencia con reconocimiento facial para empleados.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #8e44ad;
+            --primary-dark: #732d91;
+            --bg-color: #0a0a14;
+            --text-light: #f5f6fa;
+            --success: #2ecc71;
+            --error: #e74c3c;
+            --warning: #e67e22;
+            --glass-bg: rgba(255, 255, 255, 0.04);
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-light);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-image:
+                radial-gradient(ellipse at 30% 20%, rgba(142, 68, 173, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(52, 152, 219, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(26, 26, 46, 1) 0%, var(--bg-color) 100%);
+            user-select: none;
+            cursor: default;
+        }
+
+        /* ═══ HEADER ═══ */
+        .kiosco-header {
+            text-align: center;
+            margin-bottom: 24px;
+            z-index: 10;
+        }
+        .kiosco-header .brand {
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            color: var(--primary);
+            opacity: 0.9;
+            margin-bottom: 4px;
+        }
+        .kiosco-header .clock {
+            font-size: 4.5rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-shadow: 0 4px 20px rgba(142, 68, 173, 0.3);
+            line-height: 1;
+        }
+        .kiosco-header .date {
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 500;
+            letter-spacing: 1px;
+            margin-top: 6px;
+        }
+
+        /* ═══ CAMERA ═══ */
+        .camera-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 580px;
+            height: 440px;
+            border-radius: 24px;
+            overflow: hidden;
+            background: #000;
+            border: 2px solid var(--glass-border);
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 80px rgba(142, 68, 173, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            transition: border-color 0.5s ease, box-shadow 0.5s ease;
+        }
+        .camera-container.flash-entrada {
+            border-color: var(--success) !important;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(46, 204, 113, 0.3) !important;
+        }
+        .camera-container.flash-salida {
+            border-color: #3498db !important;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(52, 152, 219, 0.3) !important;
+        }
+        .camera-container.flash-error {
+            border-color: var(--error) !important;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(231, 76, 60, 0.3) !important;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+
+        /* Scan line animation overlay */
+        .scan-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            opacity: 0.15;
+        }
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            animation: scanMove 3s ease-in-out infinite;
+        }
+        @keyframes scanMove {
+            0%, 100% { top: 0; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            50% { top: 100%; }
+        }
+
+        /* ═══ STATUS BAR ═══ */
+        .status-bar {
+            margin-top: 24px;
+            padding: 14px 32px;
+            border-radius: 100px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(20px);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.4s ease;
+        }
+        .status-dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: var(--warning);
+            flex-shrink: 0;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.6); }
+            70% { box-shadow: 0 0 0 8px rgba(230, 126, 34, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0); }
+        }
+        .status-bar.ready .status-dot {
+            background: var(--success);
+            box-shadow: 0 0 12px var(--success);
+            animation: none;
+        }
+        .status-bar.error-state .status-dot {
+            background: var(--error);
+            box-shadow: 0 0 12px var(--error);
+            animation: none;
+        }
+
+        /* ═══ TOAST ═══ */
+        #toast {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            min-width: 400px;
+            max-width: 600px;
+            padding: 20px 32px;
+            border-radius: 16px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            text-align: center;
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(20px);
+        }
+        #toast.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+        #toast.toast-entrada {
+            background: linear-gradient(135deg, rgba(46, 204, 113, 0.9), rgba(39, 174, 96, 0.9));
+            color: white;
+            box-shadow: 0 8px 32px rgba(46, 204, 113, 0.4);
+        }
+        #toast.toast-salida {
+            background: linear-gradient(135deg, rgba(52, 152, 219, 0.9), rgba(41, 128, 185, 0.9));
+            color: white;
+            box-shadow: 0 8px 32px rgba(52, 152, 219, 0.4);
+        }
+        #toast.toast-error {
+            background: linear-gradient(135deg, rgba(231, 76, 60, 0.9), rgba(192, 57, 43, 0.9));
+            color: white;
+            box-shadow: 0 8px 32px rgba(231, 76, 60, 0.4);
+        }
+        #toast .toast-icon {
+            font-size: 1.6rem;
+            margin-right: 8px;
+        }
+
+        /* ═══ INSTRUCCIONES ═══ */
+        .instructions {
+            position: absolute;
+            bottom: 100px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+        .instructions.visible {
+            opacity: 1;
+        }
+        .instructions p {
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.4);
+            font-weight: 500;
+        }
+
+        /* ═══ RESPONSIVE ═══ */
+        @media (max-width: 700px) {
+            .camera-container { width: 95vw; height: 70vw; }
+            .kiosco-header .clock { font-size: 3rem; }
+            #toast { min-width: 90vw; font-size: 1.1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="kiosco-header">
+        <div class="brand">FaceID Access</div>
+        <div class="clock" id="clock">00:00:00</div>
+        <div class="date" id="date">Cargando...</div>
+    </div>
+
+    <div class="camera-wrapper">
+        <div class="camera-container" id="cameraBox">
+            <video id="video" autoplay muted playsinline></video>
+            <div class="scan-overlay">
+                <div class="scan-line"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Cargando motores de IA...</span>
+    </div>
+
+    <div class="instructions" id="instructions">
+        <p>Acércate a la cámara para registrar tu asistencia</p>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        // ═══════════════════════════════════════════
+        // KIOSCO DE MARCAJE — LÓGICA AUTOMÁTICA
+        // Sin botones de entrada/salida: el backend decide
+        // ═══════════════════════════════════════════
+
+        const video = document.getElementById('video');
+        const statusText = document.getElementById('statusText');
+        const statusBar = document.getElementById('statusBar');
+        const cameraBox = document.getElementById('cameraBox');
+        const instructions = document.getElementById('instructions');
+
+        let faceMatcher = null;
+        let isProcessing = false;
+        let recentDetections = new Map();
+        let faceapiReady = false;
+
+        // ─── RELOJ ───
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent =
+                now.toLocaleTimeString('es-NI', { hour12: false });
+            document.getElementById('date').textContent =
+                now.toLocaleDateString('es-NI', {
+                    weekday: 'long', year: 'numeric',
+                    month: 'long', day: 'numeric'
+                }).toUpperCase();
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // ─── TOAST ───
+        function showToast(msg, tipo = 'entrada') {
+            const toast = document.getElementById('toast');
+            let icon = '✅';
+            let cssClass = 'toast-entrada';
+
+            if (tipo === 'salida') {
+                icon = '👋';
+                cssClass = 'toast-salida';
+            } else if (tipo === 'error' || tipo === 'completado') {
+                icon = '⚠️';
+                cssClass = 'toast-error';
+            }
+
+            toast.innerHTML = `<span class="toast-icon">${icon}</span> ${msg}`;
+            toast.className = `show ${cssClass}`;
+
+            // Flash en cámara
+            cameraBox.classList.remove('flash-entrada', 'flash-salida', 'flash-error');
+            if (tipo === 'entrada') cameraBox.classList.add('flash-entrada');
+            else if (tipo === 'salida') cameraBox.classList.add('flash-salida');
+            else cameraBox.classList.add('flash-error');
+
+            setTimeout(() => {
+                toast.className = '';
+                cameraBox.classList.remove('flash-entrada', 'flash-salida', 'flash-error');
+            }, 5000);
+        }
+
+        // ─── CARGAR face-api.js DINÁMICAMENTE ───
+        function loadFaceAPI() {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
+                script.onload = () => {
+                    faceapiReady = true;
+                    resolve();
+                };
+                script.onerror = () => {
+                    reject(new Error('No se pudo cargar face-api.js desde CDN'));
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        // ─── INICIALIZAR IA ───
+        async function initAI() {
+            try {
+                statusText.textContent = 'Cargando librería de IA...';
+                await loadFaceAPI();
+
+                statusText.textContent = 'Cargando modelos de reconocimiento...';
+                const MODEL_URL = '/static/models';
+
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+
+                statusText.textContent = 'Cargando datos de empleados...';
+                await loadEmployees();
+
+                startVideo();
+            } catch (e) {
+                console.error('Error inicializando IA:', e);
+                statusText.textContent = 'Error al cargar IA. Reintentando en 10s...';
+                statusBar.classList.add('error-state');
+                setTimeout(initAI, 10000);
+            }
+        }
+
+        // ─── CARGAR EMPLEADOS ───
+        async function loadEmployees() {
+            const res = await fetch('/kiosco/api/empleados/referencias');
+            const empleados = await res.json();
+
+            if (empleados.length === 0) {
+                statusText.textContent = 'No hay fotos de empleados registradas.';
+                statusBar.classList.add('error-state');
+                return;
+            }
+
+            const labeledDescriptors = [];
+            for (const emp of empleados) {
+                try {
+                    const img = await faceapi.fetchImage(emp.foto);
+                    const detection = await faceapi.detectSingleFace(
+                        img, new faceapi.TinyFaceDetectorOptions()
+                    ).withFaceLandmarks().withFaceDescriptor();
+
+                    if (detection) {
+                        labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(
+                            JSON.stringify({ id: emp.id, nombre: emp.nombre }),
+                            [detection.descriptor]
+                        ));
+                    }
+                } catch (e) {
+                    console.warn('No se pudo cargar foto de ' + emp.nombre);
+                }
+            }
+
+            if (labeledDescriptors.length > 0) {
+                faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.5);
+                statusText.textContent = 'IA lista — Acércate a la cámara';
+                statusBar.classList.remove('error-state');
+                statusBar.classList.add('ready');
+                instructions.classList.add('visible');
+            } else {
+                statusText.textContent = 'Ninguna foto de perfil detectó un rostro válido.';
+                statusBar.classList.add('error-state');
+            }
+        }
+
+        // ─── CÁMARA ───
+        function startVideo() {
+            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+                .then(stream => { video.srcObject = stream; })
+                .catch(err => {
+                    statusText.textContent = 'Error: Cámara no permitida.';
+                    statusBar.classList.add('error-state');
+                });
+        }
+
+        // ─── DETECCIÓN EN TIEMPO REAL ───
+        video.addEventListener('play', () => {
+            const canvas = faceapi.createCanvasFromMedia(video);
+            cameraBox.appendChild(canvas);
+            const displaySize = { width: video.videoWidth || 640, height: video.videoHeight || 480 };
+            faceapi.matchDimensions(canvas, displaySize);
+
+            setInterval(async () => {
+                if (!faceMatcher || isProcessing) return;
+
+                const detection = await faceapi.detectSingleFace(
+                    video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
+                ).withFaceLandmarks().withFaceDescriptor();
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (detection) {
+                    const resized = faceapi.resizeResults(detection, displaySize);
+                    const result = faceMatcher.findBestMatch(resized.descriptor);
+
+                    const box = resized.detection.box;
+                    let color = '#e74c3c';
+                    let text = 'Desconocido';
+
+                    if (result.label !== 'unknown') {
+                        const emp = JSON.parse(result.label);
+                        text = emp.nombre;
+                        color = '#2ecc71';
+                        marcarAsistencia(emp);
+                    }
+
+                    // Invertir X para modo espejo
+                    const mirroredBox = {
+                        x: displaySize.width - box.x - box.width,
+                        y: box.y,
+                        width: box.width,
+                        height: box.height
+                    };
+                    const drawBox = new faceapi.draw.DrawBox(mirroredBox, {
+                        label: text, boxColor: color
+                    });
+                    drawBox.draw(canvas);
+                }
+            }, 750);
+        });
+
+        // ─── MARCAR ASISTENCIA (AUTOMÁTICO) ───
+        async function marcarAsistencia(emp) {
+            if (isProcessing) return;
+
+            // Cooldown de 30 segundos por persona
+            const now = Date.now();
+            if (recentDetections.has(emp.id) && (now - recentDetections.get(emp.id)) < 30000) return;
+
+            isProcessing = true;
+            recentDetections.set(emp.id, now);
+
+            try {
+                const res = await fetch('/kiosco/api/marcar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ empleado_id: emp.id })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    showToast(data.mensaje, data.tipo);
+                    playBeep(data.tipo === 'entrada');
+                } else {
+                    showToast(data.error, data.tipo || 'error');
+                }
+            } catch (e) {
+                console.error('Error al marcar:', e);
+                showToast('Error de conexión con el servidor', 'error');
+            }
+
+            setTimeout(() => { isProcessing = false; }, 2000);
+        }
+
+        // ─── SONIDO DE CONFIRMACIÓN ───
+        function playBeep(isEntrada) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.value = isEntrada ? 880 : 660;
+                gain.gain.value = 0.15;
+                osc.start();
+                osc.stop(ctx.currentTime + 0.15);
+            } catch (e) { /* Audio not supported */ }
+        }
+
+        // ─── ARRANCAR ───
+        initAI();
+    </script>
+</body>
+</html>

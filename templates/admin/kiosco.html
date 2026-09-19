@@ -235,15 +235,16 @@
             setInterval(async () => {
                 if(!faceMatcher) return;
 
-                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
-                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                // Optimización: Un solo rostro a la vez, menor inputSize para máxima velocidad (224px)
+                const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })).withFaceLandmarks().withFaceDescriptor();
                 
                 canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
                 
-                const results = resizedDetections.map(d => faceMatcher.findBestMatch(d.descriptor));
-                
-                results.forEach((result, i) => {
-                    const box = resizedDetections[i].detection.box;
+                if (detection) {
+                    const resizedDetection = faceapi.resizeResults(detection, displaySize);
+                    const result = faceMatcher.findBestMatch(resizedDetection.descriptor);
+                    
+                    const box = resizedDetection.detection.box;
                     let color = '#e74c3c'; // Rojo por defecto (desconocido)
                     let text = "Desconocido";
 
@@ -264,8 +265,8 @@
                     
                     const drawBox = new faceapi.draw.DrawBox(mirroredBox, { label: text, boxColor: color });
                     drawBox.draw(canvas);
-                });
-            }, 500); // Evaluar cada 500ms
+                }
+            }, 750); // Evaluar cada 750ms para no saturar el CPU
         });
 
         async function marcarAsistencia(emp) {

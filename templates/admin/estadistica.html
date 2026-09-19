@@ -39,6 +39,22 @@
     </div>
 </div>
 
+<!-- Row 1.5: Pronóstico Estadístico de Ventas -->
+<div class="panel panel-full panel-accent-warning mt-3">
+    <div class="panel-header flex-between">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            Pronóstico de Ventas (Próximos 7 días)
+        </h3>
+        <span class="text-muted" style="font-size: 0.85rem; font-weight: normal;">Modelo predictivo de Regresión Lineal</span>
+    </div>
+    <div class="panel-body">
+        <div style="position: relative; height: 300px;">
+            <canvas id="chart-pronostico-ventas"></canvas>
+        </div>
+    </div>
+</div>
+
 <!-- Row 2: Rotación de productos + Mermas -->
 <div class="panels-grid-asymmetric mt-3">
     <div class="panel panel-accent-warning">
@@ -243,5 +259,137 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- Keep existing scripts, Chart.js handles its own canvas layout -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Datos desde Flask (Jinja)
+        const ventasHora = {{ ventas_por_hora | tojson | safe }};
+        const ventasDiarias = {{ ventas_diarias | tojson | safe }};
+        const clientesNivel = {{ clientes_nivel | tojson | safe }};
+        const pronosticoVentasData = {{ pronostico_ventas_data | tojson | safe }};
+
+        // Paleta Corporativa Brajher's Cake
+        const colorPrimario = '#6B3A2A'; // Café
+        const colorSecundario = '#D4952B'; // Dorado
+        const colorAcento = '#4A9D5B'; // Verde
+
+        // 1. Gráfico de Ventas por Hora
+        if (document.getElementById('chart-ventas-hora') && ventasHora.length > 0) {
+            new Chart(document.getElementById('chart-ventas-hora'), {
+                type: 'bar',
+                data: {
+                    labels: ventasHora.map(d => d.hora + ':00'),
+                    datasets: [{
+                        label: 'Ingresos (C$)',
+                        data: ventasHora.map(d => d.total),
+                        backgroundColor: colorPrimario,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        // 2. Gráfico de Ventas Diarias
+        if (document.getElementById('chart-ventas-diarias') && ventasDiarias.length > 0) {
+            new Chart(document.getElementById('chart-ventas-diarias'), {
+                type: 'line',
+                data: {
+                    labels: ventasDiarias.map(d => {
+                        const date = new Date(d.dia);
+                        return `${date.getDate()}/${date.getMonth()+1}`;
+                    }),
+                    datasets: [{
+                        label: 'Ingresos (C$)',
+                        data: ventasDiarias.map(d => d.total),
+                        borderColor: colorAcento,
+                        backgroundColor: 'rgba(74, 157, 91, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        // 2.5 Gráfico de Pronóstico de Ventas (Regresión Lineal)
+        if (document.getElementById('chart-pronostico-ventas') && pronosticoVentasData.fechas.length > 0) {
+            new Chart(document.getElementById('chart-pronostico-ventas'), {
+                type: 'line',
+                data: {
+                    labels: pronosticoVentasData.fechas,
+                    datasets: [
+                        {
+                            label: 'Ventas Históricas (C$)',
+                            data: pronosticoVentasData.historico,
+                            borderColor: colorPrimario,
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            tension: 0.2,
+                            pointRadius: 3
+                        },
+                        {
+                            label: 'Pronóstico Estadístico (C$)',
+                            data: pronosticoVentasData.prediccion,
+                            borderColor: colorSecundario,
+                            backgroundColor: 'transparent',
+                            borderWidth: 3,
+                            borderDash: [5, 5], // Línea punteada para predicción
+                            tension: 0.2,
+                            pointRadius: 4,
+                            pointBackgroundColor: colorSecundario
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: { 
+                        y: { beginAtZero: true },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        // 3. Gráfico Clientes por Nivel
+        if (document.getElementById('chart-clientes-nivel') && clientesNivel.length > 0) {
+            new Chart(document.getElementById('chart-clientes-nivel'), {
+                type: 'doughnut',
+                data: {
+                    labels: clientesNivel.map(d => d.nivel),
+                    datasets: [{
+                        data: clientesNivel.map(d => d.cantidad),
+                        backgroundColor: [colorPrimario, colorSecundario, colorAcento, '#E8DDD0'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+    });
+</script>
 {% endblock %}

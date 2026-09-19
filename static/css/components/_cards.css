@@ -8,12 +8,13 @@
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-sm);
     overflow: hidden;
-    transition: all var(--transition-smooth);
+    transition: transform 0.3s var(--ease-spring), box-shadow 0.3s var(--ease-spring), border-color 0.3s ease;
 }
 
 .card:hover {
-    box-shadow: var(--shadow-md);
-    border-color: var(--border);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: rgba(212, 149, 43, 0.15);
 }
 
 .card-header {
@@ -54,12 +55,13 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: all var(--transition-smooth);
+    transition: transform 0.3s var(--ease-spring), box-shadow 0.3s var(--ease-spring), border-color 0.3s ease;
 }
 
 .turno-card:hover {
+    transform: translateY(-3px);
     border-color: var(--primary-light);
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--shadow-md);
 }
 
 .turno-info h4 {

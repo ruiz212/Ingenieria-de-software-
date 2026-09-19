@@ -2,138 +2,530 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Colilla de Pago - {{ nomina.NombreCompleto }}</title>
+    <!-- Tipografía Moderna -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    
     <style>
-        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; color: #333; margin: 0; padding: 20px; }
-        .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); font-size: 16px; line-height: 24px; color: #555; }
-        .invoice-box table { width: 100%; line-height: inherit; text-align: left; border-collapse: collapse; }
-        .invoice-box table td { padding: 5px; vertical-align: top; }
-        .invoice-box table tr td:nth-child(2) { text-align: right; }
-        .invoice-box table tr.top table td { padding-bottom: 20px; }
-        .invoice-box table tr.information table td { padding-bottom: 40px; }
-        .invoice-box table tr.heading td { background: #eee; border-bottom: 1px solid #ddd; font-weight: bold; }
-        .invoice-box table tr.details td { padding-bottom: 20px; }
-        .invoice-box table tr.item td { border-bottom: 1px solid #eee; }
-        .invoice-box table tr.item.last td { border-bottom: none; }
-        .invoice-box table tr.total td:nth-child(2) { border-top: 2px solid #eee; font-weight: bold; font-size: 18px; color: #2ecc71; }
-        .header-title { font-size: 24px; font-weight: bold; color: #333; }
-        .text-danger { color: #e74c3c; }
-        .text-info { color: #3498db; }
-        .patronal-box { margin-top: 40px; border-top: 2px dashed #ccc; padding-top: 20px; font-size: 14px; }
+        :root {
+            --brand-cafe: #6B3A2A;         /* Café profundo corporativo */
+            --brand-cafe-light: #E8DDD0;   /* Fondo claro para acentos */
+            --brand-dorado: #D4952B;       /* Dorado para acentos/resaltados */
+            --brand-dorado-dark: #B87D1E;
+            --text-dark: #3B2218;          /* Gris carbón adaptado a café para texto */
+            --text-muted: #7A6456;         
+            --bg-gray: #FDFBF8;            /* Fondo general sutil */
+            --border-color: #E8DDD0;       
+            
+            --success-green: #4A9D5B;      /* Verde sutil adaptado a la paleta */
+            --success-bg: rgba(74, 157, 91, 0.1);
+            
+            --danger-red: #C44536;         /* Rojo/naranja para deducciones */
+            --danger-bg: rgba(196, 69, 54, 0.08);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F3F4F6;
+            color: var(--text-dark);
+            margin: 0;
+            padding: 40px 20px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ── Action Bar (No Imprimible) ── */
+        .action-bar {
+            max-width: 800px;
+            margin: 0 auto 20px auto;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .btn-print {
+            background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 6px -1px rgba(212, 149, 43, 0.2), 0 2px 4px -1px rgba(212, 149, 43, 0.1);
+            transition: all 0.2s;
+        }
+
+        .btn-print:hover {
+            background: linear-gradient(135deg, var(--brand-dorado-dark), #A06C18);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 15px -3px rgba(212, 149, 43, 0.3);
+        }
+
+        /* ── Contenedor Principal (Tarjeta) ── */
+        .colilla-card {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #FFFFFF;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            padding: 40px;
+            box-sizing: border-box;
+        }
+
+        /* ── Encabezado ── */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid var(--brand-cafe);
+            padding-bottom: 20px;
+            margin-bottom: 24px;
+        }
+
+        .brand-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo-placeholder {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-family: 'Playfair Display', serif;
+            font-weight: 700;
+            font-size: 26px;
+            letter-spacing: -1px;
+            box-shadow: 0 4px 12px rgba(212, 149, 43, 0.30);
+        }
+
+        .company-info h1 {
+            margin: 0;
+            font-family: 'Playfair Display', serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--brand-cafe);
+            letter-spacing: -0.5px;
+        }
+
+        .company-info p {
+            margin: 4px 0 0 0;
+            font-size: 13px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .doc-meta {
+            text-align: right;
+            font-size: 13px;
+        }
+
+        .doc-meta .meta-row {
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .doc-meta .meta-label {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .doc-meta .meta-value {
+            font-weight: 700;
+            color: var(--text-dark);
+            min-width: 140px;
+        }
+        
+        .doc-meta .highlight-value {
+            color: var(--brand-dorado);
+            font-size: 15px;
+        }
+
+        /* ── Ficha del Empleado ── */
+        .employee-card {
+            background-color: var(--bg-gray);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 32px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px 32px;
+        }
+
+        .emp-data-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .emp-data-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .emp-data-value {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        /* ── Tablas de Detalle ── */
+        .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            margin-bottom: 32px;
+        }
+
+        .detail-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .detail-table th {
+            background-color: var(--brand-cafe);
+            color: white;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .detail-table th:first-child { border-top-left-radius: 8px; }
+        .detail-table th:last-child { border-top-right-radius: 8px; text-align: right; }
+
+        .detail-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 14px;
+            color: var(--text-dark);
+        }
+
+        .detail-table td:last-child {
+            text-align: right;
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .detail-table tr.total-row td {
+            font-weight: 700;
+            border-bottom: none;
+            background-color: var(--bg-gray);
+            font-size: 15px;
+        }
+
+        .detail-table tr.total-row td:first-child { border-bottom-left-radius: 8px; }
+        .detail-table tr.total-row td:last-child { border-bottom-right-radius: 8px; }
+
+        /* Colores específicos de tabla */
+        .table-incomes th { background-color: var(--brand-cafe); }
+        .table-incomes tr.total-row td { background-color: var(--success-bg); color: var(--success-green); }
+        
+        .table-deductions th { background-color: var(--text-muted); }
+        .table-deductions tr.total-row td { background-color: var(--danger-bg); color: var(--danger-red); }
+
+        /* ── Resumen Final (Neto) ── */
+        .net-summary {
+            background: linear-gradient(135deg, var(--brand-cafe), var(--brand-cafe-dark));
+            border-radius: 12px;
+            padding: 24px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            margin-bottom: 48px;
+            box-shadow: 0 10px 15px -3px rgba(78, 42, 30, 0.2);
+        }
+
+        .net-label {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 500;
+            opacity: 0.9;
+        }
+
+        .net-value {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        /* ── Firmas y Pie de Página ── */
+        .signatures {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            margin-bottom: 40px;
+            padding: 0 20px;
+        }
+
+        .signature-box {
+            text-align: center;
+        }
+
+        .signature-line {
+            height: 1px;
+            background-color: var(--text-dark);
+            margin-bottom: 12px;
+            width: 100%;
+        }
+
+        .signature-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+        
+        .signature-date {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .legal-note {
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+            padding-top: 16px;
+        }
+
+        /* ── Optimización para Impresión (Print-friendly) ── */
         @media print {
-            body { padding: 0; }
-            .invoice-box { box-shadow: none; border: 0; }
-            .no-print { display: none; }
+            body {
+                background-color: white;
+                padding: 0;
+                margin: 0;
+            }
+
+            .action-bar { display: none !important; }
+
+            .colilla-card {
+                box-shadow: none;
+                border: none;
+                padding: 0;
+                margin: 0;
+                max-width: 100%;
+            }
+
+            .employee-card {
+                border: 1px solid #ddd;
+                background-color: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .detail-table th, .detail-table tr.total-row td, .net-summary, .logo-placeholder {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .net-summary {
+                box-shadow: none;
+                break-inside: avoid;
+            }
+
+            .details-grid {
+                break-inside: avoid;
+            }
+            
+            .signatures {
+                break-inside: avoid;
+                margin-top: 60px;
+            }
+
+            @page {
+                size: A4; /* Ajustable a A5 si el navegador lo permite en el diálogo de impresión */
+                margin: 1.5cm;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="no-print" style="margin-bottom: 20px; text-align: right;">
-        <button onclick="window.print()" style="padding: 10px 20px; background: #3498db; color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 16px;">🖨️ Imprimir Colilla</button>
+
+    <div class="action-bar">
+        <button class="btn-print" onclick="window.print()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+            </svg>
+            Imprimir Colilla
+        </button>
     </div>
 
-    <div class="invoice-box">
-        <table>
-            <tr class="top">
-                <td colspan="2">
-                    <table>
+    <div class="colilla-card">
+        
+        <!-- Encabezado -->
+        <header class="header">
+            <div class="brand-section">
+                <div class="logo-placeholder">BC</div>
+                <div class="company-info">
+                    <h1>Brajher's Cake</h1>
+                    <p>Nómina de Pago</p>
+                </div>
+            </div>
+            
+            <div class="doc-meta">
+                <div class="meta-row">
+                    <span class="meta-label">Colilla N°:</span>
+                    <span class="meta-value highlight-value">N-{{ "{:04d}".format(nomina.ID) }}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">Fecha Emisión:</span>
+                    <span class="meta-value">{{ datetime.now().strftime('%d/%m/%Y %H:%M') }}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">Período de Pago:</span>
+                    <span class="meta-value">{{ nomina.PeriodoInicio.strftime('%d/%m/%Y') }} al {{ nomina.PeriodoFin.strftime('%d/%m/%Y') }}</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Ficha del Empleado -->
+        <section class="employee-card">
+            <div class="emp-data-group">
+                <span class="emp-data-label">Nombre del Empleado</span>
+                <span class="emp-data-value">{{ nomina.NombreCompleto }}</span>
+            </div>
+            <div class="emp-data-group">
+                <span class="emp-data-label">Cédula de Identidad</span>
+                <span class="emp-data-value">{{ nomina.Cedula }}</span>
+            </div>
+            <div class="emp-data-group">
+                <span class="emp-data-label">Cargo / Puesto</span>
+                <span class="emp-data-value">{{ nomina.Cargo }}</span>
+            </div>
+            <div class="emp-data-group">
+                <span class="emp-data-label">Número de INSS</span>
+                <span class="emp-data-value">{{ nomina.NumeroINSS or 'No registrado' }}</span>
+            </div>
+        </section>
+
+        <!-- Detalle de Conceptos -->
+        <div class="details-grid">
+            
+            <!-- Ingresos -->
+            <div>
+                <table class="detail-table table-incomes">
+                    <thead>
                         <tr>
-                            <td class="title">
-                                <div class="header-title">Brajher's Cake</div>
-                                <div style="font-size: 14px; color: #888;">Nómina de Pago</div>
-                            </td>
-                            <td>
-                                <strong>Colilla #:</strong> N-{{ "{:04d}".format(nomina.ID) }}<br>
-                                <strong>Generado:</strong> {{ datetime.now().strftime('%d/%m/%Y %H:%M') }}<br>
-                                <strong>Período:</strong> {{ nomina.PeriodoInicio.strftime('%d/%m/%Y') }} al {{ nomina.PeriodoFin.strftime('%d/%m/%Y') }}
-                            </td>
+                            <th>Conceptos de Ingreso</th>
+                            <th>Monto (C$)</th>
                         </tr>
-                    </table>
-                </td>
-            </tr>
-
-            <tr class="information">
-                <td colspan="2">
-                    <table>
+                    </thead>
+                    <tbody>
                         <tr>
-                            <td>
-                                <strong>Empleado:</strong> {{ nomina.NombreCompleto }}<br>
-                                <strong>Cargo:</strong> {{ nomina.Cargo }}<br>
-                                <strong>Cédula:</strong> {{ nomina.Cedula }}<br>
-                                <strong>Nº INSS:</strong> {{ nomina.NumeroINSS or 'No registrado' }}
-                            </td>
+                            <td>Salario Base</td>
+                            <td>{{ "{:,.2f}".format(nomina.SalarioBruto) }}</td>
                         </tr>
-                    </table>
-                </td>
-            </tr>
+                        {% if nomina.HorasExtras > 0 %}
+                        <tr>
+                            <td>Horas Extras ({{ nomina.HorasExtras }} hrs)</td>
+                            <td>{{ "{:,.2f}".format(nomina.MontoHorasExtras) }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if nomina.OtrosIngresos > 0 %}
+                        <tr>
+                            <td>Comisiones / Otros Ingresos</td>
+                            <td>{{ "{:,.2f}".format(nomina.OtrosIngresos) }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="total-row">
+                            <td>Total Devengado</td>
+                            <td>{{ "{:,.2f}".format(nomina.TotalDevengado) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
-            <tr class="heading">
-                <td>Ingresos Devengados</td>
-                <td>Monto (C$)</td>
-            </tr>
-            <tr class="item">
-                <td>Salario Base</td>
-                <td>{{ "%.2f"|format(nomina.SalarioBruto) }}</td>
-            </tr>
-            {% if nomina.HorasExtras > 0 %}
-            <tr class="item">
-                <td>Horas Extras ({{ nomina.HorasExtras }} hrs)</td>
-                <td>{{ "%.2f"|format(nomina.MontoHorasExtras) }}</td>
-            </tr>
-            {% endif %}
-            {% if nomina.OtrosIngresos > 0 %}
-            <tr class="item">
-                <td>Otros Ingresos</td>
-                <td>{{ "%.2f"|format(nomina.OtrosIngresos) }}</td>
-            </tr>
-            {% endif %}
-            <tr class="item last" style="font-weight: bold;">
-                <td>Total Devengado</td>
-                <td>{{ "%.2f"|format(nomina.TotalDevengado) }}</td>
-            </tr>
+            <!-- Deducciones -->
+            <div>
+                <table class="detail-table table-deductions">
+                    <thead>
+                        <tr>
+                            <th>Conceptos de Deducción</th>
+                            <th>Monto (C$)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>INSS Laboral (7%)</td>
+                            <td>{{ "{:,.2f}".format(nomina.INSSLaboral) }}</td>
+                        </tr>
+                        {% if nomina.IRMensual > 0 %}
+                        <tr>
+                            <td>IR (Impuesto sobre la Renta)</td>
+                            <td>{{ "{:,.2f}".format(nomina.IRMensual) }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if nomina.PensionAlimenticia > 0 %}
+                        <tr>
+                            <td>Deducción Judicial / Pensión</td>
+                            <td>{{ "{:,.2f}".format(nomina.PensionAlimenticia) }}</td>
+                        </tr>
+                        {% endif %}
+                        
+                        <!-- NOTA: Eliminado el apartado de préstamos/vales por solicitud del usuario -->
 
-            <tr class="heading" style="margin-top: 20px;">
-                <td>Deducciones (Retenciones)</td>
-                <td>Monto (C$)</td>
-            </tr>
-            <tr class="item text-danger">
-                <td>INSS Laboral (7%)</td>
-                <td>-{{ "%.2f"|format(nomina.INSSLaboral) }}</td>
-            </tr>
-            {% if nomina.IRMensual > 0 %}
-            <tr class="item text-danger">
-                <td>Impuesto sobre la Renta (IR)</td>
-                <td>-{{ "%.2f"|format(nomina.IRMensual) }}</td>
-            </tr>
-            {% endif %}
-            {% if nomina.PensionAlimenticia > 0 %}
-            <tr class="item text-danger">
-                <td>Pensión Alimenticia / Deducción Judicial</td>
-                <td>-{{ "%.2f"|format(nomina.PensionAlimenticia) }}</td>
-            </tr>
-            {% endif %}
-            {% if nomina.ValesDescontados > 0 %}
-            <tr class="item text-danger">
-                <td>Vales Descontados</td>
-                <td>-{{ "%.2f"|format(nomina.ValesDescontados) }}</td>
-            </tr>
-            {% endif %}
-            <tr class="item last text-danger" style="font-weight: bold;">
-                <td>Total Deducciones</td>
-                <td>-{{ "%.2f"|format(nomina.TotalDeducciones) }}</td>
-            </tr>
-
-            <tr class="total">
-                <td style="text-align: right; padding-right: 20px;">Neto a Recibir:</td>
-                <td>C$ {{ "%.2f"|format(nomina.SalarioNeto) }}</td>
-            </tr>
-        </table>
-
-
-        <div style="margin-top: 60px; display: flex; justify-content: space-between; text-align: center;">
-            <div style="width: 40%; border-top: 1px solid #333; padding-top: 5px;">Firma del Empleador</div>
-            <div style="width: 40%; border-top: 1px solid #333; padding-top: 5px;">Recibí Conforme (Empleado)</div>
+                        <tr class="total-row">
+                            <td>Total Deducciones</td>
+                            <td>{{ "{:,.2f}".format(nomina.TotalDeducciones) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
         </div>
+
+        <!-- Resumen Final -->
+        <div class="net-summary">
+            <div class="net-label">Neto a Recibir (Córdobas)</div>
+            <div class="net-value">C$ {{ "{:,.2f}".format(nomina.SalarioNeto) }}</div>
+        </div>
+
+        <!-- Firmas -->
+        <div class="signatures">
+            <div class="signature-box">
+                <div class="signature-line"></div>
+                <div class="signature-title">Firma del Empleador / Sello</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-line"></div>
+                <div class="signature-title">Recibí Conforme (Firma del Empleado)</div>
+                <div class="signature-date">Fecha: _____ / _____ / _________</div>
+            </div>
+        </div>
+
+        <!-- Pie Legal -->
+        <div class="legal-note">
+            Este documento constituye el recibo oficial de pago de salario y deducciones de ley aplicables correspondientes al período indicado.
+        </div>
+
     </div>
+
 </body>
 </html>

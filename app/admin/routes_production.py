@@ -17,8 +17,15 @@ def produccion():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Productos
-    cursor.execute("SELECT ID, Nombre FROM Productos WHERE Activo = 1 ORDER BY Nombre")
+    # Productos (Excluir Bebidas y otras categorías que solo se revenden, asumiendo CategoriaID != 4 si 4 es Bebidas)
+    # Mejor aún, uniremos con Categorias para excluir explícitamente 'Bebidas'
+    cursor.execute("""
+        SELECT p.ID, p.Nombre 
+        FROM Productos p
+        JOIN Categorias c ON p.CategoriaID = c.ID
+        WHERE p.Activo = 1 AND c.Nombre != 'Bebidas'
+        ORDER BY p.Nombre
+    """)
     productos = [{'id': r.ID, 'nombre': r.Nombre} for r in cursor.fetchall()]
 
     # Materias Primas para agregar a receta

@@ -200,7 +200,7 @@
         e.preventDefault();
         showLoading();
         try {
-            const res = await fetch('/api/produccion/lote', {
+            const res = await fetch('/admin/api/produccion/lote', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -227,7 +227,7 @@
         e.preventDefault();
         showLoading();
         try {
-            const res = await fetch('/api/produccion/receta', {
+            const res = await fetch('/admin/api/produccion/receta', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -258,7 +258,7 @@
         
         showLoading();
         try {
-            const res = await fetch(`/api/produccion/receta/${id}/delete`, { method: 'POST' });
+            const res = await fetch(`/admin/api/produccion/receta/${id}/delete`, { method: 'POST' });
             hideLoading();
             if (res.ok) window.location.reload();
             else showToast((await res.json()).error, true);

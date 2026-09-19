@@ -38,7 +38,9 @@ def rrhh():
             'tipo_contrato': r.TipoContrato, 'forma_pago': r.FormaPago,
             'estado': r.EstadoEmpleado, 'telefono': r.Telefono or '',
             'numero_inss': r.NumeroINSS or '', 'username': r.Username or '',
-            'consentimiento': bool(r.ConsentimientoDatos)
+            'consentimiento': bool(r.ConsentimientoDatos),
+            'hora_entrada': r.HoraEntrada.strftime('%H:%M') if r.HoraEntrada else '',
+            'hora_salida': r.HoraSalida.strftime('%H:%M') if r.HoraSalida else ''
         })
 
     # Nóminas recientes
@@ -64,23 +66,28 @@ def rrhh():
     cursor.execute("SELECT COUNT(*) FROM Empleados WHERE EstadoEmpleado = 'Activo'")
     total_activos = cursor.fetchone()[0]
 
-    # Asistencia de hoy
+    # Asistencia de hoy (Monitor)
     fecha_hoy = datetime.now().strftime('%Y-%m-%d')
     cursor.execute("""
-        SELECT a.EmpleadoID, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada 
+        SELECT a.EmpleadoID, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada, e.NombreCompleto, e.Cargo
         FROM Asistencia a 
+        JOIN Empleados e ON a.EmpleadoID = e.ID
         WHERE a.Fecha = ?
+        ORDER BY a.HoraEntrada DESC
     """, fecha_hoy)
-    asistencia_hoy = {r.EmpleadoID: {'entrada': r.HoraEntrada.strftime('%H:%M') if r.HoraEntrada else None, 
-                                     'salida': r.HoraSalida.strftime('%H:%M') if r.HoraSalida else None,
-                                     'estado': r.EstadoEntrada} 
-                      for r in cursor.fetchall()}
+    monitor_hoy = [{
+        'empleado': r.NombreCompleto,
+        'cargo': r.Cargo,
+        'entrada': r.HoraEntrada.strftime('%H:%M') if r.HoraEntrada else '-',
+        'salida': r.HoraSalida.strftime('%H:%M') if r.HoraSalida else '-',
+        'estado': r.EstadoEntrada
+    } for r in cursor.fetchall()]
 
     conn.close()
 
     return render_template('admin/rrhh.html', user=current_user,
         empleados=empleados, nominas=nominas, tasas=tasas, total_activos=total_activos,
-        asistencia_hoy=asistencia_hoy, datetime=datetime)
+        monitor_hoy=monitor_hoy, datetime=datetime)
 
 
 @admin_bp.route('/api/rrhh/empleado', methods=['POST'])
@@ -104,7 +111,11 @@ def crear_empleado():
                 header, encoded = datos['foto'].split(",", 1)
                 ext = "png" if "png" in header else "jpg"
                 filename = f"face_{uuid.uuid4().hex}.{ext}"
-                filepath = os.path.join(current_app.root_path, 'static', 'uploads', 'faces', filename)
+                filepath = os.path.join(current_app.static_folder, 'uploads', 'faces', filename)
+                
+                # Make sure the directory exists
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                
                 with open(filepath, "wb") as f:
                     f.write(base64.b64decode(encoded))
                 foto_path = f"/static/uploads/faces/{filename}"
@@ -115,8 +126,8 @@ def crear_empleado():
         cursor.execute("""
             INSERT INTO Empleados (NombreCompleto, Cedula, FechaNacimiento, Genero, Direccion,
                 Telefono, CorreoElectronico, NumeroINSS, Cargo, FechaIngreso, TipoContrato, FechaFinContrato,
-                TipoJornada, SalarioBase, FormaPago, ConsentimientoDatos, FechaConsentimiento, FotoPerfil)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), ?)
+                TipoJornada, SalarioBase, FormaPago, ConsentimientoDatos, FechaConsentimiento, FotoPerfil, HoraEntrada, HoraSalida)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), ?, ?, ?)
         """,
             datos.get('nombre'), datos.get('cedula'),
             datos.get('fecha_nacimiento') or None, datos.get('genero') or None,
@@ -129,7 +140,9 @@ def crear_empleado():
             float(datos.get('salario_base')),
             datos.get('forma_pago', 'Mensual'),
             1 if datos.get('consentimiento') else 0,
-            foto_path
+            foto_path,
+            datos.get('hora_entrada') or None,
+            datos.get('hora_salida') or None
         )
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Empleado registrado'})
@@ -141,6 +154,27 @@ def crear_empleado():
     finally:
         conn.close()
 
+@admin_bp.route('/api/rrhh/empleado/<int:id>/horario', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def actualizar_horario_empleado(id):
+    datos = request.json
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        hora_entrada = datos.get('hora_entrada') or None
+        hora_salida = datos.get('hora_salida') or None
+        cursor.execute("UPDATE Empleados SET HoraEntrada = ?, HoraSalida = ? WHERE ID = ?", hora_entrada, hora_salida, id)
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': 'Horario actualizado'})
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.error(f"Error updating schedule: {e}")
+        return jsonify({'error': 'Error interno'}), 500
+    finally:
+        conn.close()
 
 @admin_bp.route('/api/rrhh/nomina/calcular', methods=['POST'])
 @csrf.exempt
@@ -578,11 +612,9 @@ def get_empleados_referencias():
     conn.close()
     return jsonify(empleados)
 
-@admin_bp.route('/rrhh/kiosco', methods=['GET'])
-@login_required
-@roles_required('Admin', 'SuperAdmin')
-def kiosco_asistencia():
-    return render_template('admin/kiosco.html')
+
+# La ruta del kiosco fue movida al blueprint app.kiosco (accesible en /kiosco/)
+
 
 @admin_bp.route('/api/rrhh/kiosco/marcar', methods=['POST'])
 @csrf.exempt
@@ -603,9 +635,9 @@ def kiosco_marcar():
     cursor = conn.cursor()
     try:
         if empleado_id:
-            cursor.execute("SELECT ID, NombreCompleto FROM Empleados WHERE ID = ? AND EstadoEmpleado = 'Activo'", empleado_id)
+            cursor.execute("SELECT ID, NombreCompleto, HoraEntrada, HoraSalida FROM Empleados WHERE ID = ? AND EstadoEmpleado = 'Activo'", empleado_id)
         else:
-            cursor.execute("SELECT ID, NombreCompleto FROM Empleados WHERE Cedula = ? AND EstadoEmpleado = 'Activo'", cedula)
+            cursor.execute("SELECT ID, NombreCompleto, HoraEntrada, HoraSalida FROM Empleados WHERE Cedula = ? AND EstadoEmpleado = 'Activo'", cedula)
             
         empleado = cursor.fetchone()
         if not empleado:
@@ -626,9 +658,17 @@ def kiosco_marcar():
                 return jsonify({'error': f'Hola {nombre}, ya tienes entrada registrada hoy.'}), 400
                 
             estado_entrada = 'A Tiempo'
-            if turno:
-                from datetime import datetime as dt, timedelta
+            from datetime import datetime as dt, timedelta
+            
+            # Determinar hora de entrada límite usando horario personalizado o general
+            if empleado.HoraEntrada:
+                hora_limite = (dt.combine(dt.today(), empleado.HoraEntrada) + timedelta(minutes=15)).time() # 15 mins tolerancia por defecto para personalizados
+            elif turno:
                 hora_limite = (dt.combine(dt.today(), turno.HoraEntrada) + timedelta(minutes=turno.ToleranciaMinutos)).time()
+            else:
+                hora_limite = None
+
+            if hora_limite:
                 hora_actual = dt.now().time()
                 if hora_actual > hora_limite:
                     estado_entrada = 'Llegada Tardia'

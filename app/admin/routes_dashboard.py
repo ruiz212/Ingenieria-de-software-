@@ -8,7 +8,7 @@ from app.admin import admin_bp
 from app.db import get_db_connection
 from app.auth.decorators import roles_required
 from app.extensions import csrf
-from datetime import datetime
+from datetime import datetime, timedelta
 
 @admin_bp.route('/dashboard')
 @login_required
@@ -193,13 +193,90 @@ def estadistica():
         'fecha': r.FechaArqueo.strftime('%d/%m/%Y %H:%M')
     } for r in cursor.fetchall()]
 
+    # 8. Pronóstico de Abastecimiento (Inteligencia / Últimos 30 días)
+    cursor.execute("""
+        SELECT 
+            m.Nombre, 
+            u.Abreviatura, 
+            m.StockActual,
+            ISNULL(SUM(cl.CantidadUsada) / 30.0, 0) AS ConsumoPromedioDiario
+        FROM MateriaPrima m
+        JOIN UnidadesMedida u ON m.UnidadMedidaID = u.ID
+        JOIN ConsumoLote cl ON m.ID = cl.MateriaPrimaID
+        JOIN ProduccionLotes pl ON cl.LoteID = pl.ID
+        WHERE pl.Fecha >= DATEADD(DAY, -30, GETDATE())
+        GROUP BY m.ID, m.Nombre, u.Abreviatura, m.StockActual
+        HAVING ISNULL(SUM(cl.CantidadUsada), 0) > 0
+    """)
+    pronostico = []
+    for r in cursor.fetchall():
+        consumo_diario = float(r.ConsumoPromedioDiario)
+        stock = float(r.StockActual)
+        dias_restantes = int(stock / consumo_diario) if consumo_diario > 0 else 999
+        pronostico.append({
+            'nombre': r.Nombre,
+            'stock': f"{stock:.2f} {r.Abreviatura}",
+            'consumo_diario': f"{consumo_diario:.2f} {r.Abreviatura}",
+            'dias_restantes': dias_restantes,
+            'alerta': dias_restantes <= 7
+        })
+    # Ordenar por los que se van a agotar más rápido
+    pronostico.sort(key=lambda x: x['dias_restantes'])
+
+    # 9. Pronóstico Estadístico de Ventas (Regresión Lineal para próximos 7 días)
+    cursor.execute("""
+        SELECT CONVERT(date, FechaHora) AS Dia, ISNULL(SUM(Total), 0) AS Total
+        FROM Facturas
+        WHERE FechaHora >= DATEADD(DAY, -30, GETDATE())
+        GROUP BY CONVERT(date, FechaHora)
+        ORDER BY Dia
+    """)
+    historico_ventas = cursor.fetchall()
+    
+    pronostico_ventas_data = {
+        'fechas': [],
+        'historico': [],
+        'prediccion': []
+    }
+
+    if len(historico_ventas) >= 3:
+        n = len(historico_ventas)
+        sum_x = sum(range(1, n + 1))
+        sum_y = sum(float(r.Total) for r in historico_ventas)
+        sum_xy = sum(i * float(r.Total) for i, r in enumerate(historico_ventas, 1))
+        sum_x2 = sum(i ** 2 for i in range(1, n + 1))
+        
+        denominador = (n * sum_x2 - sum_x ** 2)
+        m = (n * sum_xy - sum_x * sum_y) / denominador if denominador != 0 else 0
+        b = (sum_y - m * sum_x) / n
+        
+        # Llenar datos históricos (la predicción es null para que el gráfico no la dibuje aún)
+        for i, r in enumerate(historico_ventas, 1):
+            pronostico_ventas_data['fechas'].append(r.Dia.strftime('%d/%m'))
+            pronostico_ventas_data['historico'].append(float(r.Total))
+            # Opcional: para que la línea conecte, el último punto histórico tiene el mismo valor en ambas series
+            if i == n:
+                pronostico_ventas_data['prediccion'].append(float(r.Total))
+            else:
+                pronostico_ventas_data['prediccion'].append(None)
+            
+        # Generar próximos 7 días
+        last_date = historico_ventas[-1].Dia
+        for i in range(1, 8):
+            next_x = n + i
+            predicted_y = max(0, m * next_x + b) # Evitar predicciones negativas
+            next_date = last_date + timedelta(days=i)
+            pronostico_ventas_data['fechas'].append(next_date.strftime('%d/%m'))
+            pronostico_ventas_data['historico'].append(None)
+            pronostico_ventas_data['prediccion'].append(round(predicted_y, 2))
+
     conn.close()
 
     return render_template('admin/estadistica.html', user=current_user,
         ventas_por_hora=ventas_por_hora, ventas_diarias=ventas_diarias,
         rotacion_productos=rotacion_productos, mermas_mes=mermas_mes,
         clientes_nivel=clientes_nivel, rendimiento_lotes=rendimiento_lotes,
-        arqueos=arqueos)
+        arqueos=arqueos, pronostico=pronostico, pronostico_ventas_data=pronostico_ventas_data)
 
 
 # ============================================================

@@ -13,7 +13,7 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nuevo Empleado
         </button>
-        <a href="{{ url_for('admin.kiosco_asistencia') }}" target="_blank" class="btn btn-outline" style="border-color: #9b59b6; color: #9b59b6; text-decoration: none;">⏱️ Kiosco Asistencia</a>
+        <a href="{{ url_for('kiosco.kiosco_vista') }}" target="_blank" class="btn btn-outline" style="border-color: #9b59b6; color: #9b59b6; text-decoration: none;">⏱️ Kiosco Asistencia</a>
         <button class="btn btn-outline" onclick="abrirModalPlanilla()" style="border-color: var(--primary-color); color: var(--primary-color);">📝 Generar Planilla Batch</button>
         <button class="btn btn-outline" onclick="abrirModalNomina()" style="border-color: var(--success); color: var(--success);">💰 Indiv.</button>
         <button class="btn btn-outline" onclick="abrirModalLiquidacion()" style="border-color: var(--warning); color: var(--warning);">📋 Liquidación</button>
@@ -68,7 +68,7 @@
                     <span><strong>Cédula:</strong> {{ e.cedula }}</span>
                     <span><strong>Ingreso:</strong> {{ e.fecha_ingreso }}</span>
                     <span><strong>Salario:</strong> <span class="text-success fw-600">C${{ "%.2f"|format(e.salario_base) }}</span></span>
-                    <span><strong>Jornada:</strong> {{ e.tipo_jornada }}</span>
+                    <span><strong>Horario:</strong> {% if e.hora_entrada %}{{ e.hora_entrada }} - {{ e.hora_salida }}{% else %}General{% endif %} <button class="btn btn-outline btn-sm" onclick="abrirModalHorario('{{ e.id }}', '{{ e.hora_entrada }}', '{{ e.hora_salida }}')" style="padding: 2px 5px; font-size: 0.7rem;">✏️</button></span>
                     {% if e.numero_inss %}<span><strong>INSS:</strong> {{ e.numero_inss }}</span>{% endif %}
                 </div>
                 {% if e.consentimiento %}
@@ -87,6 +87,53 @@
         <div class="empty-state">
             <div class="empty-state-icon">👥</div>
             <p>No hay empleados registrados.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Monitor de Asistencia -->
+<div class="panel panel-full panel-accent-warning mb-3">
+    <div class="panel-header flex-between">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Monitor de Asistencia Hoy
+        </h3>
+    </div>
+    <div class="panel-body panel-body-flush">
+        {% if monitor_hoy %}
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Empleado</th>
+                        <th>Cargo</th>
+                        <th>Entrada</th>
+                        <th>Salida</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in monitor_hoy %}
+                    <tr>
+                        <td class="cell-bold">{{ a.empleado }}</td>
+                        <td class="cell-muted">{{ a.cargo }}</td>
+                        <td class="fw-600">{{ a.entrada }}</td>
+                        <td class="fw-600">{{ a.salida }}</td>
+                        <td>
+                            <span class="badge {% if a.estado == 'A Tiempo' %}badge-success{% elif a.estado == 'Llegada Tardia' %}badge-danger{% else %}badge-warning{% endif %}">
+                                {{ a.estado }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">⏱️</div>
+            <p>Nadie ha marcado asistencia el día de hoy.</p>
         </div>
         {% endif %}
     </div>
@@ -194,6 +241,16 @@
             </div>
             <div class="form-row">
                 <div class="form-group">
+                    <label class="form-label">Hora Entrada Personalizada (Opcional)</label>
+                    <input type="time" id="ne-hora-entrada" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Hora Salida Personalizada (Opcional)</label>
+                    <input type="time" id="ne-hora-salida" class="form-input">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
                     <label class="form-label">Tipo Contrato</label>
                     <select id="ne-tipo-contrato" class="form-select" onchange="toggleFinContrato()">
                         <option value="Indefinido">Indefinido</option>
@@ -206,8 +263,21 @@
                 </div>
             </div>
             <div class="form-group">
-                <label class="form-label">Foto de Rostro (Para Reconocimiento Facial)</label>
-                <input type="file" id="emp-foto" class="form-input" accept="image/*">
+                <label class="form-label">Foto de Rostro (Reconocimiento Facial)</label>
+                <div style="display: flex; flex-direction: column; gap: 10px; align-items: center; border: 1px dashed var(--glass-border, #ccc); padding: 15px; border-radius: 8px;">
+                    <div id="camera-container" style="position: relative; width: 320px; height: 240px; background: #000; border-radius: 8px; overflow: hidden; display: none;">
+                        <video id="emp-video" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);"></video>
+                        <canvas id="emp-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
+                    </div>
+                    <img id="emp-foto-preview" style="width: 320px; height: 240px; object-fit: cover; border-radius: 8px; display: none; border: 2px solid var(--success, #2ecc71);">
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn btn-outline btn-sm" id="btn-start-camera" onclick="startEmployeeCamera()">📷 Iniciar Cámara IA</button>
+                        <button type="button" class="btn btn-primary btn-sm hidden" id="btn-capture-photo" onclick="captureEmployeePhoto()" disabled>📸 Capturar (Buscando...)</button>
+                        <button type="button" class="btn btn-outline btn-sm hidden" id="btn-retake-photo" onclick="retakeEmployeePhoto()">🔄 Repetir Foto</button>
+                    </div>
+                    <p id="camera-status" style="font-size: 0.8rem; color: #888; margin: 0;">Usa la cámara para que la IA extraiga el rostro con precisión.</p>
+                </div>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-outline" onclick="cerrarModalEmpleado()">Cancelar</button>
@@ -242,15 +312,113 @@
         </form>
     </div>
 </div>
+
+<!-- Modal Horario Empleado -->
+<div id="modal-horario-empleado" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 400px;">
+        <h2>Configurar Horario</h2>
+        <p class="subtitle">Asignar horario personalizado al empleado (Dejar en blanco para usar el horario general de la empresa).</p>
+        <form id="form-horario-empleado">
+            <input type="hidden" id="he-id">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Hora de Entrada</label>
+                    <input type="time" id="he-hora-entrada" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Hora de Salida</label>
+                    <input type="time" id="he-hora-salida" class="form-input">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="cerrarModalHorario()">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Horario</button>
+            </div>
+        </form>
+    </div>
+</div>
+<!-- Modal Liquidación -->
+<div id="modal-liquidacion" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 800px;">
+        <h2>Cálculo de Liquidación</h2>
+        <p class="subtitle">Calcula las prestaciones sociales de ley por terminación de contrato.</p>
+        
+        <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 300px;">
+                <form id="form-liquidacion">
+                    <div class="form-group">
+                        <label class="form-label">Empleado</label>
+                        <select id="liq-empleado" class="form-select" required>
+                            <option value="">Seleccione un empleado...</option>
+                            {% for e in empleados %}
+                                {% if e.estado == 'Activo' %}
+                                <option value="{{ e.id }}">{{ e.nombre }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Fecha de Egreso (Último día)</label>
+                            <input type="date" id="liq-fecha" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Motivo de Salida</label>
+                            <select id="liq-motivo" class="form-select" required>
+                                <option value="Renuncia Voluntaria">Renuncia Voluntaria</option>
+                                <option value="Despido Injustificado">Despido Injustificado</option>
+                                <option value="Despido Justificado">Despido Justificado (Art. 48)</option>
+                                <option value="Fin de Contrato">Fin de Contrato</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Calcular Prestaciones</button>
+                    <button type="button" class="btn btn-outline" style="width: 100%; margin-top: 10px;" onclick="cerrarModalLiquidacion()">Cerrar</button>
+                </form>
+            </div>
+            
+            <div style="flex: 1; min-width: 300px; border-left: 1px solid var(--glass-border); padding-left: 20px; min-height: 250px;">
+                <h4 style="margin-top: 0; color: var(--primary);">Desglose de Prestaciones Sociales</h4>
+                <div id="liq-resultado" style="font-size: 0.9rem; line-height: 1.6;">
+                    <div class="empty-state" style="padding: 20px 0;">
+                        <div class="empty-state-icon">🧮</div>
+                        <p style="font-size: 0.85rem;">Selecciona un empleado y presiona Calcular para ver el desglose de ley.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
     function abrirModalEmpleado() { document.getElementById('modal-nuevo-empleado').classList.remove('hidden'); }
-    function cerrarModalEmpleado() { document.getElementById('modal-nuevo-empleado').classList.add('hidden'); }
+    function cerrarModalEmpleado() { 
+        document.getElementById('modal-nuevo-empleado').classList.add('hidden'); 
+        if (typeof stopEmployeeCamera === 'function') stopEmployeeCamera();
+    }
     
     function abrirModalPlanilla() { document.getElementById('modal-generar-planilla').classList.remove('hidden'); }
     function cerrarModalPlanilla() { document.getElementById('modal-generar-planilla').classList.add('hidden'); }
+    
+    function abrirModalHorario(id, entrada, salida) {
+        document.getElementById('he-id').value = id;
+        document.getElementById('he-hora-entrada').value = entrada;
+        document.getElementById('he-hora-salida').value = salida;
+        document.getElementById('modal-horario-empleado').classList.remove('hidden');
+    }
+    function cerrarModalHorario() { document.getElementById('modal-horario-empleado').classList.add('hidden'); }
+
+    function abrirModalLiquidacion() { document.getElementById('modal-liquidacion').classList.remove('hidden'); }
+    function cerrarModalLiquidacion() { 
+        document.getElementById('modal-liquidacion').classList.add('hidden'); 
+        document.getElementById('liq-resultado').innerHTML = `
+            <div class="empty-state" style="padding: 20px 0;">
+                <div class="empty-state-icon">🧮</div>
+                <p style="font-size: 0.85rem;">Selecciona un empleado y presiona Calcular para ver el desglose de ley.</p>
+            </div>`;
+    }
 
     // Add overlay closing for the new modal
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -258,6 +426,8 @@
             if (e.target === overlay) {
                 cerrarModalEmpleado();
                 cerrarModalPlanilla();
+                cerrarModalHorario();
+                cerrarModalLiquidacion();
             }
         });
     });
@@ -275,25 +445,144 @@
     }
 
     function abrirModalNomina() { showToast('Función Nómina Individual en desarrollo', true); }
-    function abrirModalLiquidacion() { showToast('Función Liquidación en desarrollo', true); }
+
+    // --- LÓGICA DE CÁMARA E IA ---
+    let capturedFaceBase64 = null;
+    let cameraStream = null;
+    let faceDetectionInterval = null;
+    let isFaceApiLoaded = false;
+    let isModelLoaded = false;
+
+    async function startEmployeeCamera() {
+        document.getElementById('btn-start-camera').classList.add('hidden');
+        document.getElementById('emp-foto-preview').style.display = 'none';
+        document.getElementById('camera-container').style.display = 'block';
+        const captureBtn = document.getElementById('btn-capture-photo');
+        captureBtn.classList.remove('hidden');
+        captureBtn.disabled = true;
+        captureBtn.textContent = '⏳ Cargando IA...';
+        document.getElementById('btn-retake-photo').classList.add('hidden');
+        document.getElementById('camera-status').textContent = 'Descargando modelos...';
+        capturedFaceBase64 = null;
+
+        try {
+            if (!isFaceApiLoaded) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+                isFaceApiLoaded = true;
+            }
+            if (!isModelLoaded) {
+                await faceapi.nets.tinyFaceDetector.loadFromUri('/static/models');
+                await faceapi.nets.faceLandmark68Net.loadFromUri('/static/models');
+                isModelLoaded = true;
+            }
+            
+            captureBtn.textContent = 'Buscando rostro...';
+            document.getElementById('camera-status').textContent = 'IA lista. Por favor, mira fijamente a la cámara.';
+            
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+            const video = document.getElementById('emp-video');
+            video.srcObject = cameraStream;
+            
+            video.addEventListener('play', () => {
+                const canvas = document.getElementById('emp-canvas');
+                const displaySize = { width: video.clientWidth, height: video.clientHeight };
+                faceapi.matchDimensions(canvas, displaySize);
+                
+                if (faceDetectionInterval) clearInterval(faceDetectionInterval);
+                faceDetectionInterval = setInterval(async () => {
+                    // Optimización: No buscar landmarks, usar menor inputSize y evaluar cada 600ms en vez de 200ms
+                    const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }));
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    if (detections) {
+                        const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                        
+                        // Invert x for mirrored view drawing
+                        const box = resizedDetections.box;
+                        const mirroredBox = {
+                            x: displaySize.width - box.x - box.width,
+                            y: box.y,
+                            width: box.width,
+                            height: box.height
+                        };
+                        const drawBox = new faceapi.draw.DrawBox(mirroredBox, { boxColor: '#2ecc71', label: 'Rostro Válido' });
+                        drawBox.draw(canvas);
+                        
+                        captureBtn.disabled = false;
+                        captureBtn.textContent = '📸 Capturar Rostro';
+                    } else {
+                        captureBtn.disabled = true;
+                        captureBtn.textContent = '⏳ Buscando rostro...';
+                    }
+                }, 600);
+            });
+            
+        } catch (e) {
+            console.error(e);
+            document.getElementById('camera-status').textContent = 'Error al acceder a la cámara o cargar IA.';
+        }
+    }
+
+    function captureEmployeePhoto() {
+        const video = document.getElementById('emp-video');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        
+        // Mirror the image to match the video preview
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        capturedFaceBase64 = canvas.toDataURL('image/jpeg', 0.9);
+        
+        stopEmployeeCamera();
+        
+        document.getElementById('camera-container').style.display = 'none';
+        const preview = document.getElementById('emp-foto-preview');
+        preview.src = capturedFaceBase64;
+        preview.style.display = 'block';
+        
+        document.getElementById('btn-capture-photo').classList.add('hidden');
+        document.getElementById('btn-retake-photo').classList.remove('hidden');
+        document.getElementById('camera-status').textContent = 'Rostro capturado y validado por IA.';
+    }
+
+    function retakeEmployeePhoto() {
+        startEmployeeCamera();
+    }
+
+    function stopEmployeeCamera() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+        if (faceDetectionInterval) {
+            clearInterval(faceDetectionInterval);
+            faceDetectionInterval = null;
+        }
+        const video = document.getElementById('emp-video');
+        if (video) video.srcObject = null;
+    }
 
     document.getElementById('form-nuevo-empleado').addEventListener('submit', async (e) => {
         e.preventDefault();
-        showLoading();
         
-        let fotoBase64 = null;
-        const fotoInput = document.getElementById('emp-foto');
-        if (fotoInput.files.length > 0) {
-            const file = fotoInput.files[0];
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            await new Promise((resolve) => {
-                reader.onload = () => {
-                    fotoBase64 = reader.result;
-                    resolve();
-                };
-            });
+        if (!capturedFaceBase64) {
+            showToast('Debe capturar un rostro válido con la cámara para registrar al empleado', true);
+            return;
         }
+
+        showLoading();
+        let fotoBase64 = capturedFaceBase64;
 
         const data = {
             nombre: document.getElementById('ne-nombre').value,
@@ -306,7 +595,9 @@
             tipo_contrato: document.getElementById('ne-tipo-contrato').value,
             fecha_fin_contrato: document.getElementById('ne-fin-contrato').value,
             consentimiento: true,
-            foto: fotoBase64
+            foto: fotoBase64,
+            hora_entrada: document.getElementById('ne-hora-entrada').value,
+            hora_salida: document.getElementById('ne-hora-salida').value
         };
         try {
             const res = await fetch('/admin/api/rrhh/empleado', {
@@ -351,6 +642,92 @@
                 setTimeout(() => location.reload(), 1500);
             } else {
                 showToast(result.error || 'Error al generar la planilla', true);
+            }
+        } catch(err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
+    });
+    
+    document.getElementById('form-horario-empleado').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoading();
+        const id = document.getElementById('he-id').value;
+        const data = {
+            hora_entrada: document.getElementById('he-hora-entrada').value,
+            hora_salida: document.getElementById('he-hora-salida').value
+        };
+        try {
+            const res = await fetch(`/admin/api/rrhh/empleado/${id}/horario`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            hideLoading();
+            if (res.ok) {
+                showToast('Horario actualizado');
+                cerrarModalHorario();
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast('Error al actualizar', true);
+            }
+        } catch(err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
+    });
+
+    document.getElementById('form-liquidacion').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoading();
+        
+        const data = {
+            empleado_id: document.getElementById('liq-empleado').value,
+            fecha_egreso: document.getElementById('liq-fecha').value,
+            motivo: document.getElementById('liq-motivo').value
+        };
+        
+        try {
+            const res = await fetch('/admin/api/rrhh/liquidacion/calcular', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            hideLoading();
+            const result = await res.json();
+            
+            if (res.ok) {
+                const l = result.liquidacion;
+                const html = `
+                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span>Días Trabajados:</span> <strong>${l.dias_trabajados}</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span>Antigüedad:</span> <strong>${l.anios} años, ${l.meses_fraccion} meses</strong>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--success);">
+                        <span>Vacaciones (Neto):</span> <strong>C$${l.vacaciones.neto.toFixed(2)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--success);">
+                        <span>Aguinaldo/Treceavo Mes:</span> <strong>C$${l.aguinaldo.monto.toFixed(2)}</strong>
+                    </div>
+                    ${l.indemnizacion.aplica ? `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--warning);">
+                        <span>Indemnización (Antigüedad):</span> <strong>C$${l.indemnizacion.neto.toFixed(2)}</strong>
+                    </div>
+                    ` : ''}
+                    
+                    <hr style="border: 0; border-top: 1px solid var(--glass-border); margin: 15px 0;">
+                    <div style="display: flex; justify-content: space-between; font-size: 1.2rem; font-weight: bold; color: var(--text-light);">
+                        <span>Total a Pagar:</span> <span>C$${l.total_liquidacion.toFixed(2)}</span>
+                    </div>
+                `;
+                document.getElementById('liq-resultado').innerHTML = html;
+            } else {
+                showToast(result.error || 'Error al calcular', true);
             }
         } catch(err) {
             hideLoading();
