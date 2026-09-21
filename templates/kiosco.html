@@ -117,10 +117,9 @@
             transform: scaleX(-1);
         }
 
-        canvas {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+        /* Oculto, usado para capturar frames */
+        #canvas {
+            display: none;
         }
 
         /* Scan line animation overlay */
@@ -131,6 +130,10 @@
             pointer-events: none;
             overflow: hidden;
             opacity: 0.15;
+            transition: opacity 0.5s ease;
+        }
+        .scan-overlay.paused {
+            opacity: 0;
         }
         .scan-line {
             position: absolute;
@@ -182,6 +185,11 @@
             background: var(--error);
             box-shadow: 0 0 12px var(--error);
             animation: none;
+        }
+        .status-bar.paused .status-dot {
+            background: #3498db;
+            box-shadow: 0 0 12px #3498db;
+            animation: pulse 2s infinite;
         }
 
         /* ═══ TOAST ═══ */
@@ -265,7 +273,8 @@
     <div class="camera-wrapper">
         <div class="camera-container" id="cameraBox">
             <video id="video" autoplay muted playsinline></video>
-            <div class="scan-overlay">
+            <canvas id="canvas" width="640" height="480"></canvas>
+            <div class="scan-overlay" id="scanOverlay">
                 <div class="scan-line"></div>
             </div>
         </div>
@@ -273,7 +282,7 @@
 
     <div class="status-bar" id="statusBar">
         <div class="status-dot" id="statusDot"></div>
-        <span id="statusText">Cargando motores de IA...</span>
+        <span id="statusText">Inicializando cámara...</span>
     </div>
 
     <div class="instructions" id="instructions">
@@ -284,20 +293,21 @@
 
     <script>
         // ═══════════════════════════════════════════
-        // KIOSCO DE MARCAJE — LÓGICA AUTOMÁTICA
-        // Sin botones de entrada/salida: el backend decide
+        // KIOSCO DE MARCAJE — BACKEND FACE RECOGNITION
         // ═══════════════════════════════════════════
 
         const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
         const statusText = document.getElementById('statusText');
         const statusBar = document.getElementById('statusBar');
         const cameraBox = document.getElementById('cameraBox');
         const instructions = document.getElementById('instructions');
+        const scanOverlay = document.getElementById('scanOverlay');
 
-        let faceMatcher = null;
-        let isProcessing = false;
-        let recentDetections = new Map();
-        let faceapiReady = false;
+        let scanInterval = null;
+        let isRequestPending = false;
+        let isPaused = false;
 
         // ─── RELOJ ───
         function updateClock() {
@@ -313,7 +323,7 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // ─── TOAST ───
+        // ─── TOAST Y EFECTOS ───
         function showToast(msg, tipo = 'entrada') {
             const toast = document.getElementById('toast');
             let icon = '✅';
@@ -342,198 +352,143 @@
             }, 5000);
         }
 
-        // ─── CARGAR face-api.js DINÁMICAMENTE ───
-        function loadFaceAPI() {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
-                script.onload = () => {
-                    faceapiReady = true;
-                    resolve();
-                };
-                script.onerror = () => {
-                    reject(new Error('No se pudo cargar face-api.js desde CDN'));
-                };
-                document.head.appendChild(script);
-            });
-        }
-
-        // ─── INICIALIZAR IA ───
-        async function initAI() {
-            try {
-                statusText.textContent = 'Cargando librería de IA...';
-                await loadFaceAPI();
-
-                statusText.textContent = 'Cargando modelos de reconocimiento...';
-                const MODEL_URL = '/static/models';
-
-                await Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-                ]);
-
-                statusText.textContent = 'Cargando datos de empleados...';
-                await loadEmployees();
-
-                startVideo();
-            } catch (e) {
-                console.error('Error inicializando IA:', e);
-                statusText.textContent = 'Error al cargar IA. Reintentando en 10s...';
-                statusBar.classList.add('error-state');
-                setTimeout(initAI, 10000);
-            }
-        }
-
-        // ─── CARGAR EMPLEADOS ───
-        async function loadEmployees() {
-            const res = await fetch('/kiosco/api/empleados/referencias');
-            const empleados = await res.json();
-
-            if (empleados.length === 0) {
-                statusText.textContent = 'No hay fotos de empleados registradas.';
-                statusBar.classList.add('error-state');
-                return;
-            }
-
-            const labeledDescriptors = [];
-            for (const emp of empleados) {
-                try {
-                    const img = await faceapi.fetchImage(emp.foto);
-                    const detection = await faceapi.detectSingleFace(
-                        img, new faceapi.TinyFaceDetectorOptions()
-                    ).withFaceLandmarks().withFaceDescriptor();
-
-                    if (detection) {
-                        labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(
-                            JSON.stringify({ id: emp.id, nombre: emp.nombre }),
-                            [detection.descriptor]
-                        ));
-                    }
-                } catch (e) {
-                    console.warn('No se pudo cargar foto de ' + emp.nombre);
-                }
-            }
-
-            if (labeledDescriptors.length > 0) {
-                faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.5);
-                statusText.textContent = 'IA lista — Acércate a la cámara';
-                statusBar.classList.remove('error-state');
-                statusBar.classList.add('ready');
-                instructions.classList.add('visible');
-            } else {
-                statusText.textContent = 'Ninguna foto de perfil detectó un rostro válido.';
-                statusBar.classList.add('error-state');
-            }
-        }
-
-        // ─── CÁMARA ───
-        function startVideo() {
-            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
-                .then(stream => { video.srcObject = stream; })
-                .catch(err => {
-                    statusText.textContent = 'Error: Cámara no permitida.';
-                    statusBar.classList.add('error-state');
-                });
-        }
-
-        // ─── DETECCIÓN EN TIEMPO REAL ───
-        video.addEventListener('play', () => {
-            const canvas = faceapi.createCanvasFromMedia(video);
-            cameraBox.appendChild(canvas);
-            const displaySize = { width: video.videoWidth || 640, height: video.videoHeight || 480 };
-            faceapi.matchDimensions(canvas, displaySize);
-
-            setInterval(async () => {
-                if (!faceMatcher || isProcessing) return;
-
-                const detection = await faceapi.detectSingleFace(
-                    video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
-                ).withFaceLandmarks().withFaceDescriptor();
-
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                if (detection) {
-                    const resized = faceapi.resizeResults(detection, displaySize);
-                    const result = faceMatcher.findBestMatch(resized.descriptor);
-
-                    const box = resized.detection.box;
-                    let color = '#e74c3c';
-                    let text = 'Desconocido';
-
-                    if (result.label !== 'unknown') {
-                        const emp = JSON.parse(result.label);
-                        text = emp.nombre;
-                        color = '#2ecc71';
-                        marcarAsistencia(emp);
-                    }
-
-                    // Invertir X para modo espejo
-                    const mirroredBox = {
-                        x: displaySize.width - box.x - box.width,
-                        y: box.y,
-                        width: box.width,
-                        height: box.height
-                    };
-                    const drawBox = new faceapi.draw.DrawBox(mirroredBox, {
-                        label: text, boxColor: color
-                    });
-                    drawBox.draw(canvas);
-                }
-            }, 750);
-        });
-
-        // ─── MARCAR ASISTENCIA (AUTOMÁTICO) ───
-        async function marcarAsistencia(emp) {
-            if (isProcessing) return;
-
-            // Cooldown de 30 segundos por persona
-            const now = Date.now();
-            if (recentDetections.has(emp.id) && (now - recentDetections.get(emp.id)) < 30000) return;
-
-            isProcessing = true;
-            recentDetections.set(emp.id, now);
-
-            try {
-                const res = await fetch('/kiosco/api/marcar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ empleado_id: emp.id })
-                });
-                const data = await res.json();
-
-                if (res.ok) {
-                    showToast(data.mensaje, data.tipo);
-                    playBeep(data.tipo === 'entrada');
-                } else {
-                    showToast(data.error, data.tipo || 'error');
-                }
-            } catch (e) {
-                console.error('Error al marcar:', e);
-                showToast('Error de conexión con el servidor', 'error');
-            }
-
-            setTimeout(() => { isProcessing = false; }, 2000);
-        }
-
-        // ─── SONIDO DE CONFIRMACIÓN ───
         function playBeep(isEntrada) {
             try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
                 osc.connect(gain);
-                gain.connect(ctx.destination);
+                gain.connect(audioCtx.destination);
                 osc.frequency.value = isEntrada ? 880 : 660;
                 gain.gain.value = 0.15;
                 osc.start();
-                osc.stop(ctx.currentTime + 0.15);
+                osc.stop(audioCtx.currentTime + 0.15);
             } catch (e) { /* Audio not supported */ }
         }
 
+        // ─── CÁMARA ───
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480, facingMode: "user" } 
+                });
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    statusText.textContent = 'IA lista — Acércate a la cámara';
+                    statusBar.classList.remove('error-state');
+                    statusBar.classList.add('ready');
+                    instructions.classList.add('visible');
+                    
+                    // Iniciar el loop de envío de frames al backend
+                    startScanning();
+                };
+            } catch (err) {
+                console.error('Error accediendo a la cámara:', err);
+                statusText.textContent = 'Error: No se pudo acceder a la cámara.';
+                statusBar.classList.add('error-state');
+            }
+        }
+
+        // ─── LÓGICA DE ESCANEO ───
+        function startScanning() {
+            if (scanInterval) clearInterval(scanInterval);
+            // Ejecutar captura y reconocimiento cada 1000 ms (1 segundo)
+            scanInterval = setInterval(processFrame, 1000);
+        }
+
+        async function processFrame() {
+            if (isPaused || isRequestPending) return;
+
+            isRequestPending = true;
+
+            try {
+                // Dibujar el video en el canvas
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Exportar como imagen JPEG comprimida para ahorrar ancho de banda
+                const base64Image = canvas.toDataURL('image/jpeg', 0.6);
+
+                const response = await fetch('/kiosco/api/kiosco/reconocer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64Image })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        // Marcaje exitoso (entrada o salida)
+                        handleSuccess(data);
+                    } else if (data.status === 'completado') {
+                        // Ya completó la jornada
+                        handleSuccess(data);
+                    } else if (data.status === 'error') {
+                        console.error('Error del servidor:', data.message);
+                    }
+                    // Si es 'no_face' o 'unknown', no hacemos nada (seguimos escaneando silenciosamente)
+                }
+            } catch (error) {
+                console.error('Error enviando frame al backend:', error);
+            } finally {
+                isRequestPending = false;
+            }
+        }
+
+        function hablar(texto) {
+            if ('speechSynthesis' in window) {
+                // Cancelar si ya está hablando para no encolar audios
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(texto);
+                utterance.lang = 'es-MX'; // Español latino genérico
+                utterance.rate = 1.0; // Velocidad normal
+                utterance.pitch = 1.1; // Tono ligeramente más amigable
+                
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function handleSuccess(data) {
+            // Mostrar mensaje y hablar
+            if (data.status === 'success') {
+                showToast(data.mensaje, data.tipo);
+                playBeep(data.tipo === 'entrada');
+                hablar(data.mensaje);
+            } else {
+                showToast(data.mensaje, 'completado');
+                playBeep(false);
+                hablar(data.mensaje);
+            }
+
+            // Pausar escaneo (Cooldown)
+            pauseScanning();
+        }
+
+        function pauseScanning() {
+            isPaused = true;
+            scanOverlay.classList.add('paused');
+            statusText.textContent = 'Procesado. Espera un momento...';
+            statusBar.classList.remove('ready');
+            statusBar.classList.add('paused');
+
+            // Reanudar después de 6 segundos
+            setTimeout(() => {
+                isPaused = false;
+                scanOverlay.classList.remove('paused');
+                statusText.textContent = 'IA lista — Acércate a la cámara';
+                statusBar.classList.remove('paused');
+                statusBar.classList.add('ready');
+            }, 6000);
+        }
+
         // ─── ARRANCAR ───
-        initAI();
+        window.addEventListener('DOMContentLoaded', initCamera);
+
     </script>
 </body>
 </html>

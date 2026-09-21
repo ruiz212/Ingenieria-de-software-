@@ -8,3 +8,5 @@ python-dotenv==1.2.2
 twilio==9.10.9
 requests>=2.31.0
 pyotp
+numpy>=1.26.0
+opencv-python>=4.8.0

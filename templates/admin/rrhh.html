@@ -68,7 +68,10 @@
                     <span><strong>Cédula:</strong> {{ e.cedula }}</span>
                     <span><strong>Ingreso:</strong> {{ e.fecha_ingreso }}</span>
                     <span><strong>Salario:</strong> <span class="text-success fw-600">C${{ "%.2f"|format(e.salario_base) }}</span></span>
-                    <span><strong>Horario:</strong> {% if e.hora_entrada %}{{ e.hora_entrada }} - {{ e.hora_salida }}{% else %}General{% endif %} <button class="btn btn-outline btn-sm" onclick="abrirModalHorario('{{ e.id }}', '{{ e.hora_entrada }}', '{{ e.hora_salida }}')" style="padding: 2px 5px; font-size: 0.7rem;">✏️</button></span>
+                    <span><strong>Horario:</strong> {% if e.hora_entrada %}{{ e.hora_entrada }} - {{ e.hora_salida }}{% else %}General{% endif %} 
+                        <button class="btn btn-outline btn-sm" onclick="abrirModalHorario('{{ e.id }}', '{{ e.hora_entrada }}', '{{ e.hora_salida }}')" style="padding: 2px 5px; font-size: 0.7rem;">✏️</button>
+                        <button class="btn btn-outline btn-sm" onclick="eliminarEmpleado('{{ e.id }}', '{{ e.nombre|escape }}')" style="padding: 2px 5px; font-size: 0.7rem; color: #e74c3c; border-color: #e74c3c; margin-left: 5px;">🗑️ Eliminar</button>
+                    </span>
                     {% if e.numero_inss %}<span><strong>INSS:</strong> {{ e.numero_inss }}</span>{% endif %}
                 </div>
                 {% if e.consentimiento %}
@@ -409,6 +412,30 @@
         document.getElementById('modal-horario-empleado').classList.remove('hidden');
     }
     function cerrarModalHorario() { document.getElementById('modal-horario-empleado').classList.add('hidden'); }
+
+    async function eliminarEmpleado(id, nombre) {
+        if (!confirm(`¿Estás seguro de que deseas ELIMINAR permanentemente al empleado ${nombre}? Esta acción no se puede deshacer.`)) {
+            return;
+        }
+        showLoading();
+        try {
+            const res = await fetch(`/admin/api/rrhh/empleado/${id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            hideLoading();
+            const result = await res.json();
+            if (res.ok) {
+                showToast(result.mensaje || 'Empleado eliminado exitosamente');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(result.error || 'Error al eliminar empleado', true);
+            }
+        } catch(err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
+    }
 
     function abrirModalLiquidacion() { document.getElementById('modal-liquidacion').classList.remove('hidden'); }
     function cerrarModalLiquidacion() { 

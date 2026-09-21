@@ -105,15 +105,27 @@ def crear_empleado():
     cursor = conn.cursor()
     try:
         foto_path = None
+        descriptor_str = None
         if 'foto' in datos and datos['foto']:
-            # Format: "data:image/jpeg;base64,/9j/4AAQ..."
+            # Extraer descriptor con la IA nativa (SFace)
+            from app.services.face_service import face_service
+            import json
+            resultado_ia = face_service.procesar_imagen_registro_base64(datos['foto'])
+            if resultado_ia['status'] == 'success':
+                descriptor_str = json.dumps(resultado_ia['descriptor'])
+            else:
+                # Opcional: Podrías retornar error aquí si el rostro es obligatorio.
+                # Como el sistema tiene fallback, lo dejamos pasar como NULL si falla pero avisamos en el log.
+                import logging
+                logging.warning(f"No se pudo extraer descriptor SFace: {resultado_ia['message']}")
+
+            # Guardar imagen en disco
             try:
                 header, encoded = datos['foto'].split(",", 1)
                 ext = "png" if "png" in header else "jpg"
                 filename = f"face_{uuid.uuid4().hex}.{ext}"
                 filepath = os.path.join(current_app.static_folder, 'uploads', 'faces', filename)
                 
-                # Make sure the directory exists
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
                 
                 with open(filepath, "wb") as f:
@@ -126,8 +138,9 @@ def crear_empleado():
         cursor.execute("""
             INSERT INTO Empleados (NombreCompleto, Cedula, FechaNacimiento, Genero, Direccion,
                 Telefono, CorreoElectronico, NumeroINSS, Cargo, FechaIngreso, TipoContrato, FechaFinContrato,
-                TipoJornada, SalarioBase, FormaPago, ConsentimientoDatos, FechaConsentimiento, FotoPerfil, HoraEntrada, HoraSalida)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), ?, ?, ?)
+                TipoJornada, SalarioBase, FormaPago, ConsentimientoDatos, FechaConsentimiento, FotoPerfil, HoraEntrada, HoraSalida, FaceDescriptor)
+            OUTPUT INSERTED.ID
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), ?, ?, ?, ?)
         """,
             datos.get('nombre'), datos.get('cedula'),
             datos.get('fecha_nacimiento') or None, datos.get('genero') or None,
@@ -142,15 +155,73 @@ def crear_empleado():
             1 if datos.get('consentimiento') else 0,
             foto_path,
             datos.get('hora_entrada') or None,
-            datos.get('hora_salida') or None
+            datos.get('hora_salida') or None,
+            descriptor_str
         )
+        
+        row = cursor.fetchone()
+        nuevo_id = row.ID if row else None
         conn.commit()
+
+        # Actualizar la caché de reconocimiento facial en caliente
+        if nuevo_id and descriptor_str:
+            import json
+            face_service.actualizar_cache_empleado(nuevo_id, json.loads(descriptor_str))
+            
         return jsonify({'status': 'success', 'mensaje': 'Empleado registrado'})
     except Exception as e:
         conn.rollback()
         import logging
         logging.error(f"Internal server error: {e}")
         return jsonify({'error': 'Error interno del servidor al procesar la solicitud.'}), 500
+    finally:
+        conn.close()
+
+@admin_bp.route('/api/rrhh/empleado/<int:id>', methods=['DELETE'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def eliminar_empleado(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # 1. Eliminar dependencias en cascada (Nóminas, Asistencia, etc) para permitir el borrado
+        cursor.execute("DELETE FROM DetalleNomina WHERE NominaID IN (SELECT ID FROM Nomina WHERE EmpleadoID = ?)", (id,))
+        cursor.execute("DELETE FROM Nomina WHERE EmpleadoID = ?", (id,))
+        
+        # Intentamos borrar tablas de asistencia si existen
+        try:
+            cursor.execute("DELETE FROM Asistencia WHERE EmpleadoID = ?", (id,))
+        except Exception:
+            pass # Si la tabla Asistencia no existe en su esquema, ignoramos
+            
+        try:
+            cursor.execute("DELETE FROM LicenciasEmpleados WHERE EmpleadoID = ?", (id,))
+            cursor.execute("DELETE FROM DeduccionesJudiciales WHERE EmpleadoID = ?", (id,))
+            cursor.execute("DELETE FROM IncidentesLaborales WHERE EmpleadoID = ?", (id,))
+        except Exception:
+            pass
+
+        # 2. Intentamos borrar al empleado
+        cursor.execute("DELETE FROM Empleados WHERE ID = ?", (id,))
+        if cursor.rowcount == 0:
+            return jsonify({'error': 'Empleado no encontrado'}), 404
+            
+        conn.commit()
+        # Eliminar también de la caché de rostros si existe
+        from app.services.face_service import face_service
+        if id in face_service.encodings_cache:
+            del face_service.encodings_cache[id]
+            
+        return jsonify({'status': 'success', 'mensaje': 'Empleado eliminado junto con sus registros dependientes.'})
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.error(f"Error eliminando empleado: {e}")
+        # Error 547 es de Foreign Key Constraint en SQL Server
+        if '547' in str(e) or 'REFERENCE' in str(e):
+            return jsonify({'error': 'Aún existen otras dependencias fuertes. Bórralo manualmente o ponlo Inactivo.'}), 400
+        return jsonify({'error': 'Error interno al eliminar el empleado'}), 500
     finally:
         conn.close()
 
@@ -703,5 +774,94 @@ def kiosco_marcar():
         import logging
         logging.error(f"Internal error in kiosco: {e}")
         return jsonify({'error': 'Error interno del servidor'}), 500
+    finally:
+        conn.close()
+
+@admin_bp.route('/rrhh/asistencia')
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def rrhh_asistencia():
+    fecha_str = request.args.get('fecha', datetime.now().strftime('%Y-%m-%d'))
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Get active employees
+        cursor.execute("SELECT ID, NombreCompleto, Cargo FROM Empleados WHERE EstadoEmpleado = 'Activo'")
+        empleados = cursor.fetchall()
+        total_esperados = len(empleados)
+        
+        # Get attendance for the selected date
+        cursor.execute("""
+            SELECT a.EmpleadoID, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada, t.Nombre AS Turno
+            FROM Asistencia a
+            LEFT JOIN TurnosLaborales t ON a.TurnoID = t.ID
+            WHERE a.Fecha = ?
+        """, (fecha_str,))
+        
+        asistencia_raw = cursor.fetchall()
+        asistencia_map = {row.EmpleadoID: row for row in asistencia_raw}
+        
+        presentes = 0
+        a_tiempo = 0
+        tardes = 0
+        
+        detalle = []
+        for emp in empleados:
+            registro = asistencia_map.get(emp.ID)
+            estado = 'Ausente'
+            entrada = '--:--'
+            salida = '--:--'
+            turno = 'General'
+            
+            if registro:
+                presentes += 1
+                estado = registro.EstadoEntrada or 'A Tiempo'
+                # Convertir obj a str si no es None
+                try:
+                    entrada = registro.HoraEntrada.strftime('%H:%M:%S') if registro.HoraEntrada else '--:--'
+                except:
+                    entrada = str(registro.HoraEntrada)
+                try:
+                    salida = registro.HoraSalida.strftime('%H:%M:%S') if registro.HoraSalida else '--:--'
+                except:
+                    salida = str(registro.HoraSalida) if registro.HoraSalida else '--:--'
+                    
+                turno = registro.Turno or 'General'
+                
+                if estado == 'A Tiempo':
+                    a_tiempo += 1
+                elif estado == 'Llegada Tardia':
+                    tardes += 1
+                    
+            detalle.append({
+                'nombre': emp.NombreCompleto,
+                'cargo': emp.Cargo,
+                'turno': turno,
+                'entrada': entrada,
+                'salida': salida,
+                'estado': estado
+            })
+            
+        ausentes = total_esperados - presentes
+        
+        # Ordenar (Ausentes arriba, luego Tardes, luego A Tiempo)
+        def sort_key(x):
+            order = {'Ausente': 0, 'Llegada Tardia': 1, 'A Tiempo': 2}
+            return (order.get(x['estado'], 99), x['nombre'])
+            
+        detalle.sort(key=sort_key)
+        
+        stats = {
+            'esperados': total_esperados,
+            'presentes': presentes,
+            'a_tiempo': a_tiempo,
+            'tardes': tardes,
+            'ausentes': ausentes
+        }
+        
+        return render_template('admin/asistencia.html', 
+                               fecha=fecha_str, 
+                               stats=stats, 
+                               detalle=detalle)
     finally:
         conn.close()

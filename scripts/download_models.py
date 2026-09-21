@@ -1,28 +1,16 @@
-import os
 import urllib.request
+import os
 
-models_dir = r"C:\Ingenieria de software\panaderia_amada\static\models"
+models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static', 'models')
 os.makedirs(models_dir, exist_ok=True)
 
-base_url = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/"
-files = [
-    "tiny_face_detector_model-weights_manifest.json",
-    "tiny_face_detector_model-shard1",
-    "face_landmark_68_model-weights_manifest.json",
-    "face_landmark_68_model-shard1",
-    "face_recognition_model-weights_manifest.json",
-    "face_recognition_model-shard1",
-    "face_recognition_model-shard2"
-]
+yunet_url = 'https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx'
+sface_url = 'https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx'
 
-for f in files:
-    url = base_url + f
-    out_path = os.path.join(models_dir, f)
-    print(f"Downloading {f}...")
-    try:
-        urllib.request.urlretrieve(url, out_path)
-        print("Success.")
-    except Exception as e:
-        print(f"Failed to download {f}: {e}")
+print("Descargando YuNet...")
+urllib.request.urlretrieve(yunet_url, os.path.join(models_dir, 'face_detection_yunet.onnx'))
 
-print("Done downloading models.")
+print("Descargando SFace...")
+urllib.request.urlretrieve(sface_url, os.path.join(models_dir, 'face_recognition_sface.onnx'))
+
+print("Modelos descargados exitosamente en static/models/")
