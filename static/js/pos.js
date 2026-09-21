@@ -264,6 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const fechaEntrega = document.getElementById('pastel-fecha').value;
             const fotoInput = document.getElementById('pastel-foto');
             const telefonoInput = document.getElementById('pastel-telefono');
+            const nombreInput = document.getElementById('pastel-nombre');
             
             let rutaImagen = null;
 
@@ -286,12 +287,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 especificaciones: especificaciones,
                 fecha_entrega: fechaEntrega,
                 ruta_imagen_referencia: rutaImagen,
-                telefono: telefonoInput ? telefonoInput.value : null
+                telefono: telefonoInput ? telefonoInput.value : null,
+                nombre: nombreInput ? nombreInput.value : null
             };
 
             try {
                 const result = await API.solicitarCotizacion(cotizacionData);
-                showToast('¡Cotización enviada a recepción!');
+                if (result.numero_cotizacion) {
+                    alert(`¡Cotización enviada con éxito!\n\nGuarda tu número de seguimiento: ${result.numero_cotizacion}\n\nCon este número podrás consultar el estado de tu pastel.`);
+                } else {
+                    showToast('¡Cotización enviada a recepción!');
+                }
                 pastelPersonalizadoModal.classList.add('hidden');
                 formPastel.reset();
             } catch (error) {

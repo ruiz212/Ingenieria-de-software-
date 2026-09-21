@@ -146,6 +146,8 @@
                 <input type="file" id="pastel-foto" class="form-control" accept="image/*">
                 
                 {% if user.rol_nombre == 'Invitado' %}
+                <label>Tu Nombre Completo:</label>
+                <input type="text" id="pastel-nombre" class="form-control" required placeholder="Ej: María López">
                 <label>Teléfono de contacto (WhatsApp):</label>
                 <input type="tel" id="pastel-telefono" class="form-control" required placeholder="Ej: 8888-1234">
                 {% endif %}
@@ -301,13 +303,16 @@
                         cotizaciones.forEach(c => {
                             const badgeColor = c.estado === 'Pendiente' ? '#ff7e5f' : (c.estado === 'Cotizado' ? '#1c92d2' : '#2ea043');
                             listContainer.innerHTML += `
-                                <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,0.1);">
-                                    <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem;">
-                                        <strong style="color:white;">Pastel para ${c.fecha_entrega}</strong>
-                                        <span style="background: ${badgeColor}; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">${c.estado}</span>
+                                <div style="background: rgba(107, 58, 42, 0.05); padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem; border: 1px solid rgba(107, 58, 42, 0.1);">
+                                    <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem; align-items: center;">
+                                        <strong style="color: var(--brand-cafe-dark); font-size: 1.1rem;">
+                                            Cotización #COT-${String(c.id).padStart(4, '0')} <br>
+                                            <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal;">Para entregar el ${c.fecha_entrega}</span>
+                                        </strong>
+                                        <span style="background: ${badgeColor}; color: white; padding: 0.3rem 0.6rem; border-radius: 50px; font-size: 0.75rem; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">${c.estado}</span>
                                     </div>
-                                    <p style="font-size: 0.85rem; color: #c9d1d9;">${c.especificaciones}</p>
-                                    ${c.precio_asignado ? `<p style="font-size: 1.1rem; color: #2ea043; font-weight: bold; margin-top: 0.5rem;">C$${parseFloat(c.precio_asignado).toFixed(2)}</p>` : ''}
+                                    <p style="font-size: 0.95rem; color: var(--text-main); margin: 0.5rem 0;">${c.especificaciones}</p>
+                                    ${c.precio_asignado ? `<p style="font-size: 1.15rem; color: var(--brand-dorado-dark); font-weight: bold; margin-top: 0.5rem;">C$${parseFloat(c.precio_asignado).toFixed(2)}</p>` : ''}
                                 </div>
                             `;
                         });
