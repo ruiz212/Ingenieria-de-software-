@@ -363,6 +363,7 @@ def crear_cotizacion():
     fecha_entrega = datos.get('fecha_entrega')
     ruta_imagen = datos.get('ruta_imagen_referencia')
     telefono = datos.get('telefono')
+    nombre_contacto = datos.get('nombre') # Para invitados
 
     if not especificaciones or not fecha_entrega:
         return jsonify({'error': 'Faltan datos requeridos'}), 400
@@ -382,12 +383,19 @@ def crear_cotizacion():
         
     try:
         cursor.execute(
-            "INSERT INTO Cotizaciones (ClienteID, SessionID, Especificaciones, FechaEntrega, RutaImagenReferencia, TelefonoContacto, Estado) "
-            "VALUES (?, ?, ?, ?, ?, ?, 'Pendiente')",
-            cliente_id, session_id, especificaciones, fecha_entrega, ruta_imagen, telefono
+            "INSERT INTO Cotizaciones (ClienteID, SessionID, Especificaciones, FechaEntrega, RutaImagenReferencia, TelefonoContacto, Estado, NombreContacto) "
+            "OUTPUT INSERTED.ID "
+            "VALUES (?, ?, ?, ?, ?, ?, 'Pendiente', ?)",
+            cliente_id, session_id, especificaciones, fecha_entrega, ruta_imagen, telefono, nombre_contacto
         )
+        cotizacion_id = cursor.fetchone()[0]
+        numero_cotizacion = f"COT-{cotizacion_id:04d}"
+        
         conn.commit()
-        return jsonify({'mensaje': 'Cotización solicitada correctamente'}), 200
+        return jsonify({
+            'mensaje': 'Cotización solicitada correctamente',
+            'numero_cotizacion': numero_cotizacion
+        }), 200
     except Exception as e:
         conn.rollback()
         return jsonify({'error': str(e)}), 500
