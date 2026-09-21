@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tienda Online - Panadería Amada</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/tienda.css') }}">
+    <style>
+        /* Fallbacks for JS interactions */
+        .catalog-panel { display: contents; }
+        .products-grid { display: contents; }
+    </style>
+</head>
+<body class="tienda-body pos-body">
+    <!-- Navbar -->
+    <nav class="tienda-nav app-header">
+        <a href="/" class="brand-logo">
+            <span style="font-size: 2rem;">🌾</span>
+            <h1>Panadería Amada</h1>
+        </a>
+        <div class="nav-actions">
+            {% if user.is_authenticated %}
+                <span style="color: var(--text-muted); font-size: 0.9rem; font-weight: 500;">Hola, {{ user.nombre.split()[0] if user.nombre else 'Invitado' }}</span>
+                <button id="btn-mis-cotizaciones" class="filter-btn" style="border:none; box-shadow:none;">Mis Cotizaciones</button>
+                <a href="/logout" style="color: var(--text-muted); text-decoration: none; font-size: 0.9rem;">Salir</a>
+            {% else %}
+                <a href="/login" class="filter-btn">Iniciar Sesión</a>
+            {% endif %}
+            <button class="cart-toggle" onclick="document.getElementById('cartDrawer').classList.add('open'); document.getElementById('cartOverlay').classList.add('active');">
+                🛒
+                <span class="cart-badge" id="badge-pedidos">0</span>
+            </button>
+        </div>
+    </nav>
+
+    {% if user.fecha_nacimiento and user.fecha_nacimiento.month == mes_actual %}
+    <div style="background: var(--brand-primary); color: white; text-align: center; padding: 0.5rem; font-weight: 600; letter-spacing: 1px;">
+        🎉 ¡Feliz mes de tu cumpleaños! Disfruta de la mejor calidad.
+    </div>
+    {% endif %}
+
+    <!-- Hero Section -->
+    <header class="hero-section">
+        <div class="hero-content">
+            <h2>El sabor de la tradición, ahora en tu hogar.</h2>
+            <p>Pan artesanal recién horneado y pasteles personalizados para tus momentos más especiales.</p>
+            <button id="btn-pastel-personalizado" class="btn-hero">🎂 Pedir Pastel Personalizado</button>
+        </div>
+    </header>
+
+    <main class="pos-layout">
+        <!-- Catalog wrapper for pos.js event delegation -->
+        <div class="catalog-panel pos-main" style="width: 100%;">
+            
+            <!-- Category Filters -->
+            <section class="store-filters category-tabs">
+                <button class="filter-btn category-btn active" data-filter="Todos">Descubrir Todos</button>
+                {% for cat in categorias %}
+                <button class="filter-btn category-btn" data-filter="{{ cat.nombre }}">{{ cat.nombre }}</button>
+                {% endfor %}
+            </section>
+
+            <!-- Products Grid -->
+            <section class="store-catalog">
+                <div class="store-grid products-grid">
+                    {% for producto in productos if producto.categoria != 'Reposteria' %}
+                    <article class="store-product-card filterable-product product-card" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre }}" data-precio="{{ producto.precio }}" data-categoria="{{ producto.categoria }}" data-descuento="{{ producto.descuento }}">
+                        {% if producto.descuento > 0 %}
+                            <div class="discount-badge">-{{ "%.0f"|format(producto.descuento) }}%</div>
+                        {% endif %}
+                        
+                        <div>
+                            <div class="card-cat category-label">{{ producto.categoria }}</div>
+                            <h3 class="card-title">{{ producto.nombre }}</h3>
+                        </div>
+                        
+                        <div class="card-price-add">
+                            {% if producto.descuento > 0 %}
+                                <div style="display: flex; flex-direction: column;">
+                                    <span style="text-decoration: line-through; color: var(--text-muted); font-size: 0.9rem;">C${{ "%.2f"|format(producto.precio) }}</span>
+                                    <span class="card-price" style="color: #e74c3c;">C${{ "%.2f"|format(producto.precio - (producto.precio * producto.descuento / 100)) }}</span>
+                                </div>
+                            {% else %}
+                                <p class="card-price price">C${{ "%.2f"|format(producto.precio) }}</p>
+                            {% endif %}
+                            <button class="btn-add">+</button>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Cart Drawer -->
+    <div id="cartOverlay" class="cart-drawer-overlay" onclick="document.getElementById('cartDrawer').classList.remove('open'); this.classList.remove('active');"></div>
+    <aside id="cartDrawer" class="cart-drawer invoice-panel">
+        <div class="cart-header invoice-header">
+            <h2>Tu Pedido</h2>
+            <button class="btn-close-cart" onclick="document.getElementById('cartDrawer').classList.remove('open'); document.getElementById('cartOverlay').classList.remove('active');">×</button>
+        </div>
+        
+        <div class="cart-body cart-items" id="cart-items">
+            <div class="empty-cart-msg empty-cart">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🛒</div>
+                Tu carrito está vacío.<br>Agrega algunos productos deliciosos.
+            </div>
+        </div>
+        
+        <div class="cart-footer invoice-footer">
+            <div class="summary-row">
+                <span>Subtotal:</span>
+                <span id="subtotal-display">C$0.00</span>
+            </div>
+            <div class="summary-row">
+                <span>IVA (15%):</span>
+                <span id="iva-display">C$0.00</span>
+            </div>
+            <div class="summary-row total-row">
+                <span>Total:</span>
+                <span id="total-display">C$0.00</span>
+            </div>
+            <button type="button" id="btn-realizar-pedido" disabled>
+                Continuar al Pago
+            </button>
+        </div>
+    </aside>
+
+    <!-- Modals Background -->
+    <div id="modal-overlay" class="modal-overlay hidden"></div>
+
+    <!-- Modal Pastel Personalizado -->
+    <div id="pastel-personalizado-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Pastel Personalizado</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Cuéntanos cómo quieres tu pastel ideal y te lo cotizamos.</p>
+            
+            <form id="form-pastel-personalizado">
+                <label>Especificaciones (Sabores, decoración):</label>
+                <textarea id="pastel-especificaciones" class="form-control" rows="4" required placeholder="Ej: Pastel de vainilla relleno de fresa..."></textarea>
+                
+                <label>Fecha de entrega deseada:</label>
+                <input type="date" id="pastel-fecha" class="form-control" required>
+                
+                <label>Foto de Referencia (Opcional):</label>
+                <input type="file" id="pastel-foto" class="form-control" accept="image/*">
+                
+                {% if user.rol_nombre == 'Invitado' %}
+                <label>Teléfono de contacto (WhatsApp):</label>
+                <input type="tel" id="pastel-telefono" class="form-control" required placeholder="Ej: 8888-1234">
+                {% endif %}
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn-outline" id="btn-cerrar-pastel">Cancelar</button>
+                    <button type="submit" class="btn-primary">Solicitar Cotización</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Mis Cotizaciones -->
+    <div id="mis-cotizaciones-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <h2>Mis Cotizaciones</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Revisa el estado de tus solicitudes de pastel.</p>
+            <div id="cotizaciones-cliente-list" style="max-height: 60vh; overflow-y: auto;">
+                <p style="text-align: center; color: var(--text-muted);">Cargando...</p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-outline" id="btn-cerrar-mis-cotizaciones">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Encargo / Finalizar Pago Cliente -->
+    <div id="encargo-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="encargo-modal-title">Finalizar Pedido</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Por favor, completa los datos de tu compra.</p>
+            
+            <input type="hidden" id="modal-nombre-cliente" value="{{ user.nombre or 'Invitado' }}">
+            <input type="hidden" id="modal-telefono-cliente" value="{{ user.telefono or '00000000' }}">
+            
+            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                <div style="flex: 1;">
+                    <label>Total:</label>
+                    <input type="text" id="modal-total" class="form-control" readonly style="background: #fafafa; font-weight: bold; color: var(--brand-dark);">
+                </div>
+                <div style="flex: 1; display: none;">
+                    <input type="number" id="modal-adelanto" class="form-control" readonly value="0">
+                </div>
+            </div>
+
+            <label>Método de Pago Preferido:</label>
+            <select id="modal-metodo-pago" class="form-control">
+                <option value="Efectivo">Pago al recoger (Efectivo)</option>
+                <option value="Transferencia">Transferencia Bancaria</option>
+            </select>
+            
+            <div id="encargo-efectivo-container" style="display: none;">
+                <input type="number" id="modal-efectivo-encargo" class="form-control" value="0">
+                <input type="text" id="modal-cambio-encargo">
+            </div>
+
+            <div style="margin-top: 1rem; display: none;" id="encargo-fecha-container">
+                <label>Fecha de Recogida (Para Pasteles):</label>
+                <input type="date" id="modal-fecha" class="form-control">
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn-outline" id="btn-cerrar-modal">Cancelar</button>
+                <button type="button" class="btn-primary" id="btn-confirmar-encargo">Confirmar Pedido</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fake Modals for JS compatibility -->
+    <div style="display:none;">
+        <button id="btn-cerrar-turno"></button>
+        <button id="btn-ver-pedidos-clientes"></button>
+        <button id="btn-nuevo-encargo"></button>
+        <div id="pago-modal"><button id="btn-cerrar-pago"></button><button id="btn-confirmar-pago"></button></div>
+        <div id="ingredientes-modal"><button id="btn-cerrar-ingredientes"></button><button id="btn-confirmar-ingredientes"></button></div>
+        <div id="base-encargo-modal"><button id="btn-cerrar-base-encargo"></button></div>
+        <div id="pedidos-clientes-modal"><button id="btn-cerrar-pedidos-clientes"></button></div>
+        <div id="arqueo-modal"><button id="btn-cerrar-arqueo"></button><button id="btn-confirmar-arqueo"></button></div>
+        <div id="factura-modal"><button id="btn-cerrar-ticket"></button><button id="btn-imprimir-ticket"></button></div>
+        <!-- Required elements inside fake modals to prevent null errors -->
+        <input id="pago-total">
+        <input id="pago-efectivo">
+        <input id="pago-dolares">
+        <input id="pago-transferencia">
+        <input id="pago-referencia">
+        <input id="pago-cambio">
+        <select id="pago-metodo"></select>
+        <input id="factura-ruc-toggle">
+        <div id="factura-ruc-container"></div>
+        <input id="ruc-razon-social">
+        <input id="ruc-numero">
+        
+        <!-- Ticket -->
+        <span id="ticket-numero"></span>
+        <span id="ticket-fecha"></span>
+        <span id="ticket-hora"></span>
+        <div id="ticket-productos"></div>
+        <span id="ticket-subtotal"></span>
+        <span id="ticket-iva"></span>
+        <span id="ticket-total"></span>
+        <div id="ticket-encargo-section"></div>
+        <span id="ticket-cliente"></span>
+        <span id="ticket-adelanto"></span>
+        <span id="ticket-saldo"></span>
+        <span id="ticket-fecha-entrega"></span>
+        <img id="ticket-qr-img">
+    </div>
+
+    <!-- Spinners y Toasts -->
+    <div id="loading-overlay" class="modal-overlay hidden" style="background:rgba(255,255,255,0.8); flex-direction:column; color:var(--brand-dark);">
+        <span style="font-size: 2rem; margin-bottom:1rem;">🍞</span>
+        <span style="font-weight: 700;">Procesando...</span>
+    </div>
+    <div id="toast-container" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px;"></div>
+
+    <script>
+        window.configuracionGlobal = {{ configuracion|tojson|safe if configuracion else '{}' }};
+        
+        // Update cart badge dynamically (intercepting DOM changes in pos.js)
+        const cartObserver = new MutationObserver(() => {
+            const itemCount = document.querySelectorAll('#cart-items .cart-item').length;
+            document.getElementById('badge-pedidos').textContent = itemCount;
+            if (itemCount > 0 && !document.getElementById('cartDrawer').classList.contains('open')) {
+                // Auto open drawer on first add
+                document.getElementById('cartDrawer').classList.add('open'); 
+                document.getElementById('cartOverlay').classList.add('active');
+            }
+        });
+        
+        window.addEventListener('load', () => {
+            const cartItemsContainer = document.getElementById('cart-items');
+            if (cartItemsContainer) {
+                cartObserver.observe(cartItemsContainer, { childList: true });
+            }
+
+            // Mis Cotizaciones Logic
+            const btnMisCotizaciones = document.getElementById('btn-mis-cotizaciones');
+            const misCotizacionesModal = document.getElementById('mis-cotizaciones-modal');
+            const btnCerrarMisCotizaciones = document.getElementById('btn-cerrar-mis-cotizaciones');
+
+            if (btnMisCotizaciones) {
+                btnMisCotizaciones.addEventListener('click', async () => {
+                    misCotizacionesModal.classList.remove('hidden');
+                    const listContainer = document.getElementById('cotizaciones-cliente-list');
+                    listContainer.innerHTML = '<p style="text-align: center; color: #8b949e;">Cargando...</p>';
+                    try {
+                        const cotizaciones = await API.obtenerCotizacionesCliente();
+                        if (cotizaciones.length === 0) {
+                            listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #8b949e;">No has solicitado ningún pastel aún.</div>';
+                            return;
+                        }
+                        listContainer.innerHTML = '';
+                        cotizaciones.forEach(c => {
+                            const badgeColor = c.estado === 'Pendiente' ? '#ff7e5f' : (c.estado === 'Cotizado' ? '#1c92d2' : '#2ea043');
+                            listContainer.innerHTML += `
+                                <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,0.1);">
+                                    <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem;">
+                                        <strong style="color:white;">Pastel para ${c.fecha_entrega}</strong>
+                                        <span style="background: ${badgeColor}; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">${c.estado}</span>
+                                    </div>
+                                    <p style="font-size: 0.85rem; color: #c9d1d9;">${c.especificaciones}</p>
+                                    ${c.precio_asignado ? `<p style="font-size: 1.1rem; color: #2ea043; font-weight: bold; margin-top: 0.5rem;">C$${parseFloat(c.precio_asignado).toFixed(2)}</p>` : ''}
+                                </div>
+                            `;
+                        });
+                    } catch(err) {
+                        listContainer.innerHTML = '<p style="color: #ff4757; text-align:center;">Error al cargar cotizaciones.</p>';
+                    }
+                });
+            }
+
+            if (btnCerrarMisCotizaciones) {
+                btnCerrarMisCotizaciones.addEventListener('click', () => {
+                    misCotizacionesModal.classList.add('hidden');
+                });
+            }
+
+            // Realizar Pedido Logic
+            const btnRealizarPedido = document.getElementById('btn-realizar-pedido');
+            const encargoModal = document.getElementById('encargo-modal');
+            const btnCerrarEncargoModal = document.getElementById('btn-cerrar-modal');
+
+            if (btnRealizarPedido) {
+                btnRealizarPedido.addEventListener('click', () => {
+                    document.getElementById('cartDrawer').classList.remove('open');
+                    document.getElementById('cartOverlay').classList.remove('active');
+                    encargoModal.classList.remove('hidden');
+                    
+                    // Llenar el total desde el carrito (el script principal mantiene actualizado total-display)
+                    const totalStr = document.getElementById('total-display').innerText.replace('C$', '').trim();
+                    document.getElementById('modal-total').value = totalStr;
+                });
+            }
+
+            if (btnCerrarEncargoModal) {
+                btnCerrarEncargoModal.addEventListener('click', () => {
+                    encargoModal.classList.add('hidden');
+                });
+            }
+        });
+    </script>
+    <script src="{{ url_for('static', filename='js/api_services.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pos.js') }}"></script>
+</body>
+</html>

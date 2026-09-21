@@ -1,0 +1,188 @@
+{% extends 'admin_base.html' %}
+
+{% block title %}Monitor KDS | Brajher's Cake{% endblock %}
+{% block page_title %}Monitor de Cocina (KDS){% endblock %}
+
+{% block extra_head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/monitor.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="kds-board">
+    <!-- Columna PENDIENTES -->
+    <div class="kds-column" id="col-Pendiente">
+        <div class="kds-column-header header-danger">
+            <h3>🔴 Pendientes</h3>
+            <span class="badge badge-danger" id="count-Pendiente" style="font-size: 1.1rem; padding: 0.2rem 0.6rem;">0</span>
+        </div>
+        <div class="kds-column-body" id="list-Pendiente">
+            <!-- Tarjetas se inyectan aquí -->
+        </div>
+    </div>
+
+    <!-- Columna EN PROCESO -->
+    <div class="kds-column" id="col-En_Proceso">
+        <div class="kds-column-header header-warning">
+            <h3>🟠 Preparando</h3>
+            <span class="badge badge-warning" id="count-En_Proceso" style="font-size: 1.1rem; padding: 0.2rem 0.6rem;">0</span>
+        </div>
+        <div class="kds-column-body" id="list-En_Proceso">
+            <!-- Tarjetas se inyectan aquí -->
+        </div>
+    </div>
+
+    <!-- Columna LISTOS -->
+    <div class="kds-column" id="col-Listo">
+        <div class="kds-column-header header-success">
+            <h3>🟢 Listos</h3>
+            <span class="badge badge-success" id="count-Listo" style="font-size: 1.1rem; padding: 0.2rem 0.6rem;">0</span>
+        </div>
+        <div class="kds-column-body" id="list-Listo">
+            <!-- Tarjetas se inyectan aquí -->
+        </div>
+    </div>
+</div>
+
+<!-- Plantilla oculta para las tarjetas de Kanban -->
+<div id="encargos-data" style="display: none;">
+    {{ encargos|tojson|safe }}
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const encargos = JSON.parse(document.getElementById('encargos-data').textContent || '[]');
+    
+    // Renderizado inicial
+    function renderBoard() {
+        // Limpiar columnas
+        document.getElementById('list-Pendiente').innerHTML = '';
+        document.getElementById('list-En_Proceso').innerHTML = '';
+        document.getElementById('list-Listo').innerHTML = '';
+        
+        let counts = { 'Pendiente': 0, 'En Proceso': 0, 'Listo': 0, 'Entregado': 0 };
+
+        encargos.forEach(encargo => {
+            const estado = encargo.encargo_detalles?.estado || 'Pendiente';
+            counts[estado] = (counts[estado] || 0) + 1;
+            
+            // No mostrar entregados en el tablero principal
+            if (estado === 'Entregado') return;
+            
+            // Reemplazar espacios por guiones bajos para el ID de columna
+            let colId = `list-${estado.replace(' ', '_')}`;
+            const col = document.getElementById(colId);
+            
+            if (col) {
+                col.appendChild(createCard(encargo));
+            }
+        });
+
+        // Actualizar contadores
+        document.getElementById('count-Pendiente').textContent = counts['Pendiente'];
+        document.getElementById('count-En_Proceso').textContent = counts['En Proceso'];
+        document.getElementById('count-Listo').textContent = counts['Listo'];
+    }
+
+    function createCard(encargo) {
+        const card = document.createElement('div');
+        const estado = encargo.encargo_detalles?.estado || 'Pendiente';
+        card.className = `kds-card card-${estado.replace(' ', '_')}`;
+        card.id = `card-${encargo.codigo_seguimiento}`;
+        
+        let productosHtml = '';
+        encargo.productos.forEach(item => {
+            let addonsHtml = '';
+            if (item.detalle_ingredientes && item.detalle_ingredientes.ingredientes) {
+                addonsHtml = `<div class="kds-addons">` + 
+                             item.detalle_ingredientes.ingredientes.map(ing => `+ ${ing.nombre}`).join('<br>') + 
+                             `</div>`;
+            }
+            productosHtml += `
+                <div class="kds-product-row">
+                    <span class="kds-qty">x${item.cantidad}</span>
+                    <div>
+                        <span class="kds-name">${item.nombre.split(' (')[0]}</span>
+                        ${addonsHtml}
+                    </div>
+                </div>
+            `;
+        });
+
+        let nextActionHtml = '';
+        if (estado === 'Pendiente') {
+            nextActionHtml = `<button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'En Proceso')" class="btn btn-warning w-100" style="font-weight: 800; font-size: 1.05rem; padding: 0.75rem;">▶ PREPARAR</button>`;
+        } else if (estado === 'En Proceso') {
+            nextActionHtml = `<button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'Listo')" class="btn btn-success w-100" style="font-weight: 800; font-size: 1.05rem; padding: 0.75rem;">✔ TERMINADO</button>`;
+        } else if (estado === 'Listo') {
+            nextActionHtml = `<button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'Entregado')" class="btn btn-outline w-100" style="font-weight: 800; font-size: 1.05rem; padding: 0.75rem;">📦 ENTREGAR</button>`;
+        }
+
+        let customCakeHtml = '';
+        if (encargo.encargo_detalles?.especificaciones) {
+            customCakeHtml = `
+                <div class="kds-alert">
+                    <strong>✨ Personalizado:</strong> ${encargo.encargo_detalles.especificaciones}
+                </div>
+            `;
+        }
+
+        card.innerHTML = `
+            <div class="kds-card-header">
+                <span class="kds-invoice">#${encargo.numero_factura}</span>
+                <span class="kds-time">${encargo.hora}</span>
+            </div>
+            <div class="kds-customer">
+                <strong>${encargo.encargo_detalles?.nombre_cliente || 'Cliente'}</strong>
+                <br>Para: <span class="text-danger fw-700">${encargo.encargo_detalles?.fecha_entrega || ''}</span>
+            </div>
+            ${customCakeHtml}
+            <div class="kds-products">
+                ${productosHtml}
+            </div>
+            <div class="kds-actions mt-3">
+                ${nextActionHtml}
+            </div>
+        `;
+        return card;
+    }
+
+    async function cambiarEstado(codigo, nuevoEstado) {
+        // Encontrar el encargo en el array local y actualizarlo
+        const index = encargos.findIndex(e => e.codigo_seguimiento === codigo);
+        if (index === -1) return;
+        
+        const estadoAnterior = encargos[index].encargo_detalles.estado;
+        encargos[index].encargo_detalles.estado = nuevoEstado;
+        
+        // Re-renderizar el tablero para mover la tarjeta con CSS
+        renderBoard();
+
+        try {
+            const response = await fetch(`/api/seguimiento/${codigo}/estado`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado: nuevoEstado })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                showToast(data.error || 'Error al actualizar', true);
+                // Revertir
+                encargos[index].encargo_detalles.estado = estadoAnterior;
+                renderBoard();
+            }
+        } catch (error) {
+            console.error(error);
+            showToast('Error de conexión', true);
+            // Revertir
+            encargos[index].encargo_detalles.estado = estadoAnterior;
+            renderBoard();
+        }
+    }
+
+    // Inicializar
+    document.addEventListener('DOMContentLoaded', renderBoard);
+</script>
+{% endblock %}

@@ -1,0 +1,154 @@
+/* ============================================================
+   BUTTONS — Brajher's Cake Design System
+   ============================================================ */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.6rem 1.25rem;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 0.875rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-smooth);
+    border: 1px solid transparent;
+    text-decoration: none;
+    white-space: nowrap;
+    line-height: 1.4;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn:active { transform: scale(0.97); }
+
+.btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+/* Primary — Dorado Ámbar */
+.btn-primary {
+    background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
+    color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(212, 149, 43, 0.25);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, var(--brand-dorado-dark), #A06C18);
+    box-shadow: 0 4px 16px rgba(212, 149, 43, 0.35);
+    transform: translateY(-1px);
+}
+
+.btn-primary[disabled] {
+    background: var(--border);
+    color: var(--text-faint);
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Secondary — Café Terracota */
+.btn-secondary {
+    background: var(--secondary);
+    color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(107, 58, 42, 0.15);
+}
+
+.btn-secondary:hover {
+    background: var(--secondary-hover);
+    box-shadow: 0 4px 12px rgba(107, 58, 42, 0.25);
+    transform: translateY(-1px);
+}
+
+/* Outline */
+.btn-outline {
+    background: var(--surface);
+    color: var(--secondary);
+    border-color: var(--border);
+    box-shadow: var(--shadow-xs);
+}
+
+.btn-outline:hover {
+    background: var(--surface-sunken);
+    border-color: var(--border-interactive);
+    transform: translateY(-1px);
+}
+
+/* Success — Verde Fresco */
+.btn-success {
+    background: var(--success);
+    color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(74, 157, 91, 0.20);
+}
+
+.btn-success:hover {
+    background: #3D8A4E;
+    box-shadow: 0 4px 12px rgba(74, 157, 91, 0.30);
+    transform: translateY(-1px);
+}
+
+/* Danger Outline */
+.btn-danger-outline {
+    background: var(--surface);
+    color: var(--danger);
+    border-color: var(--danger-border);
+}
+
+.btn-danger-outline:hover {
+    background: var(--danger-bg);
+    border-color: var(--danger);
+}
+
+/* Danger Solid */
+.btn-danger {
+    background: var(--danger);
+    color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(196, 69, 54, 0.20);
+}
+
+.btn-danger:hover {
+    background: #A83A2E;
+    transform: translateY(-1px);
+}
+
+/* Ghost — Text only */
+.btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    padding: 0.5rem 0.75rem;
+}
+
+.btn-ghost:hover {
+    background: var(--surface-sunken);
+    color: var(--text-main);
+}
+
+/* Sizes */
+.btn-sm {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: var(--radius-sm);
+}
+
+.btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    border-radius: var(--radius-lg);
+}
+
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: var(--radius-sm);
+}
+
+/* Button Group */
+.btn-group {
+    display: flex;
+    gap: 0.5rem;
+}

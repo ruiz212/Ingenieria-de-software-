@@ -1,0 +1,103 @@
+{% extends 'admin_base.html' %}
+
+{% block title %}Monitor de Asistencia | Brajher's Cake{% endblock %}
+{% block page_title %}Monitor de Asistencia{% endblock %}
+
+{% block content %}
+<div class="page-header" style="flex-direction: row; justify-content: space-between; align-items: center;">
+    <div>
+        <p>Monitoreo detallado de llegadas y asistencia del personal.</p>
+    </div>
+    <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <label for="fecha" class="fw-600" style="color: var(--text-light);">Filtrar Fecha:</label>
+        <form id="filtro-fecha" method="GET" action="{{ url_for('admin.rrhh_asistencia') }}">
+            <input type="date" name="fecha" id="fecha" value="{{ fecha }}" class="form-input" style="width: 200px; cursor: pointer;" onchange="document.getElementById('filtro-fecha').submit();">
+        </form>
+        <a href="{{ url_for('kiosco.kiosco_vista') }}" target="_blank" class="btn btn-outline" style="border-color: #9b59b6; color: #9b59b6; text-decoration: none; padding: 0.5rem 1rem;">
+            ⏱️ Kiosco
+        </a>
+    </div>
+</div>
+
+<!-- KPIs -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <!-- Esperados -->
+    <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--primary); transition: transform 0.2s;">
+        <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Esperados</h3>
+        <div style="font-size: 2.5rem; font-weight: 800; color: var(--text-light);">{{ stats.esperados }}</div>
+    </div>
+    <!-- Presentes -->
+    <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--success); transition: transform 0.2s;">
+        <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Presentes</h3>
+        <div style="font-size: 2.5rem; font-weight: 800; color: var(--success);">{{ stats.presentes }}</div>
+    </div>
+    <!-- A Tiempo -->
+    <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid #3498db; transition: transform 0.2s;">
+        <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">A Tiempo</h3>
+        <div style="font-size: 2.5rem; font-weight: 800; color: #3498db;">{{ stats.a_tiempo }}</div>
+    </div>
+    <!-- Tardes -->
+    <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--warning); transition: transform 0.2s;">
+        <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Llegadas Tardías</h3>
+        <div style="font-size: 2.5rem; font-weight: 800; color: var(--warning);">{{ stats.tardes }}</div>
+    </div>
+    <!-- Ausentes -->
+    <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--error); transition: transform 0.2s;">
+        <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Ausentes</h3>
+        <div style="font-size: 2.5rem; font-weight: 800; color: var(--error);">{{ stats.ausentes }}</div>
+    </div>
+</div>
+
+<!-- Detalles -->
+<div class="panel panel-full panel-accent-primary">
+    <div class="panel-header flex-between">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Detalle de Registros
+        </h3>
+    </div>
+    <div class="panel-body panel-body-flush">
+        {% if detalle %}
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Empleado</th>
+                        <th>Cargo</th>
+                        <th>Turno Asignado</th>
+                        <th>Hora Entrada</th>
+                        <th>Hora Salida</th>
+                        <th style="text-align: center;">Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in detalle %}
+                    <tr style="{% if d.estado == 'Ausente' %}opacity: 0.6;{% endif %} transition: opacity 0.3s;">
+                        <td class="cell-bold">{{ d.nombre }}</td>
+                        <td class="cell-muted">{{ d.cargo }}</td>
+                        <td>{{ d.turno }}</td>
+                        <td class="fw-600 {% if d.entrada == '--:--' %}text-muted{% endif %}">{{ d.entrada }}</td>
+                        <td class="fw-600 {% if d.salida == '--:--' %}text-muted{% endif %}">{{ d.salida }}</td>
+                        <td style="text-align: center;">
+                            <span class="badge 
+                                {% if d.estado == 'A Tiempo' %}badge-success
+                                {% elif d.estado == 'Llegada Tardia' %}badge-warning
+                                {% else %}badge-danger{% endif %}">
+                                {{ d.estado }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">👥</div>
+            <p>No hay empleados registrados en el sistema.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

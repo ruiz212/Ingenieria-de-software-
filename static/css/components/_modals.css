@@ -1,0 +1,195 @@
+/* ============================================================
+   MODALS & TOASTS — Brajher's Cake Design System
+   ============================================================ */
+
+.hidden { display: none !important; }
+
+/* ── Modal Overlay ── */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    opacity: 0;
+    animation: modalFadeIn 0.25s var(--ease-out) forwards;
+    padding: 1rem;
+}
+
+.modal-overlay.active,
+.modal-overlay:not(.hidden) {
+    opacity: 1;
+    pointer-events: all;
+}
+
+/* ── Modal Content ── */
+.modal-content {
+    background: var(--surface);
+    padding: 2rem;
+    border-radius: var(--radius-xl);
+    width: 100%;
+    max-width: 480px;
+    box-shadow: var(--shadow-lg);
+    max-height: 90vh;
+    overflow-y: auto;
+    transform: scale(0.95) translateY(12px);
+    animation: modalSlideUp 0.35s var(--ease-out) forwards;
+    border-top: 3px solid var(--brand-dorado);
+    position: relative;
+}
+
+.modal-content h2,
+.modal-content h3 {
+    font-size: 1.2rem;
+    color: var(--text-main);
+    margin-bottom: 0.35rem;
+    font-family: 'Playfair Display', serif;
+}
+
+.modal-content p.subtitle {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 1.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border-light);
+}
+
+/* Wide modal variant */
+.modal-content.modal-wide {
+    max-width: 640px;
+}
+
+.modal-content.modal-xl {
+    max-width: 840px;
+}
+
+@keyframes modalFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes modalSlideUp {
+    from { transform: scale(0.95) translateY(12px); opacity: 0; }
+    to   { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* ============================================================
+   TOASTS
+   ============================================================ */
+.toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 9999;
+}
+
+.toast {
+    background: var(--secondary);
+    color: white;
+    padding: 0.85rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    animation: toastSlideIn 0.4s var(--ease-out);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    max-width: 380px;
+}
+
+.toast.error   { background: var(--danger); }
+.toast.success { background: var(--success); }
+.toast.warning { background: var(--warning); color: #3B2218; }
+
+.toast svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+@keyframes toastSlideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ============================================================
+   SPINNER / LOADING
+   ============================================================ */
+.loading-overlay {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: var(--surface);
+    padding: 0.85rem 1.25rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: var(--shadow-lg);
+    z-index: 10000;
+    font-size: 0.875rem;
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+}
+
+.spinner {
+    width: 18px;
+    height: 18px;
+    border: 2.5px solid var(--border);
+    border-top-color: var(--brand-dorado);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.empty-state-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary-subtle);
+    border-radius: 50%;
+    color: var(--brand-dorado);
+    box-shadow: 0 0 0 10px rgba(212, 149, 43, 0.05);
+    opacity: 0.85;
+}
+
+.empty-state p {
+    font-size: 0.95rem;
+    font-weight: 500;
+    max-width: 250px;
+    line-height: 1.5;
+}
+
+.empty-state .btn {
+    margin-top: 1rem;
+}

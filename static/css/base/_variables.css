@@ -1,0 +1,134 @@
+/* ============================================================
+   DESIGN TOKENS — BRAJHER'S CAKE | Panadería y Repostería
+   Brand-driven palette extracted from official logo/mural
+   ============================================================ */
+
+:root {
+    /* ── Brand Core ── */
+    --brand-cafe:       #6B3A2A;
+    --brand-cafe-dark:  #4E2A1E;
+    --brand-dorado:     #D4952B;
+    --brand-dorado-dark:#B87D1E;
+    --brand-beige:      #E8DDD0;
+    --brand-crema:      #F5F0EA;
+
+    /* ── Primary: Dorado Ámbar (CTAs, active states) ── */
+    --primary-color:    #D4952B;
+    --primary-hover:    #B87D1E;
+    --primary-light:    rgba(212, 149, 43, 0.18);
+    --primary-subtle:   rgba(212, 149, 43, 0.10);
+
+    /* ── Secondary: Café Terracota (text, anchors, structure) ── */
+    --secondary:        #6B3A2A;
+    --secondary-hover:  #4E2A1E;
+    --secondary-light:  rgba(107, 58, 42, 0.12);
+
+    /* ── Accent: Verde Fresco (success, positive) ── */
+    --accent:           #4A9D5B;
+    --accent-subtle:    rgba(74, 157, 91, 0.12);
+
+    /* ── Surfaces (Light Mode — Default) ── */
+    --background:       #F5F0EA;    /* Crema suave */
+    --surface:          #FEFCF9;    /* Blanco cálido */
+    --card-bg:          #FFFFFF;
+    --surface-elevated: rgba(255, 255, 255, 0.92);
+    --surface-sunken:   rgba(232, 221, 208, 0.45);
+    --surface-hover:    rgba(255, 255, 255, 0.98);
+
+    /* ── Text ── */
+    --text-main:        #3B2218;    /* Café profundo */
+    --text-muted:       #7A6456;    /* Café medio */
+    --text-faint:       #A89585;    /* Café claro */
+
+    /* ── Semantic ── */
+    --success:          #4A9D5B;
+    --success-bg:       rgba(74, 157, 91, 0.10);
+    --success-border:   rgba(74, 157, 91, 0.25);
+
+    --danger:           #C44536;
+    --danger-bg:        rgba(196, 69, 54, 0.08);
+    --danger-border:    rgba(196, 69, 54, 0.25);
+
+    --warning:          #E8A838;
+    --warning-bg:       rgba(232, 168, 56, 0.10);
+    --warning-border:   rgba(232, 168, 56, 0.25);
+
+    --info:             #3B7CC2;
+    --info-bg:          rgba(59, 124, 194, 0.08);
+    --info-border:      rgba(59, 124, 194, 0.25);
+
+    /* ── Borders ── */
+    --border:           rgba(107, 58, 42, 0.12);
+    --border-light:     rgba(107, 58, 42, 0.06);
+    --border-interactive: rgba(107, 58, 42, 0.20);
+    --glass-blur:       blur(16px);
+
+    /* ── Shadows ── */
+    --shadow-xs:  0 2px 4px rgba(78, 42, 30, 0.04);
+    --shadow-sm:  0 4px 12px rgba(78, 42, 30, 0.05);
+    --shadow:     0 8px 24px rgba(78, 42, 30, 0.06), 0 2px 8px rgba(78, 42, 30, 0.04);
+    --shadow-md:  0 12px 32px rgba(78, 42, 30, 0.07), 0 4px 12px rgba(78, 42, 30, 0.05);
+    --shadow-lg:  0 24px 48px rgba(78, 42, 30, 0.08), 0 12px 24px rgba(78, 42, 30, 0.06);
+    --shadow-glow: 0 0 20px rgba(212, 149, 43, 0.4), 0 0 40px rgba(212, 149, 43, 0.2);
+
+    --ring:       rgba(212, 149, 43, 0.35);
+
+    /* ── Radii ── */
+    --radius-xs:   6px;
+    --radius-sm:   8px;
+    --radius-md:   12px;
+    --radius-lg:   16px;
+    --radius-xl:   20px;
+    --radius-full: 9999px;
+
+    /* ── Transitions ── */
+    --ease-out:          cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring:       cubic-bezier(0.34, 1.56, 0.64, 1);
+    --transition-fast:   0.15s ease;
+    --transition-smooth: 0.3s var(--ease-out);
+    --transition-slow:   0.5s var(--ease-out);
+
+    /* ── Texture (artisanal grain) ── */
+    --texture-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.025'/%3E%3C/svg%3E");
+}
+
+
+/* ============================================================
+   DARK MODE — Café Profundo
+   ============================================================ */
+body.dark-theme,
+html.dark-theme {
+    --background:       #1A120D;
+    --surface:          rgba(45, 31, 22, 0.90);
+    --card-bg:          rgba(45, 31, 22, 0.60);
+    --surface-elevated: rgba(58, 40, 28, 0.85);
+    --surface-sunken:   rgba(26, 18, 13, 0.70);
+    --surface-hover:    rgba(65, 46, 33, 0.90);
+
+    --text-main:        #F5EDE6;
+    --text-muted:       #C4AFA0;
+    --text-faint:       #8C7668;
+
+    --border:           rgba(245, 237, 230, 0.08);
+    --border-light:     rgba(245, 237, 230, 0.04);
+    --border-interactive: rgba(245, 237, 230, 0.15);
+
+    --shadow-xs:  0 1px 2px rgba(0, 0, 0, 0.40);
+    --shadow-sm:  0 2px 4px rgba(0, 0, 0, 0.40);
+    --shadow:     0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.35);
+    --shadow-md:  0 10px 15px -3px rgba(0, 0, 0, 0.50), 0 4px 6px -4px rgba(0, 0, 0, 0.35);
+    --shadow-lg:  0 20px 25px -5px rgba(0, 0, 0, 0.55), 0 8px 10px -6px rgba(0, 0, 0, 0.40);
+    --shadow-glow: 0 0 20px rgba(212, 149, 43, 0.25);
+
+    /* Semantic adjustments for dark */
+    --success-bg:  rgba(74, 157, 91, 0.15);
+    --danger-bg:   rgba(196, 69, 54, 0.15);
+    --warning-bg:  rgba(232, 168, 56, 0.15);
+    --info-bg:     rgba(59, 124, 194, 0.15);
+}
+
+/* Legacy class support */
+body.light-theme,
+html.light-theme {
+    /* Light is default — no overrides needed */
+}

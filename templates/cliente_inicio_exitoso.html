@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panadería Amada | Bienvenido</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        .login-wrapper {
+            width: 100%;
+            max-width: 500px;
+            padding: 2rem;
+            z-index: 10;
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            border-radius: var(--radius-lg);
+            padding: 4rem 3rem;
+            box-shadow: var(--shadow-lg), 0 0 40px rgba(217, 119, 6, 0.15);
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            text-align: center;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .success-icon {
+            font-size: 4rem;
+            color: #10b981; /* Emerald-500 */
+            margin-bottom: 1.5rem;
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            margin-bottom: 0.5rem;
+            color: var(--secondary);
+            font-weight: 800;
+        }
+
+        p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            font-weight: 500;
+            line-height: 1.5;
+            margin-bottom: 2.5rem;
+        }
+
+        .btn-action {
+            width: 100%;
+            padding: 1rem;
+            font-size: 1.05rem;
+            letter-spacing: 0.02em;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            display: inline-block;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 15px rgba(217, 119, 6, 0.3);
+        }
+
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(217, 119, 6, 0.4);
+            background: var(--primary-dark);
+        }
+
+    </style>
+</head>
+<body>
+    <div class="ambient-bg">
+        <div class="ambient-shape shape-1"></div>
+        <div class="ambient-shape shape-2"></div>
+    </div>
+
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="success-icon">
+                <svg width="1em" height="1em" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <h1>¡Bienvenido, {{ current_user.nombre }}!</h1>
+            <p>Tu cuenta ha sido creada exitosamente. Pronto podrás ver nuestros pasteles y personalizar tus pedidos desde aquí.</p>
+            
+            <a href="/pos" class="btn-action">Ir al catálogo por ahora</a>
+        </div>
+    </div>
+</body>
+</html>

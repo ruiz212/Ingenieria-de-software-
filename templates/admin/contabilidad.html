@@ -1,0 +1,378 @@
+{% extends 'admin_base.html' %}
+
+{% block title %}Contabilidad | Brajher's Cake{% endblock %}
+{% block page_title %}Contabilidad Financiera{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <p>Resumen de ingresos, gastos y salud financiera de la empresa.</p>
+</div>
+
+<h3 style="margin-bottom: 1rem; color: var(--text-dark); font-family: 'Playfair Display', serif; font-size: 1.25rem;">Resumen de Hoy</h3>
+<div class="metrics-grid">
+    <!-- Ingresos Hoy -->
+    <div class="metric-card">
+        <div class="metric-icon revenue">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Ingresos Hoy</div>
+            <div class="metric-value text-success">C${{ "%.2f"|format(metricas.ingresos_hoy) }}</div>
+        </div>
+    </div>
+    <!-- Compras MP Hoy -->
+    <div class="metric-card">
+        <div class="metric-icon pending">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Compras MP Hoy</div>
+            <div class="metric-value text-warning">C${{ "%.2f"|format(metricas.compras_hoy) }}</div>
+        </div>
+    </div>
+    <!-- Egresos Priv Hoy -->
+    <div class="metric-card">
+        <div class="metric-icon expense">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Gastos Priv. Hoy</div>
+            <div class="metric-value text-danger">C${{ "%.2f"|format(metricas.egresos_hoy) }}</div>
+        </div>
+    </div>
+    <!-- Balance Hoy -->
+    <div class="metric-card">
+        <div class="metric-icon average">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Utilidad Neta Hoy</div>
+            <div class="metric-value text-primary">C${{ "%.2f"|format(metricas.balance_hoy) }}</div>
+        </div>
+    </div>
+</div>
+
+<h3 style="margin-bottom: 1rem; margin-top: 1.5rem; color: var(--text-dark); font-family: 'Playfair Display', serif; font-size: 1.25rem;">Resumen del Mes en Curso</h3>
+<div class="metrics-grid">
+     <!-- Ingresos Mes -->
+     <div class="metric-card">
+        <div class="metric-body">
+            <div class="metric-title">Ingresos Mensuales</div>
+            <div class="metric-value text-success">C${{ "%.2f"|format(metricas.ingresos_mes) }}</div>
+        </div>
+    </div>
+    <!-- Compras Mes -->
+    <div class="metric-card">
+        <div class="metric-body">
+            <div class="metric-title">Compras Mensuales</div>
+            <div class="metric-value text-warning">C${{ "%.2f"|format(metricas.compras_mes) }}</div>
+        </div>
+    </div>
+    <!-- Gastos Mes -->
+    <div class="metric-card">
+        <div class="metric-body">
+            <div class="metric-title">Gastos Mensuales</div>
+            <div class="metric-value text-danger">C${{ "%.2f"|format(metricas.egresos_mes) }}</div>
+        </div>
+    </div>
+    <!-- Balance Mes -->
+    <div class="metric-card">
+        <div class="metric-body">
+            <div class="metric-title">Utilidad Neta del Mes</div>
+            <div class="metric-value text-primary">C${{ "%.2f"|format(metricas.balance_mes) }}</div>
+        </div>
+    </div>
+</div>
+
+<h3 style="margin-bottom: 1rem; margin-top: 1.5rem; color: var(--text-dark); font-family: 'Playfair Display', serif; font-size: 1.25rem;">Control de Gastos</h3>
+
+<!-- Panels -->
+<div class="panels-grid">
+    <!-- PANEL EGRESOS -->
+    <div class="panel panel-accent-danger">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                Registro de Egresos
+            </h3>
+            <button class="btn btn-primary btn-sm" onclick="abrirModal('egreso')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Nuevo Egreso
+            </button>
+        </div>
+        <div class="panel-body panel-body-flush">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Concepto</th>
+                            <th>Monto</th>
+                            <th>Registró</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in egresos %}
+                        <tr>
+                            <td class="cell-muted">{{ e.fecha }}</td>
+                            <td class="cell-bold">{{ e.concepto }}</td>
+                            <td class="cell-money text-danger">C${{ "%.2f"|format(e.monto) }}</td>
+                            <td class="cell-muted">{{ e.registrado_por }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">📋</div>
+                                    <p>No hay egresos registrados.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- PANEL VALES -->
+    <div class="panel panel-accent-warning">
+        <div class="panel-header">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                Vales a Empleados
+            </h3>
+            <button class="btn btn-primary btn-sm" onclick="abrirModal('vale')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Nuevo Vale
+            </button>
+        </div>
+        <div class="panel-body panel-body-flush">
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Empleado</th>
+                            <th>Monto</th>
+                            <th>Estado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for v in vales %}
+                        <tr>
+                            <td class="cell-muted">{{ v.fecha }}</td>
+                            <td class="cell-bold">{{ v.empleado }}</td>
+                            <td class="cell-money text-warning">C${{ "%.2f"|format(v.monto) }}</td>
+                            <td>
+                                {% if v.descontado %}
+                                <span class="badge badge-success">Descontado</span>
+                                {% else %}
+                                <span class="badge badge-danger badge-live">Pendiente</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-outline btn-sm" onclick="toggleVale({{ v.id }})">
+                                    {{ 'Marcar Pendiente' if v.descontado else 'Marcar Descontado' }}
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">📝</div>
+                                    <p>No hay vales registrados.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Egreso -->
+<div id="modal-egreso" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h2>Nuevo Egreso Privado</h2>
+        <p class="subtitle">Registra un gasto operativo del negocio.</p>
+        
+        <form id="form-egreso">
+            <div class="form-group">
+                <label class="form-label" for="egreso-concepto">Concepto</label>
+                <input type="text" id="egreso-concepto" class="form-input" placeholder="Ej. Pago de Luz, Compra Gas" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="egreso-monto">Monto (C$)</label>
+                <input type="number" id="egreso-monto" class="form-input form-number" min="0" step="0.01" placeholder="0.00" required>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="cerrarModal('egreso')">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Egreso</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Vale -->
+<div id="modal-vale" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h2>Nuevo Vale a Empleado</h2>
+        <p class="subtitle">Registra un adelanto de salario.</p>
+        
+        <form id="form-vale">
+            <div class="form-group">
+                <label class="form-label" for="vale-empleado">Empleado</label>
+                <select id="vale-empleado" class="form-select" required>
+                    <option value="">Seleccione empleado...</option>
+                    {% for emp in empleados %}
+                    <option value="{{ emp.id }}">{{ emp.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="vale-monto">Monto del Adelanto (C$)</label>
+                <input type="number" id="vale-monto" class="form-input form-number" min="0" step="0.01" placeholder="0.00" required>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="cerrarModal('vale')">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Vale</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function abrirModal(tipo) {
+        document.getElementById(`modal-${tipo}`).classList.remove('hidden');
+    }
+
+    function cerrarModal(tipo) {
+        document.getElementById(`modal-${tipo}`).classList.add('hidden');
+        if (tipo === 'egreso') {
+            document.getElementById('egreso-concepto').value = '';
+            document.getElementById('egreso-monto').value = '';
+        } else {
+            document.getElementById('vale-empleado').value = '';
+            document.getElementById('vale-monto').value = '';
+        }
+    }
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                cerrarModal(overlay.id.replace('modal-', ''));
+            }
+        });
+    });
+
+    // Handlers para formularios
+    document.getElementById('form-egreso').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const concepto = document.getElementById('egreso-concepto').value.trim();
+        const monto = document.getElementById('egreso-monto').value;
+        if (!concepto || !monto) { showToast('Complete todos los campos requeridos', true); return; }
+
+        showLoading();
+        try {
+            const res = await fetchWithTimeout('/admin/api/contabilidad/egresos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ concepto, monto })
+            });
+            const data = await res.json();
+            hideLoading();
+            if (res.ok) { 
+                showToast('Egreso registrado correctamente');
+                cerrarModal('egreso');
+                const tbody = document.querySelector('.panel-accent-danger .data-table tbody');
+                const empty = tbody.querySelector('.empty-state');
+                if(empty) tbody.innerHTML = '';
+                
+                const tr = document.createElement('tr');
+                const d = new Date();
+                const fecha = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                tr.innerHTML = `
+                    <td class="cell-muted">${fecha}</td>
+                    <td class="cell-bold">${escapeHTML(concepto)}</td>
+                    <td class="cell-money text-danger">C$${parseFloat(monto).toFixed(2)}</td>
+                    <td class="cell-muted">Tú</td>
+                `;
+                tbody.prepend(tr);
+            } else { 
+                showToast(data.error, true); 
+            }
+        } catch (e) { hideLoading(); showToast('Error de red', true); }
+    });
+
+    document.getElementById('form-vale').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const selectEmpleado = document.getElementById('vale-empleado');
+        const empleado_id = selectEmpleado.value;
+        const empleadoNombre = selectEmpleado.options[selectEmpleado.selectedIndex].text;
+        const monto = document.getElementById('vale-monto').value;
+        if (!empleado_id || !monto) { showToast('Complete todos los campos requeridos', true); return; }
+
+        showLoading();
+        try {
+            const res = await fetchWithTimeout('/admin/api/contabilidad/vales', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ empleado_id, monto })
+            });
+            const data = await res.json();
+            hideLoading();
+            if (res.ok) { 
+                showToast('Vale registrado correctamente');
+                cerrarModal('vale');
+                const tbody = document.querySelector('.panel-accent-warning .data-table tbody');
+                const empty = tbody.querySelector('.empty-state');
+                if(empty) tbody.innerHTML = '';
+                
+                const tr = document.createElement('tr');
+                const d = new Date();
+                const fecha = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                tr.innerHTML = `
+                    <td class="cell-muted">${fecha}</td>
+                    <td class="cell-bold">${escapeHTML(empleadoNombre)}</td>
+                    <td class="cell-money text-warning">C$${parseFloat(monto).toFixed(2)}</td>
+                    <td><span class="badge badge-danger badge-live">Pendiente</span></td>
+                    <td>
+                        <button class="btn btn-outline btn-sm" onclick="toggleVale(${data.id})">Marcar Descontado</button>
+                    </td>
+                `;
+                tbody.prepend(tr);
+            } else { 
+                showToast(data.error, true); 
+            }
+        } catch (e) { hideLoading(); showToast('Error de red', true); }
+    });
+
+    async function toggleVale(id) {
+        showLoading();
+        try {
+            const res = await fetchWithTimeout(`/admin/api/contabilidad/vales/${id}/toggle`, { method: 'POST' });
+            hideLoading();
+            if (res.ok) { window.location.reload(); } else { showToast('Error al actualizar', true); }
+        } catch (e) { hideLoading(); showToast('Error de red', true); }
+    }
+
+    // Utilidad escapeHTML
+    function escapeHTML(str) {
+        if (!str) return '';
+        return str.toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+</script>
+{% endblock %}

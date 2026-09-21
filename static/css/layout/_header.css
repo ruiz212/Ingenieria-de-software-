@@ -1,0 +1,207 @@
+/* APP HEADER / NAVBAR */
+.app-header {
+    background: var(--surface-elevated);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    padding: 0 1.5rem;
+    height: 72px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-light);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-sm);
+}
+
+.app-header h1 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Admin Navbar */
+.admin-nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+.admin-nav-brand .brand-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.25);
+}
+
+.admin-nav-brand .brand-text {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.15rem;
+    color: var(--secondary);
+    letter-spacing: -0.02em;
+}
+
+.mobile-menu-btn { display: none; }
+
+.admin-nav-links {
+    display: flex;
+    align-items: center;
+    gap: 0.1rem;
+    margin-left: 0.5rem;
+    padding-left: 0.5rem;
+    border-left: 1px solid var(--border);
+    height: 100%;
+    overflow: visible;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.admin-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.5rem;
+    text-decoration: none;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.85rem;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+    position: relative;
+    white-space: nowrap;
+}
+
+.admin-nav-link:hover {
+    color: var(--secondary);
+    background: var(--surface-hover);
+}
+
+.admin-nav-link.active {
+    color: var(--primary-color);
+    background: var(--primary-subtle);
+}
+
+.admin-nav-link.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 2px;
+    background: var(--primary-color);
+    border-radius: 2px 2px 0 0;
+}
+
+.admin-nav-link svg {
+    width: 16px;
+    height: 16px;
+    opacity: 0.75;
+    flex-shrink: 0;
+}
+
+.admin-nav-link.active svg {
+    opacity: 1;
+}
+
+.admin-nav-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+}
+
+.admin-nav-user {
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admin-nav-role {
+    background: var(--primary-subtle);
+    color: var(--primary-hover);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-xs);
+    font-weight: 700;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Navbar dropdown "Más" */
+.nav-dropdown-wrapper {
+    position: relative;
+}
+
+.nav-dropdown-trigger {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0; /* Right align to avoid going off-screen to the right */
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    min-width: 200px;
+    z-index: 200;
+    padding: 0.5rem;
+    gap: 0.25rem;
+    animation: dropIn 0.15s ease;
+}
+
+.nav-dropdown-wrapper.active .nav-dropdown-menu {
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes dropIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.nav-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    text-decoration: none;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all var(--transition-fast);
+    border-radius: var(--radius-sm);
+}
+
+.nav-dropdown-item:hover,
+.nav-dropdown-item.active {
+    color: var(--primary-color);
+    background: var(--primary-subtle);
+}
+
+.nav-dropdown-item svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    opacity: 0.75;
+}
+
