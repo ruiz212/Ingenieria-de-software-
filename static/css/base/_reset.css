@@ -1,0 +1,102 @@
+/* ============================================================
+   RESET & BASE — Brajher's Cake
+   ============================================================ */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--background);
+    color: var(--text-main);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', 'Georgia', serif;
+    font-weight: 700;
+    color: var(--text-main);
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+}
+
+a { color: inherit; }
+
+/* Scrollbar — Artisanal warm tones */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(107, 58, 42, 0.25);
+}
+
+/* ============================================================
+   AMBIENT BACKGROUND — Warm bakery glow
+   ============================================================ */
+.ambient-bg {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    overflow: hidden;
+    z-index: -1;
+    background:
+        var(--texture-grain),
+        radial-gradient(ellipse at 15% 50%, rgba(212, 149, 43, 0.08) 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 20%, rgba(107, 58, 42, 0.05) 0%, transparent 55%),
+        radial-gradient(ellipse at 50% 90%, rgba(212, 149, 43, 0.04) 0%, transparent 50%),
+        var(--background);
+}
+
+body.dark-theme .ambient-bg,
+html.dark-theme .ambient-bg {
+    background:
+        var(--texture-grain),
+        radial-gradient(ellipse at 15% 50%, rgba(212, 149, 43, 0.06) 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 30%, rgba(196, 69, 54, 0.03) 0%, transparent 50%),
+        var(--background);
+}
+
+.ambient-shape { display: none; }
+
+/* ============================================================
+   ANIMATIONS — Reusable keyframes
+   ============================================================ */
+@keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.5; }
+}
+
+@keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+/* Selection */
+::selection {
+    background: rgba(212, 149, 43, 0.25);
+    color: var(--text-main);
+}

@@ -1,0 +1,119 @@
+/* ============================================================
+   STEPPER — Multi-stage flow component
+   Used by Arqueos de Caja and other multi-step processes
+   ============================================================ */
+
+.stepper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 1.5rem 0;
+    margin-bottom: 2rem;
+}
+
+.stepper-step {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    position: relative;
+}
+
+.stepper-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.85rem;
+    font-family: 'Outfit', sans-serif;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    color: var(--text-faint);
+    transition: all 0.4s var(--ease-out);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+}
+
+.stepper-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-faint);
+    white-space: nowrap;
+    transition: color 0.3s;
+    font-family: 'Inter', sans-serif;
+}
+
+.stepper-sublabel {
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    display: block;
+    font-weight: 400;
+}
+
+/* Connector line between steps */
+.stepper-line {
+    width: 60px;
+    height: 2px;
+    background: var(--border);
+    margin: 0 0.5rem;
+    transition: background 0.4s var(--ease-out);
+    flex-shrink: 0;
+}
+
+/* States */
+.stepper-step.active .stepper-circle {
+    background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
+    border-color: var(--brand-dorado);
+    color: white;
+    box-shadow: 0 4px 16px rgba(212, 149, 43, 0.30);
+    transform: scale(1.1);
+}
+
+.stepper-step.active .stepper-label {
+    color: var(--brand-dorado-dark);
+    font-weight: 700;
+}
+
+.stepper-step.completed .stepper-circle {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+.stepper-step.completed .stepper-circle::after {
+    content: '✓';
+    font-size: 1rem;
+}
+
+.stepper-step.completed .stepper-label {
+    color: var(--success);
+}
+
+.stepper-line.completed {
+    background: var(--success);
+}
+
+.stepper-line.active {
+    background: linear-gradient(90deg, var(--success), var(--brand-dorado));
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .stepper {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0;
+    }
+    .stepper-step {
+        gap: 0.75rem;
+    }
+    .stepper-line {
+        width: 2px;
+        height: 24px;
+        margin: 0.25rem 0 0.25rem 19px;
+    }
+}

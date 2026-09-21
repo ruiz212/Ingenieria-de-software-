@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panadería Amada | Bienvenido</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        .login-wrapper {
+            width: 100%;
+            max-width: 450px;
+            padding: 2rem;
+            z-index: 10;
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            border-radius: var(--radius-lg);
+            padding: 3.5rem 2.5rem;
+            box-shadow: var(--shadow-lg), 0 0 40px rgba(217, 119, 6, 0.15);
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            text-align: center;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo-area {
+            margin-bottom: 2.5rem;
+        }
+
+        .logo-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            display: inline-block;
+            animation: floatLogo 6s ease-in-out infinite;
+        }
+
+        @keyframes floatLogo {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .logo-area h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: var(--secondary);
+            font-weight: 800;
+        }
+
+        .logo-area p {
+            color: var(--text-muted);
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .btn-action {
+            width: 100%;
+            padding: 1rem;
+            font-size: 1.05rem;
+            margin-bottom: 1rem;
+            letter-spacing: 0.02em;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            display: block;
+            text-decoration: none;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .btn-action.btn-primary {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 15px rgba(217, 119, 6, 0.3);
+        }
+
+        .btn-action.btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(217, 119, 6, 0.4);
+            background: var(--primary-dark);
+        }
+
+        .btn-action.btn-outline {
+            background: transparent;
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+
+        .btn-action.btn-outline:hover {
+            background: rgba(217, 119, 6, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .btn-action.btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            margin-top: 1.5rem;
+            font-size: 0.95rem;
+        }
+
+        .btn-action.btn-ghost:hover {
+            color: var(--secondary);
+            text-decoration: underline;
+        }
+
+        .footer {
+            margin-top: 3rem;
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        
+        .flash-messages {
+            margin-bottom: 1.5rem;
+            list-style: none;
+            padding: 0;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .flash-message {
+            background: var(--danger-bg);
+            color: var(--danger);
+            padding: 0.85rem 1rem;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <!-- Premium Ambient Background -->
+    <div class="ambient-bg">
+        <div class="ambient-shape shape-1"></div>
+        <div class="ambient-shape shape-2"></div>
+    </div>
+
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="logo-area">
+                <div class="logo-icon">🎂</div>
+                <h1>Panadería Amada</h1>
+                <p>Descubre el sabor de la tradición</p>
+            </div>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <ul class="flash-messages">
+                    {% for category, message in messages %}
+                        <li class="flash-message">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            {{ message }}
+                        </li>
+                    {% endfor %}
+                    </ul>
+                {% endif %}
+            {% endwith %}
+
+            <a href="{{ url_for('auth.login') }}" class="btn-action btn-primary">Iniciar Sesión</a>
+            <a href="{{ url_for('auth.cliente_registro') }}" class="btn-action btn-outline">Registrarse</a>
+            <a href="{{ url_for('auth.cliente_invitado') }}" class="btn-action btn-ghost">Continuar como Invitado</a>
+
+            <div class="footer">
+                &copy; 2026 Panadería Amada.
+            </div>
+        </div>
+    </div>
+</body>
+</html>

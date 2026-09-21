@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiosco de Marcaje — Brajher's Cake</title>
+    <meta name="description" content="Sistema de marcaje de asistencia con reconocimiento facial para empleados.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #8e44ad;
+            --primary-dark: #732d91;
+            --bg-color: #0a0a14;
+            --text-light: #f5f6fa;
+            --success: #2ecc71;
+            --error: #e74c3c;
+            --warning: #e67e22;
+            --glass-bg: rgba(255, 255, 255, 0.04);
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-light);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-image:
+                radial-gradient(ellipse at 30% 20%, rgba(142, 68, 173, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(52, 152, 219, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(26, 26, 46, 1) 0%, var(--bg-color) 100%);
+            user-select: none;
+            cursor: default;
+        }
+
+        /* ═══ HEADER ═══ */
+        .kiosco-header {
+            text-align: center;
+            margin-bottom: 24px;
+            z-index: 10;
+        }
+        .kiosco-header .brand {
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            color: var(--primary);
+            opacity: 0.9;
+            margin-bottom: 4px;
+        }
+        .kiosco-header .clock {
+            font-size: 4.5rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-shadow: 0 4px 20px rgba(142, 68, 173, 0.3);
+            line-height: 1;
+        }
+        .kiosco-header .date {
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 500;
+            letter-spacing: 1px;
+            margin-top: 6px;
+        }
+
+        /* ═══ CAMERA ═══ */
+        .camera-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 580px;
+            height: 440px;
+            border-radius: 24px;
+            overflow: hidden;
+            background: #000;
+            border: 2px solid var(--glass-border);
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 80px rgba(142, 68, 173, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            transition: border-color 0.5s ease, box-shadow 0.5s ease;
+        }
+        .camera-container.flash-entrada {
+            border-color: var(--success) !important;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(46, 204, 113, 0.3) !important;
+        }
+        .camera-container.flash-salida {
+            border-color: #3498db !important;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(52, 152, 219, 0.3) !important;
+        }
+        .camera-container.flash-error {
+            border-color: var(--error) !important;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(231, 76, 60, 0.3) !important;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        /* Oculto, usado para capturar frames */
+        #canvas {
+            display: none;
+        }
+
+        /* Scan line animation overlay */
+        .scan-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            opacity: 0.15;
+            transition: opacity 0.5s ease;
+        }
+        .scan-overlay.paused {
+            opacity: 0;
+        }
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            animation: scanMove 3s ease-in-out infinite;
+        }
+        @keyframes scanMove {
+            0%, 100% { top: 0; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            50% { top: 100%; }
+        }
+
+        /* ═══ STATUS BAR ═══ */
+        .status-bar {
+            margin-top: 24px;
+            padding: 14px 32px;
+            border-radius: 100px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(20px);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.4s ease;
+        }
+        .status-dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: var(--warning);
+            flex-shrink: 0;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.6); }
+            70% { box-shadow: 0 0 0 8px rgba(230, 126, 34, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0); }
+        }
+        .status-bar.ready .status-dot {
+            background: var(--success);
+            box-shadow: 0 0 12px var(--success);
+            animation: none;
+        }
+        .status-bar.error-state .status-dot {
+            background: var(--error);
+            box-shadow: 0 0 12px var(--error);
+            animation: none;
+        }
+        .status-bar.paused .status-dot {
+            background: #3498db;
+            box-shadow: 0 0 12px #3498db;
+            animation: pulse 2s infinite;
+        }
+
+        /* ═══ TOAST ═══ */
+        #toast {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            min-width: 400px;
+            max-width: 600px;
+            padding: 20px 32px;
+            border-radius: 16px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            text-align: center;
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(20px);
+        }
+        #toast.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+        #toast.toast-entrada {
+            background: linear-gradient(135deg, rgba(46, 204, 113, 0.9), rgba(39, 174, 96, 0.9));
+            color: white;
+            box-shadow: 0 8px 32px rgba(46, 204, 113, 0.4);
+        }
+        #toast.toast-salida {
+            background: linear-gradient(135deg, rgba(52, 152, 219, 0.9), rgba(41, 128, 185, 0.9));
+            color: white;
+            box-shadow: 0 8px 32px rgba(52, 152, 219, 0.4);
+        }
+        #toast.toast-error {
+            background: linear-gradient(135deg, rgba(231, 76, 60, 0.9), rgba(192, 57, 43, 0.9));
+            color: white;
+            box-shadow: 0 8px 32px rgba(231, 76, 60, 0.4);
+        }
+        #toast .toast-icon {
+            font-size: 1.6rem;
+            margin-right: 8px;
+        }
+
+        /* ═══ INSTRUCCIONES ═══ */
+        .instructions {
+            position: absolute;
+            bottom: 100px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+        .instructions.visible {
+            opacity: 1;
+        }
+        .instructions p {
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.4);
+            font-weight: 500;
+        }
+
+        /* ═══ RESPONSIVE ═══ */
+        @media (max-width: 700px) {
+            .camera-container { width: 95vw; height: 70vw; }
+            .kiosco-header .clock { font-size: 3rem; }
+            #toast { min-width: 90vw; font-size: 1.1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="kiosco-header">
+        <div class="brand">FaceID Access</div>
+        <div class="clock" id="clock">00:00:00</div>
+        <div class="date" id="date">Cargando...</div>
+    </div>
+
+    <div class="camera-wrapper">
+        <div class="camera-container" id="cameraBox">
+            <video id="video" autoplay muted playsinline></video>
+            <canvas id="canvas" width="640" height="480"></canvas>
+            <div class="scan-overlay" id="scanOverlay">
+                <div class="scan-line"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Inicializando cámara...</span>
+    </div>
+
+    <div class="instructions" id="instructions">
+        <p>Acércate a la cámara para registrar tu asistencia</p>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        // ═══════════════════════════════════════════
+        // KIOSCO DE MARCAJE — BACKEND FACE RECOGNITION
+        // ═══════════════════════════════════════════
+
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('statusText');
+        const statusBar = document.getElementById('statusBar');
+        const cameraBox = document.getElementById('cameraBox');
+        const instructions = document.getElementById('instructions');
+        const scanOverlay = document.getElementById('scanOverlay');
+
+        let scanInterval = null;
+        let isRequestPending = false;
+        let isPaused = false;
+
+        // ─── RELOJ ───
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent =
+                now.toLocaleTimeString('es-NI', { hour12: false });
+            document.getElementById('date').textContent =
+                now.toLocaleDateString('es-NI', {
+                    weekday: 'long', year: 'numeric',
+                    month: 'long', day: 'numeric'
+                }).toUpperCase();
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // ─── TOAST Y EFECTOS ───
+        function showToast(msg, tipo = 'entrada') {
+            const toast = document.getElementById('toast');
+            let icon = '✅';
+            let cssClass = 'toast-entrada';
+
+            if (tipo === 'salida') {
+                icon = '👋';
+                cssClass = 'toast-salida';
+            } else if (tipo === 'error' || tipo === 'completado') {
+                icon = '⚠️';
+                cssClass = 'toast-error';
+            }
+
+            toast.innerHTML = `<span class="toast-icon">${icon}</span> ${msg}`;
+            toast.className = `show ${cssClass}`;
+
+            // Flash en cámara
+            cameraBox.classList.remove('flash-entrada', 'flash-salida', 'flash-error');
+            if (tipo === 'entrada') cameraBox.classList.add('flash-entrada');
+            else if (tipo === 'salida') cameraBox.classList.add('flash-salida');
+            else cameraBox.classList.add('flash-error');
+
+            setTimeout(() => {
+                toast.className = '';
+                cameraBox.classList.remove('flash-entrada', 'flash-salida', 'flash-error');
+            }, 5000);
+        }
+
+        function playBeep(isEntrada) {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.frequency.value = isEntrada ? 880 : 660;
+                gain.gain.value = 0.15;
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.15);
+            } catch (e) { /* Audio not supported */ }
+        }
+
+        // ─── CÁMARA ───
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480, facingMode: "user" } 
+                });
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    statusText.textContent = 'IA lista — Acércate a la cámara';
+                    statusBar.classList.remove('error-state');
+                    statusBar.classList.add('ready');
+                    instructions.classList.add('visible');
+                    
+                    // Iniciar el loop de envío de frames al backend
+                    startScanning();
+                };
+            } catch (err) {
+                console.error('Error accediendo a la cámara:', err);
+                statusText.textContent = 'Error: No se pudo acceder a la cámara.';
+                statusBar.classList.add('error-state');
+            }
+        }
+
+        // ─── LÓGICA DE ESCANEO ───
+        function startScanning() {
+            if (scanInterval) clearInterval(scanInterval);
+            // Ejecutar captura y reconocimiento cada 1000 ms (1 segundo)
+            scanInterval = setInterval(processFrame, 1000);
+        }
+
+        async function processFrame() {
+            if (isPaused || isRequestPending) return;
+
+            isRequestPending = true;
+
+            try {
+                // Dibujar el video en el canvas
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Exportar como imagen JPEG comprimida para ahorrar ancho de banda
+                const base64Image = canvas.toDataURL('image/jpeg', 0.6);
+
+                const response = await fetch('/kiosco/api/kiosco/reconocer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64Image })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        // Marcaje exitoso (entrada o salida)
+                        handleSuccess(data);
+                    } else if (data.status === 'completado') {
+                        // Ya completó la jornada
+                        handleSuccess(data);
+                    } else if (data.status === 'error') {
+                        console.error('Error del servidor:', data.message);
+                    }
+                    // Si es 'no_face' o 'unknown', no hacemos nada (seguimos escaneando silenciosamente)
+                }
+            } catch (error) {
+                console.error('Error enviando frame al backend:', error);
+            } finally {
+                isRequestPending = false;
+            }
+        }
+
+        function hablar(texto) {
+            if ('speechSynthesis' in window) {
+                // Cancelar si ya está hablando para no encolar audios
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(texto);
+                utterance.lang = 'es-MX'; // Español latino genérico
+                utterance.rate = 1.0; // Velocidad normal
+                utterance.pitch = 1.1; // Tono ligeramente más amigable
+                
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function handleSuccess(data) {
+            // Mostrar mensaje y hablar
+            if (data.status === 'success') {
+                showToast(data.mensaje, data.tipo);
+                playBeep(data.tipo === 'entrada');
+                hablar(data.mensaje);
+            } else {
+                showToast(data.mensaje, 'completado');
+                playBeep(false);
+                hablar(data.mensaje);
+            }
+
+            // Pausar escaneo (Cooldown)
+            pauseScanning();
+        }
+
+        function pauseScanning() {
+            isPaused = true;
+            scanOverlay.classList.add('paused');
+            statusText.textContent = 'Procesado. Espera un momento...';
+            statusBar.classList.remove('ready');
+            statusBar.classList.add('paused');
+
+            // Reanudar después de 6 segundos
+            setTimeout(() => {
+                isPaused = false;
+                scanOverlay.classList.remove('paused');
+                statusText.textContent = 'IA lista — Acércate a la cámara';
+                statusBar.classList.remove('paused');
+                statusBar.classList.add('ready');
+            }, 6000);
+        }
+
+        // ─── ARRANCAR ───
+        window.addEventListener('DOMContentLoaded', initCamera);
+
+    </script>
+</body>
+</html>
