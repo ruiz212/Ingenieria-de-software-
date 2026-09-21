@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiosco Inteligente - Brajher's Cake</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- face-api.js CDN -->
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        :root {
+            --primary: #8e44ad;
+            --primary-dark: #732d91;
+            --bg-color: #0f0f1a;
+            --text-light: #f5f6fa;
+        }
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-light);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100vh; overflow: hidden;
+            background-image: radial-gradient(circle at 50% 50%, #2a1b3d 0%, #0f0f1a 100%);
+        }
+        .header {
+            position: absolute; top: 40px; text-align: center; z-index: 10;
+        }
+        .header h1 { margin: 0; font-size: 2.5rem; color: var(--primary); text-transform: uppercase; letter-spacing: 2px;}
+        .clock { font-size: 4rem; font-weight: 700; margin: 10px 0; text-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .date { font-size: 1.2rem; color: #bdc3c7; }
+        
+        .camera-container {
+            position: relative;
+            width: 640px; height: 480px;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 3px solid rgba(142, 68, 173, 0.3);
+            background: #000;
+        }
+        #video {
+            width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);
+        }
+        canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        }
+        
+        .status-box {
+            margin-top: 30px;
+            padding: 15px 30px;
+            border-radius: 50px;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            font-size: 1.2rem;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .status-dot {
+            width: 15px; height: 15px; border-radius: 50%;
+            background: #e67e22;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(230, 126, 34, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0); }
+        }
+        .status-ready .status-dot { background: #2ecc71; box-shadow: 0 0 15px #2ecc71; animation: none;}
+
+        .action-selector {
+            position: absolute; right: 40px; top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 20px;
+        }
+        .mode-btn {
+            padding: 20px 40px;
+            border-radius: 15px;
+            border: 2px solid transparent;
+            background: rgba(255,255,255,0.05);
+            color: white; font-size: 1.5rem; font-weight: bold;
+            cursor: pointer; transition: all 0.3s;
+        }
+        .mode-btn.active.entrada { background: rgba(46, 204, 113, 0.2); border-color: #2ecc71; color: #2ecc71; }
+        .mode-btn.active.salida { background: rgba(231, 76, 60, 0.2); border-color: #e74c3c; color: #e74c3c; }
+        
+        #toast {
+            visibility: hidden;
+            min-width: 300px;
+            background-color: #333; color: #fff;
+            text-align: center; border-radius: 12px;
+            padding: 20px; position: fixed; z-index: 100;
+            left: 50%; bottom: 40px; transform: translateX(-50%);
+            font-size: 1.5rem; font-weight: bold;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            opacity: 0; transition: opacity 0.3s, bottom 0.3s;
+        }
+        #toast.show { visibility: visible; opacity: 1; bottom: 60px; }
+        #toast.success { background-color: #2ecc71; }
+        #toast.error { background-color: #e74c3c; }
+
+        .back-btn {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(255,255,255,0.1); color: white;
+            text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <a href="/admin/rrhh" class="back-btn">← Volver a RRHH</a>
+
+    <div class="header">
+        <h1>FaceID Access</h1>
+        <div class="clock" id="clock">00:00:00</div>
+        <div class="date" id="date">Cargando fecha...</div>
+    </div>
+
+    <div class="camera-container">
+        <video id="video" autoplay muted></video>
+    </div>
+    
+    <div class="status-box" id="statusBox">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Cargando Motores de IA...</span>
+    </div>
+
+    <div class="action-selector">
+        <button class="mode-btn entrada active" onclick="setMode('entrada')">Entrada</button>
+        <button class="mode-btn salida" onclick="setMode('salida')">Salida</button>
+    </div>
+
+    <div id="toast">Mensaje</div>
+
+    <script>
+        const video = document.getElementById('video');
+        const statusText = document.getElementById('statusText');
+        const statusBox = document.getElementById('statusBox');
+        let currentMode = 'entrada';
+        let faceMatcher = null;
+        let isProcessing = false;
+        let recentDetections = new Map(); // Prevent spamming api
+        
+        // Reloj
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toLocaleTimeString('es-NI', { hour12: false });
+            document.getElementById('date').textContent = now.toLocaleDateString('es-NI', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase();
+        }
+        setInterval(updateClock, 1000); updateClock();
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`.mode-btn.${mode}`).classList.add('active');
+        }
+
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = isError ? 'show error' : 'show success';
+            setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 4000);
+        }
+
+        async function initAI() {
+            try {
+                // Usando modelos alojados localmente para evitar errores de red (CORS) y funcionar offline
+                const MODEL_URL = '/static/models';
+                
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+                
+                statusText.textContent = "Cargando Empleados...";
+                await loadEmployees();
+                
+                startVideo();
+            } catch (e) {
+                console.error(e);
+                statusText.textContent = "Error de red al cargar IA.";
+                document.getElementById('statusDot').style.background = "#e74c3c";
+            }
+        }
+
+        async function loadEmployees() {
+            const res = await fetch('/admin/api/rrhh/empleados/referencias');
+            const empleados = await res.json();
+            
+            if (empleados.length === 0) {
+                statusText.textContent = "No hay fotos de empleados registradas.";
+                document.getElementById('statusDot').style.background = "#e74c3c";
+                return;
+            }
+
+            const labeledDescriptors = [];
+            for (const emp of empleados) {
+                try {
+                    const img = await faceapi.fetchImage(emp.foto);
+                    const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+                    if (detection) {
+                        labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(
+                            JSON.stringify({id: emp.id, nombre: emp.nombre}), 
+                            [detection.descriptor]
+                        ));
+                    }
+                } catch(e) {
+                    console.warn("No se pudo cargar foto de " + emp.nombre);
+                }
+            }
+
+            if (labeledDescriptors.length > 0) {
+                faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.5); // 0.5 = 50% de distancia (muy estricto)
+                statusText.textContent = "IA Lista - Acércate a la cámara";
+                statusBox.classList.add('status-ready');
+            } else {
+                statusText.textContent = "Ninguna foto de perfil detectó un rostro válido.";
+            }
+        }
+
+        function startVideo() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => { video.srcObject = stream; })
+                .catch(err => {
+                    statusText.textContent = "Error: Cámara no permitida.";
+                    document.getElementById('statusDot').style.background = "#e74c3c";
+                });
+        }
+
+        video.addEventListener('play', () => {
+            const canvas = faceapi.createCanvasFromMedia(video);
+            document.querySelector('.camera-container').append(canvas);
+            const displaySize = { width: video.width || 640, height: video.height || 480 };
+            faceapi.matchDimensions(canvas, displaySize);
+
+            setInterval(async () => {
+                if(!faceMatcher) return;
+
+                // Optimización: Un solo rostro a la vez, menor inputSize para máxima velocidad (224px)
+                const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })).withFaceLandmarks().withFaceDescriptor();
+                
+                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (detection) {
+                    const resizedDetection = faceapi.resizeResults(detection, displaySize);
+                    const result = faceMatcher.findBestMatch(resizedDetection.descriptor);
+                    
+                    const box = resizedDetection.detection.box;
+                    let color = '#e74c3c'; // Rojo por defecto (desconocido)
+                    let text = "Desconocido";
+
+                    if(result.label !== "unknown") {
+                        const emp = JSON.parse(result.label);
+                        text = emp.nombre;
+                        color = '#2ecc71'; // Verde (conocido)
+                        marcarAsistencia(emp);
+                    }
+                    
+                    // Invertir coordenadas X para que coincida con el modo espejo de la cámara
+                    const mirroredBox = {
+                        x: displaySize.width - box.x - box.width,
+                        y: box.y,
+                        width: box.width,
+                        height: box.height
+                    };
+                    
+                    const drawBox = new faceapi.draw.DrawBox(mirroredBox, { label: text, boxColor: color });
+                    drawBox.draw(canvas);
+                }
+            }, 750); // Evaluar cada 750ms para no saturar el CPU
+        });
+
+        async function marcarAsistencia(emp) {
+            if(isProcessing) return;
+            
+            // Cooldown de 10 segundos por persona para no spamear
+            const now = Date.now();
+            if(recentDetections.has(emp.id) && (now - recentDetections.get(emp.id)) < 10000) return;
+            
+            isProcessing = true;
+            recentDetections.set(emp.id, now);
+            
+            // UI Feedback
+            const originalColor = document.querySelector('.camera-container').style.borderColor;
+            document.querySelector('.camera-container').style.borderColor = '#2ecc71';
+            
+            try {
+                const res = await fetch('/admin/api/rrhh/kiosco/marcar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ empleado_id: emp.id, tipo: currentMode })
+                });
+                const data = await res.json();
+                
+                if(res.ok) {
+                    showToast(data.mensaje);
+                    // Emitir sonido de confirmación
+                    const audio = new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'); // Beep dummy
+                    audio.play().catch(e=>{});
+                } else {
+                    showToast(data.error, true);
+                }
+            } catch(e) {
+                console.error(e);
+            }
+            
+            setTimeout(() => {
+                document.querySelector('.camera-container').style.borderColor = originalColor;
+                isProcessing = false;
+            }, 1000);
+        }
+
+        initAI();
+    </script>
+</body>
+</html>

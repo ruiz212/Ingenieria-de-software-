@@ -321,6 +321,20 @@
                     <span class="info-label" style="color: var(--danger);">Fecha de Entrega:</span>
                     <span class="info-value" style="color: var(--danger);">{{ factura.encargo_detalles.fecha_entrega }}</span>
                 </div>
+                
+                {% if factura.encargo_detalles.especificaciones or factura.encargo_detalles.ruta_imagen_referencia %}
+                <div style="background: #fff9f0; border: 1px solid var(--warning); padding: 1rem; border-radius: var(--radius-sm); margin-top: 1rem;">
+                    <div style="color: #d97706; font-weight: 800; font-size: 0.9rem; text-transform: uppercase; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.25rem;">✨ Pastel Personalizado</div>
+                    {% if factura.encargo_detalles.especificaciones %}
+                        <p style="font-size: 0.9rem; margin: 0 0 0.5rem 0; color: var(--text-main);"><strong>Especificaciones:</strong><br>{{ factura.encargo_detalles.especificaciones }}</p>
+                    {% endif %}
+                    {% if factura.encargo_detalles.ruta_imagen_referencia %}
+                        <a href="{% if factura.encargo_detalles.ruta_imagen_referencia.startswith('http') %}{{ factura.encargo_detalles.ruta_imagen_referencia }}{% else %}{{ url_for('static', filename=factura.encargo_detalles.ruta_imagen_referencia) }}{% endif %}" target="_blank" style="font-size: 0.85rem; display: inline-flex; align-items: center; gap: 0.35rem; color: var(--primary); font-weight: 700; text-decoration: none; background: rgba(30, 64, 175, 0.1); padding: 0.35rem 0.6rem; border-radius: 4px;">
+                            <span style="font-size: 1.1rem;">🖼️</span> Ver foto de referencia
+                        </a>
+                    {% endif %}
+                </div>
+                {% endif %}
                 {% endif %}
             </div>
 

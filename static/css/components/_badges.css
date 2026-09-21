@@ -1,0 +1,115 @@
+/* ============================================================
+   BADGES — Brajher's Cake Design System
+   ============================================================ */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    border-radius: var(--radius-full);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    line-height: 1.5;
+}
+
+.badge-success {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success-border);
+}
+
+.badge-danger {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger-border);
+}
+
+.badge-warning {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
+}
+
+.badge-info {
+    background: var(--info-bg);
+    color: var(--info);
+    border: 1px solid var(--info-border);
+}
+
+.badge-primary {
+    background: var(--primary-subtle);
+    color: var(--brand-dorado-dark);
+    border: 1px solid rgba(212, 149, 43, 0.25);
+}
+
+.badge-neutral {
+    background: var(--surface-sunken);
+    color: var(--text-muted);
+    border: 1px solid var(--border-light);
+}
+
+/* Live pulse animation */
+.badge-live::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 1.8s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+/* Dot indicator */
+.badge-dot {
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    border-radius: 50%;
+    border: none;
+}
+
+.badge-dot.success { background: var(--success); }
+.badge-dot.danger  { background: var(--danger); }
+.badge-dot.warning { background: var(--warning); }
+
+/* Size variants */
+.badge-lg {
+    padding: 0.3rem 0.85rem;
+    font-size: 0.8rem;
+}
+
+/* Arqueo states */
+.badge-cuadrado {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success-border);
+}
+
+.badge-sobrante {
+    background: var(--info-bg);
+    color: var(--info);
+    border: 1px solid var(--info-border);
+}
+
+.badge-faltante {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger-border);
+}
+
+.badge-pendiente {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
+}
+
+.badge-verificado {
+    background: var(--primary-subtle);
+    color: var(--brand-dorado-dark);
+    border: 1px solid rgba(212, 149, 43, 0.25);
+}

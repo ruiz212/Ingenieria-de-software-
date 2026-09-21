@@ -1,0 +1,357 @@
+/* ============================================================
+   FLOATING GLASS DOCK (SIDEBAR) — Brajher's Cake
+   ============================================================ */
+
+.app-container {
+    display: flex;
+    min-height: 100vh;
+    background: var(--background);
+    padding-left: 100px;
+    transition: padding-left 0.4s var(--ease-out);
+}
+
+.glass-dock {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    bottom: 16px;
+    width: 72px;
+    background: var(--secondary);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(107, 58, 42, 0.15);
+    border-radius: var(--radius-xl);
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    box-shadow: 0 8px 32px rgba(78, 42, 30, 0.18);
+    overflow: hidden;
+    transition: width 0.4s var(--ease-out), box-shadow 0.4s ease;
+}
+
+.dark-theme .glass-dock {
+    background: rgba(26, 18, 13, 0.95);
+    border-color: rgba(245, 237, 230, 0.06);
+}
+
+/* Expand on Hover */
+.glass-dock:hover {
+    width: 250px;
+    box-shadow: 0 16px 48px rgba(78, 42, 30, 0.22),
+                0 0 0 1px rgba(212, 149, 43, 0.08);
+}
+
+/* ── Dock Header ── */
+.dock-header {
+    padding: 1.25rem 0;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    white-space: nowrap;
+}
+
+.dock-brand {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: #ffffff;
+    padding-left: 12px;
+    gap: 12px;
+}
+
+.brand-icon {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
+    border-radius: var(--radius-md);
+    color: white;
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: -0.02em;
+    box-shadow: 0 4px 12px rgba(212, 149, 43, 0.30);
+    transition: transform 0.3s var(--ease-spring);
+}
+
+.glass-dock:hover .brand-icon {
+    transform: scale(1.05);
+}
+
+.brand-text {
+    font-size: 1.05rem;
+    font-weight: 700;
+    font-family: 'Playfair Display', serif;
+    color: rgba(255, 255, 255, 0.95);
+    opacity: 0;
+    transform: translateX(-8px);
+    transition: all 0.3s var(--ease-out);
+    white-space: nowrap;
+}
+
+.brand-subtitle {
+    font-size: 0.6rem;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    color: rgba(212, 149, 43, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    display: block;
+    margin-top: 1px;
+}
+
+.glass-dock:hover .brand-text {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* ── Menu Items ── */
+.dock-menu {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0.75rem 0 2rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.dock-menu::-webkit-scrollbar { display: none; }
+
+.menu-label {
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.3);
+    padding-left: 22px;
+    margin: 1rem 0 0.4rem 0;
+    letter-spacing: 0.12em;
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-family: 'Inter', sans-serif;
+}
+
+.glass-dock:hover .menu-label {
+    opacity: 1;
+}
+
+.dock-item {
+    display: flex;
+    align-items: center;
+    padding: 0.65rem 20px;
+    color: rgba(255, 255, 255, 0.65);
+    text-decoration: none;
+    position: relative;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    border-radius: var(--radius-md);
+    margin: 0 8px;
+    font-family: 'Inter', sans-serif;
+}
+
+.dock-item svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    opacity: 0.65;
+    transition: all 0.2s;
+}
+
+.dock-item-text {
+    margin-left: 12px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    opacity: 0;
+    transform: translateX(-8px);
+    transition: all 0.3s var(--ease-out);
+}
+
+.glass-dock:hover .dock-item-text {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* Hover */
+.dock-item:hover {
+    background: rgba(212, 149, 43, 0.15);
+    color: var(--brand-dorado);
+}
+
+.dock-item:hover svg {
+    opacity: 1;
+    transform: scale(1.08);
+    color: var(--brand-dorado);
+    filter: drop-shadow(0 0 6px rgba(212, 149, 43, 0.3));
+}
+
+/* Active */
+.dock-item.active {
+    background: var(--brand-dorado);
+    color: white;
+    box-shadow: var(--shadow-glow);
+    font-weight: 700;
+}
+
+.dock-item.active svg {
+    opacity: 1;
+    color: white;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+.dock-item:active {
+    transform: scale(0.96);
+}
+
+/* Danger item */
+.dock-item.text-danger {
+    color: rgba(196, 69, 54, 0.7);
+}
+.dock-item.text-danger:hover {
+    background: rgba(196, 69, 54, 0.12);
+    color: var(--danger);
+}
+.dock-item.text-danger:hover svg {
+    color: var(--danger);
+    filter: drop-shadow(0 0 6px rgba(196, 69, 54, 0.3));
+}
+
+/* ── Dock Footer ── */
+.dock-footer {
+    padding: 0.75rem 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================================
+   MAIN CONTENT AREA
+   ============================================================ */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.topbar {
+    height: 72px;
+    padding: 0 2rem;
+    max-width: 1440px;
+    margin: 0 auto;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: transparent;
+}
+
+.page-title {
+    font-size: 1.4rem;
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0;
+    letter-spacing: -0.01em;
+}
+
+.user-profile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.user-name {
+    font-weight: 700;
+    color: var(--text-main);
+    font-size: 0.9rem;
+    font-family: 'Inter', sans-serif;
+}
+
+.user-role {
+    font-size: 0.7rem;
+    color: var(--primary-color);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-family: 'Inter', sans-serif;
+}
+
+/* ── Global Loading Bar ── */
+.global-loading-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.global-loading-bar.active {
+    opacity: 1;
+}
+
+.global-loading-bar::after {
+    content: '';
+    display: block;
+    height: 100%;
+    width: 30%;
+    background: linear-gradient(90deg, transparent, var(--brand-dorado), transparent);
+    border-radius: 2px;
+    animation: loadingSlide 1.2s ease-in-out infinite;
+}
+
+@keyframes loadingSlide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .app-container {
+        padding-left: 0;
+    }
+    .glass-dock {
+        top: auto;
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
+        width: auto !important;
+        height: 64px;
+        flex-direction: row;
+        border-radius: var(--radius-lg);
+    }
+    .glass-dock:hover {
+        width: auto !important;
+    }
+    .dock-header,
+    .dock-footer,
+    .menu-label { display: none; }
+    .dock-menu {
+        flex-direction: row;
+        padding: 0;
+        gap: 0;
+        justify-content: space-around;
+        width: 100%;
+    }
+    .dock-item {
+        flex-direction: column;
+        padding: 0.5rem;
+        margin: 0 2px;
+        gap: 2px;
+    }
+    .dock-item-text {
+        font-size: 0.6rem;
+        margin-left: 0;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+    .topbar {
+        padding: 0 1rem;
+        height: 60px;
+    }
+    .main-content {
+        padding-bottom: 80px;
+    }
+}

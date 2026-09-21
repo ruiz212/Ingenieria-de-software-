@@ -1,0 +1,72 @@
+{% extends 'admin_base.html' %}
+
+{% block title %}Configurar Autenticador | Brajher's Cake{% endblock %}
+{% block page_title %}Configurar Autenticador{% endblock %}
+
+{% block content %}
+<div class="page-header">
+            <p>Protege tu cuenta con una capa extra de seguridad.</p>
+        </div>
+
+        <div class="totp-setup-container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}" style="background: var(--danger-bg); color: var(--danger); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1rem;">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="panel step-card">
+                <div class="panel-header">
+                    <h3>1. Descarga una aplicación autenticadora</h3>
+                </div>
+                <div class="panel-body">
+                    <p>Descarga e instala <strong>Google Authenticator</strong>, <strong>Microsoft Authenticator</strong> o <strong>Authy</strong> en tu dispositivo móvil.</p>
+                </div>
+            </div>
+
+            <div class="panel step-card">
+                <div class="panel-header">
+                    <h3>2. Escanea el código QR</h3>
+                </div>
+                <div class="panel-body" style="text-align: center;">
+                    <p>Abre la aplicación y escanea el siguiente código QR:</p>
+                    
+                    <div class="qr-container">
+                        <img src="data:image/png;base64,{{ qr_base64 }}" alt="Código QR TOTP" style="max-width: 200px;">
+                    </div>
+                    
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;">O ingresa esta clave manualmente:</p>
+                    <div class="secret-key">{{ secret }}</div>
+                </div>
+            </div>
+
+            <div class="panel step-card">
+                <div class="panel-header panel-accent-primary">
+                    <h3>3. Verifica el código</h3>
+                </div>
+                <div class="panel-body">
+                    <p style="margin-bottom: 1rem;">Ingresa el código de 6 dígitos generado por la aplicación para confirmar la configuración:</p>
+                    
+                    <form method="POST" action="{{ url_for('auth.setup_totp') }}" style="text-align: center;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="form-group totp-input-wrapper">
+                            <input type="text" name="totp_code" class="form-control" required autocomplete="off" placeholder="••••••" maxlength="6" pattern="\d{6}">
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" style="margin-top: 0.5rem; padding-left: 2rem; padding-right: 2rem;">Activar Autenticador</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+
+{% endblock %}
+
+{% block extra_scripts %}
+
+{% endblock %}

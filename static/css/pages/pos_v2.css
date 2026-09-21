@@ -1,0 +1,656 @@
+/* static/css/pages/pos_v2.css - Updated with Design Tokens */
+body.pos-body {
+    margin: 0;
+    padding: 0;
+    background: var(--background);
+    color: var(--text-main);
+    font-family: 'Inter', 'Outfit', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Glassmorphism App Header */
+.app-header {
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    z-index: 100;
+}
+
+.app-header h1 {
+    color: var(--text-main);
+    font-weight: 800;
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+.app-header .header-info {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-top: 0.2rem;
+}
+
+/* Main Layout */
+.pos-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: 1.5rem;
+    padding: 1.5rem;
+}
+
+/* Left Section: Catalog */
+.pos-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+}
+
+/* Tabs */
+.category-tabs {
+    display: flex;
+    gap: 0.5rem;
+    padding: 1rem;
+    overflow-x: auto;
+    background: var(--surface-sunken);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.category-btn {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    color: var(--text-muted);
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all var(--transition-smooth);
+}
+
+.category-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text-main);
+}
+
+.category-btn.active {
+    background: var(--primary-color);
+    color: #111; /* Contrast text for primary */
+    border-color: transparent;
+    box-shadow: var(--shadow-glow);
+}
+
+/* Catalog Grid */
+.catalog-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+.catalog-panel h2 {
+    color: var(--text-main);
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    font-weight: 700;
+}
+
+.products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.25rem;
+}
+
+/* Product Cards Glassmorphism */
+.product-card {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease, background 0.2s;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 120px;
+}
+
+.product-card:hover {
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: var(--shadow-lg);
+    background: var(--surface-hover);
+    border-color: var(--border-interactive);
+}
+
+.product-card .category-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.product-card h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.1rem;
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+.product-card .price {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--primary-color);
+    margin: 0;
+}
+
+/* Invoice / Cart Panel */
+.invoice-panel {
+    width: 350px;
+    background: var(--surface-elevated);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+
+.invoice-header {
+    padding: 1.25rem;
+    background: var(--surface-sunken);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.invoice-header h2 {
+    margin: 0;
+    color: var(--text-main);
+    font-size: 1.25rem;
+}
+
+.cart-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.empty-cart {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.cart-item {
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.cart-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cart-item-title {
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+.cart-item-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.qty-btn {
+    background: var(--surface-elevated);
+    border: none;
+    color: var(--text-main);
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.qty-btn:hover { background: var(--surface-hover); }
+
+.invoice-footer {
+    padding: 1.25rem;
+    background: var(--surface-sunken);
+    border-top: 1px solid var(--border-light);
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    color: var(--text-muted);
+}
+
+.total-row {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-main);
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-light);
+}
+
+#btn-facturar {
+    background: var(--success);
+    color: #fff;
+    border: none;
+    padding: 1.25rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    width: 100%;
+}
+
+#btn-facturar:disabled {
+    background: var(--surface-sunken);
+    color: var(--text-faint);
+    cursor: not-allowed;
+}
+
+#btn-facturar:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px var(--success-border);
+}
+
+/* Modals for POS — Performance-optimized */
+.modal-overlay {
+    background: rgba(59, 34, 24, 0.55) !important;
+    /* REMOVED backdrop-filter: blur — causes severe scroll jank (repaints every frame) */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.modal-content {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text-main) !important;
+    box-shadow: 0 25px 60px rgba(59, 34, 24, 0.35), 0 0 0 1px rgba(255,255,255,0.08) !important;
+    border-top: 3px solid var(--brand-dorado) !important;
+    max-width: 520px;
+    width: 100%;
+}
+
+/* Scrollable modal body — GPU-accelerated */
+.modal-scroll-body {
+    max-height: 60vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    will-change: scroll-position;
+    contain: content;
+    padding: 0.5rem 0;
+}
+
+/* ── Optimized Scrollbar ── */
+.modal-scroll-body::-webkit-scrollbar { width: 6px; }
+.modal-scroll-body::-webkit-scrollbar-track { background: transparent; }
+.modal-scroll-body::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+.modal-scroll-body::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* ── Modal Section Cards ── */
+.modal-section {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.modal-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+
+.modal-section h4 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.05rem;
+    color: var(--primary-color);
+    margin: 0 0 0.25rem 0;
+}
+
+.modal-section-meta {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.modal-section-meta strong {
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+/* ── Specs Box ── */
+.modal-specs-box {
+    background: rgba(107, 58, 42, 0.04);
+    padding: 1rem;
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--brand-dorado);
+    margin: 0.75rem 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-main);
+}
+
+.modal-specs-box strong {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: var(--brand-cafe-dark);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ── Status Badge ── */
+.modal-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    color: white;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.modal-badge--pending { background: var(--warning); }
+.modal-badge--success { background: var(--success); }
+.modal-badge--danger  { background: var(--danger); }
+
+/* ── Inline Input Row (precio + botones) ── */
+.modal-action-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.75rem;
+}
+
+.modal-action-row .form-control {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── Modal Buttons (Premium) ── */
+.modal-btn {
+    padding: 0.6rem 1.25rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.modal-btn--primary {
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
+}
+.modal-btn--primary:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(184, 130, 56, 0.3);
+}
+
+.modal-btn--success {
+    background: var(--success);
+    color: #fff;
+}
+.modal-btn--success:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+.modal-btn--danger-outline {
+    background: transparent;
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+.modal-btn--danger-outline:hover {
+    background: var(--danger);
+    color: #fff;
+}
+
+.modal-btn--ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: var(--border);
+}
+.modal-btn--ghost:hover {
+    background: var(--surface-hover);
+    color: var(--text-main);
+}
+
+.modal-btn--info {
+    background: var(--info);
+    color: #fff;
+}
+.modal-btn--info:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+/* ── Modal Footer ── */
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border-light);
+}
+
+/* ── Payment Total Display ── */
+.pago-total-display {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, rgba(184, 130, 56, 0.08), rgba(184, 130, 56, 0.02));
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(184, 130, 56, 0.15);
+}
+
+.pago-total-label {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+}
+
+.pago-total-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--primary-color);
+    font-family: 'Playfair Display', serif;
+}
+
+/* ── Payment Grid ── */
+.pago-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.pago-grid .form-group { margin-bottom: 0; }
+
+.pago-grid label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    display: block;
+    color: var(--text-muted);
+}
+
+.pago-grid .form-control {
+    font-size: 1.1rem;
+    text-align: center;
+    padding: 0.75rem;
+}
+
+/* ── Change Display ── */
+.cambio-display {
+    text-align: center;
+    margin-top: 1.25rem;
+    background: rgba(46, 160, 67, 0.08);
+    padding: 1.25rem;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(46, 160, 67, 0.15);
+}
+
+.cambio-display label {
+    display: block;
+    color: var(--success);
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ── Form Control in modals ── */
+.form-control, .form-select {
+    background: var(--surface-sunken) !important;
+    border: 1px solid var(--border-light) !important;
+    color: var(--text-main) !important;
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-control:focus {
+    border-color: var(--brand-dorado) !important;
+    box-shadow: 0 0 0 3px rgba(184, 130, 56, 0.12) !important;
+    outline: none;
+}
+
+/* ── RUC Toggle ── */
+.ruc-toggle {
+    background: var(--surface-sunken);
+    padding: 0.85rem 1rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-light);
+}
+
+.ruc-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-main);
+}
+
+/* Custom Header Action Buttons */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.btn-header {
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all var(--transition-fast);
+}
+
+.btn-encargo {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--warning);
+}
+.btn-encargo:hover {
+    background: var(--warning);
+    color: #111;
+}
+
+.btn-pedidos {
+    background: var(--info-bg);
+    color: var(--info);
+    border: 1px solid var(--info);
+    position: relative;
+}
+.btn-pedidos:hover {
+    background: var(--info);
+    color: #fff;
+}
+
+.btn-arqueo {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+.btn-arqueo:hover {
+    background: var(--danger);
+    color: #fff;
+}
+
+/* Micro-animations */
+@keyframes fadeInItem {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in-item {
+  animation: fadeInItem 0.2s ease-out forwards;
+}
+
+/* WhatsApp button */
+.btn-whatsapp {
+    border-color: #25D366 !important;
+    color: #25D366 !important;
+}
+.btn-whatsapp:hover {
+    background: #25D366 !important;
+    color: #fff !important;
+}

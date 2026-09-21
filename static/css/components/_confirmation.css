@@ -1,0 +1,88 @@
+/* ============================================================
+   CONFIRMATION DIALOG — Standardized critical action confirmations
+   ============================================================ */
+
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(59, 34, 24, 0.60);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3000;
+    padding: 1rem;
+    animation: modalFadeIn 0.2s ease forwards;
+}
+
+.confirm-dialog {
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    padding: 2rem;
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+    animation: modalSlideUp 0.3s var(--ease-out) forwards;
+}
+
+.confirm-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.25rem;
+    font-size: 1.5rem;
+}
+
+.confirm-icon.warning {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 2px solid var(--warning-border);
+}
+
+.confirm-icon.danger {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 2px solid var(--danger-border);
+}
+
+.confirm-icon.success {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 2px solid var(--success-border);
+}
+
+.confirm-icon.info {
+    background: var(--info-bg);
+    color: var(--info);
+    border: 2px solid var(--info-border);
+}
+
+.confirm-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 0.5rem;
+    font-family: 'Playfair Display', serif;
+}
+
+.confirm-message {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+}
+
+.confirm-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.confirm-actions .btn {
+    min-width: 100px;
+}

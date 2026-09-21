@@ -5,3 +5,7 @@ venv/
 .vscode/
 .idea/
 *.log
+*.db
+scratch/
+static/uploads/
+app/static/uploads/
