@@ -24,27 +24,27 @@
     <!-- Esperados -->
     <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--primary); transition: transform 0.2s;">
         <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Esperados</h3>
-        <div style="font-size: 2.5rem; font-weight: 800; color: var(--text-light);">{{ stats.esperados }}</div>
+        <div id="stat-esperados" style="font-size: 2.5rem; font-weight: 800; color: var(--text-light);">{{ stats.esperados }}</div>
     </div>
     <!-- Presentes -->
     <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--success); transition: transform 0.2s;">
         <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Presentes</h3>
-        <div style="font-size: 2.5rem; font-weight: 800; color: var(--success);">{{ stats.presentes }}</div>
+        <div id="stat-presentes" style="font-size: 2.5rem; font-weight: 800; color: var(--success);">{{ stats.presentes }}</div>
     </div>
     <!-- A Tiempo -->
     <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid #3498db; transition: transform 0.2s;">
         <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">A Tiempo</h3>
-        <div style="font-size: 2.5rem; font-weight: 800; color: #3498db;">{{ stats.a_tiempo }}</div>
+        <div id="stat-atiempo" style="font-size: 2.5rem; font-weight: 800; color: #3498db;">{{ stats.a_tiempo }}</div>
     </div>
     <!-- Tardes -->
     <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--warning); transition: transform 0.2s;">
         <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Llegadas Tardías</h3>
-        <div style="font-size: 2.5rem; font-weight: 800; color: var(--warning);">{{ stats.tardes }}</div>
+        <div id="stat-tardes" style="font-size: 2.5rem; font-weight: 800; color: var(--warning);">{{ stats.tardes }}</div>
     </div>
     <!-- Ausentes -->
     <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--error); transition: transform 0.2s;">
         <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Ausentes</h3>
-        <div style="font-size: 2.5rem; font-weight: 800; color: var(--error);">{{ stats.ausentes }}</div>
+        <div id="stat-ausentes" style="font-size: 2.5rem; font-weight: 800; color: var(--error);">{{ stats.ausentes }}</div>
     </div>
 </div>
 
@@ -57,8 +57,7 @@
         </h3>
     </div>
     <div class="panel-body panel-body-flush">
-        {% if detalle %}
-        <div class="table-responsive">
+        <div class="table-responsive" id="asistencia-table-container" style="{% if not detalle %}display: none;{% endif %}">
             <table class="data-table">
                 <thead>
                     <tr>
@@ -70,7 +69,7 @@
                         <th style="text-align: center;">Estado</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="asistencia-tbody">
                     {% for d in detalle %}
                     <tr style="{% if d.estado == 'Ausente' %}opacity: 0.6;{% endif %} transition: opacity 0.3s;">
                         <td class="cell-bold">{{ d.nombre }}</td>
@@ -91,13 +90,77 @@
                 </tbody>
             </table>
         </div>
-        {% else %}
-        <div class="empty-state">
+        <div class="empty-state" id="asistencia-empty-state" style="{% if detalle %}display: none;{% endif %}">
             <div class="empty-state-icon">👥</div>
             <p>No hay empleados registrados en el sistema.</p>
         </div>
-        {% endif %}
     </div>
 </div>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Iniciar polling de detalles de asistencia cada 5 segundos
+        setInterval(fetchAsistenciaDetalle, 5000);
+    });
+
+    async function fetchAsistenciaDetalle() {
+        const fecha = document.getElementById('fecha').value;
+        try {
+            const res = await fetch(`/admin/api/rrhh/asistencia_detalle_json?fecha=${fecha}`);
+            if(res.ok) {
+                const result = await res.json();
+                if(result.status === 'success') {
+                    // Actualizar KPIs
+                    document.getElementById('stat-esperados').textContent = result.stats.esperados;
+                    document.getElementById('stat-presentes').textContent = result.stats.presentes;
+                    document.getElementById('stat-atiempo').textContent = result.stats.a_tiempo;
+                    document.getElementById('stat-tardes').textContent = result.stats.tardes;
+                    document.getElementById('stat-ausentes').textContent = result.stats.ausentes;
+
+                    // Actualizar Tabla
+                    const tbody = document.getElementById('asistencia-tbody');
+                    const container = document.getElementById('asistencia-table-container');
+                    const emptyState = document.getElementById('asistencia-empty-state');
+                    const data = result.detalle;
+
+                    if(data && data.length > 0) {
+                        let html = '';
+                        data.forEach(d => {
+                            let badgeClass = 'badge-danger'; // Ausente default
+                            if(d.estado === 'A Tiempo') badgeClass = 'badge-success';
+                            else if(d.estado === 'Llegada Tardia') badgeClass = 'badge-warning';
+
+                            let opacity = d.estado === 'Ausente' ? 'opacity: 0.6;' : '';
+                            let inClass = d.entrada === '--:--' ? 'text-muted' : '';
+                            let outClass = d.salida === '--:--' ? 'text-muted' : '';
+
+                            html += `
+                            <tr style="${opacity} transition: opacity 0.3s;">
+                                <td class="cell-bold">${d.nombre}</td>
+                                <td class="cell-muted">${d.cargo}</td>
+                                <td>${d.turno}</td>
+                                <td class="fw-600 ${inClass}">${d.entrada}</td>
+                                <td class="fw-600 ${outClass}">${d.salida}</td>
+                                <td style="text-align: center;">
+                                    <span class="badge ${badgeClass}">${d.estado}</span>
+                                </td>
+                            </tr>`;
+                        });
+                        tbody.innerHTML = html;
+                        container.style.display = 'block';
+                        emptyState.style.display = 'none';
+                    } else {
+                        container.style.display = 'none';
+                        emptyState.style.display = 'block';
+                    }
+                }
+            }
+        } catch(e) {
+            console.error('Error polling asistencia detalle:', e);
+        }
+    }
+</script>
 {% endblock %}

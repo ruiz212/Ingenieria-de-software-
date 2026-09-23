@@ -90,6 +90,39 @@ def rrhh():
         monitor_hoy=monitor_hoy, datetime=datetime)
 
 
+@admin_bp.route('/api/rrhh/asistencia_hoy_json', methods=['GET'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def rrhh_asistencia_hoy_json():
+    """Endpoint para polling automático del monitor de asistencia."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        fecha_hoy = datetime.now().strftime('%Y-%m-%d')
+        cursor.execute("""
+            SELECT a.EmpleadoID, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada, e.NombreCompleto, e.Cargo
+            FROM Asistencia a 
+            JOIN Empleados e ON a.EmpleadoID = e.ID
+            WHERE a.Fecha = ?
+            ORDER BY a.HoraEntrada DESC
+        """, fecha_hoy)
+        monitor_hoy = [{
+            'empleado': r.NombreCompleto,
+            'cargo': r.Cargo,
+            'entrada': r.HoraEntrada.strftime('%H:%M') if r.HoraEntrada else '-',
+            'salida': r.HoraSalida.strftime('%H:%M') if r.HoraSalida else '-',
+            'estado': r.EstadoEntrada
+        } for r in cursor.fetchall()]
+        
+        return jsonify({'status': 'success', 'data': monitor_hoy})
+    except Exception as e:
+        import logging
+        logging.error(f"Error en polling de asistencia: {e}")
+        return jsonify({'error': 'Error interno'}), 500
+    finally:
+        conn.close()
+
+
 @admin_bp.route('/api/rrhh/empleado', methods=['POST'])
 @csrf.exempt
 @login_required
@@ -863,5 +896,86 @@ def rrhh_asistencia():
                                fecha=fecha_str, 
                                stats=stats, 
                                detalle=detalle)
+    finally:
+        conn.close()
+
+@admin_bp.route('/api/rrhh/asistencia_detalle_json')
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def rrhh_asistencia_detalle_json():
+    fecha_str = request.args.get('fecha', datetime.now().strftime('%Y-%m-%d'))
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT ID, NombreCompleto, Cargo FROM Empleados WHERE EstadoEmpleado = 'Activo'")
+        empleados = cursor.fetchall()
+        total_esperados = len(empleados)
+        
+        cursor.execute("""
+            SELECT a.EmpleadoID, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada, t.Nombre AS Turno
+            FROM Asistencia a
+            LEFT JOIN TurnosLaborales t ON a.TurnoID = t.ID
+            WHERE a.Fecha = ?
+        """, (fecha_str,))
+        
+        asistencia_raw = cursor.fetchall()
+        asistencia_map = {row.EmpleadoID: row for row in asistencia_raw}
+        
+        presentes = 0
+        a_tiempo = 0
+        tardes = 0
+        
+        detalle = []
+        for emp in empleados:
+            registro = asistencia_map.get(emp.ID)
+            estado = 'Ausente'
+            entrada = '--:--'
+            salida = '--:--'
+            turno = 'General'
+            
+            if registro:
+                presentes += 1
+                estado = registro.EstadoEntrada or 'A Tiempo'
+                try:
+                    entrada = registro.HoraEntrada.strftime('%H:%M:%S') if registro.HoraEntrada else '--:--'
+                except:
+                    entrada = str(registro.HoraEntrada)
+                try:
+                    salida = registro.HoraSalida.strftime('%H:%M:%S') if registro.HoraSalida else '--:--'
+                except:
+                    salida = str(registro.HoraSalida) if registro.HoraSalida else '--:--'
+                turno = registro.Turno or 'General'
+                if estado == 'A Tiempo':
+                    a_tiempo += 1
+                elif estado == 'Llegada Tardia':
+                    tardes += 1
+                    
+            detalle.append({
+                'nombre': emp.NombreCompleto,
+                'cargo': emp.Cargo,
+                'turno': turno,
+                'entrada': entrada,
+                'salida': salida,
+                'estado': estado
+            })
+            
+        ausentes = total_esperados - presentes
+        
+        def sort_key(x):
+            order = {'Ausente': 0, 'Llegada Tardia': 1, 'A Tiempo': 2}
+            return (order.get(x['estado'], 99), x['nombre'])
+            
+        detalle.sort(key=sort_key)
+        
+        stats = {
+            'esperados': total_esperados,
+            'presentes': presentes,
+            'a_tiempo': a_tiempo,
+            'tardes': tardes,
+            'ausentes': ausentes
+        }
+        return jsonify({'status': 'success', 'stats': stats, 'detalle': detalle})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     finally:
         conn.close()

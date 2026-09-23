@@ -3,27 +3,8 @@
    Panadería y Repostería | Sistema de Gestión
    ============================================================ */
 
-/* Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
-
-/* Design Tokens */
-@import url('base/_variables.css');
-@import url('base/_reset.css');
-
-/* Layout */
-@import url('layout/_sidebar.css');
-@import url('layout/_header.css');
-@import url('layout/_dashboard.css');
-
-/* Components */
-@import url('components/_buttons.css');
-@import url('components/_forms.css');
-@import url('components/_badges.css');
-@import url('components/_cards.css');
-@import url('components/_modals.css');
-@import url('components/_stepper.css');
-@import url('components/_confirmation.css');
-@import url('components/_data_viz.css');
-
-/* Utilities */
-@import url('_utilities.css');
+/*
+  NOTE: This file is no longer used for production.
+  CSS files are now bundled into bundle.css.
+  To generate bundle.css, run: python scripts/build_css.py
+*/

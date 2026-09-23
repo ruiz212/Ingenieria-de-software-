@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Interno - Brajher's Cake</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Preload Fonts to improve LCP -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Bundled CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/pos_v2.css') }}">
 </head>
 <body class="pos-body">
