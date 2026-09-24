@@ -1,0 +1,257 @@
+/* ============================================================
+   PAGE: LOGIN
+   ============================================================ */
+
+.l-split {
+    display: flex;
+    width: 100%;
+    height: 100vh; /* Ocupar toda la pantalla */
+    overflow: hidden;
+}
+
+/* Left Panel — Brand Showcase */
+.l-split__left {
+    flex: 1.1;
+    position: relative;
+    background-image: url('https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop');
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 3rem;
+    color: white;
+}
+
+.l-split__left::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(135deg, rgba(78, 42, 30, 0.88) 0%, rgba(107, 58, 42, 0.65) 50%, rgba(212, 149, 43, 0.30) 100%);
+    z-index: 1;
+}
+
+.l-split__content-left {
+    position: relative;
+    z-index: 2;
+}
+
+.c-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.c-brand__logo {
+    width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 1.3rem;
+    color: white;
+    box-shadow: var(--shadow-lg);
+}
+
+.c-brand__info h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+}
+
+.c-brand__info p {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    opacity: 0.7;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+.c-welcome {
+    position: relative;
+    z-index: 2;
+    max-width: 420px;
+}
+
+.c-welcome h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 1rem;
+    letter-spacing: -0.02em;
+}
+
+.c-welcome p {
+    font-size: 1rem;
+    line-height: 1.7;
+    opacity: 0.85;
+    font-weight: 400;
+}
+
+.l-split__footer {
+    position: relative;
+    z-index: 2;
+    font-size: 0.75rem;
+    opacity: 0.5;
+}
+
+.c-deco-wheat {
+    position: absolute;
+    z-index: 2;
+    opacity: 0.06;
+    font-size: 8rem;
+    right: -1rem;
+    top: 40%;
+    transform: rotate(-15deg);
+    pointer-events: none;
+}
+
+/* Right Panel — Login Form */
+.l-split__right {
+    flex: 0.9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    background: var(--background);
+    position: relative;
+}
+
+.l-split__right::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: var(--texture-grain);
+    pointer-events: none;
+}
+
+.c-login-container {
+    width: 100%;
+    max-width: 400px;
+    position: relative;
+    z-index: 1;
+}
+
+.c-login-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+}
+
+.c-login-header__logo-mobile {
+    display: none;
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
+    border-radius: var(--radius-md);
+    align-items: center;
+    justify-content: center;
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: white;
+    margin: 0 auto 1.25rem;
+    box-shadow: var(--shadow-md);
+}
+
+.c-login-header h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--brand-cafe-dark);
+    margin-bottom: 0.35rem;
+}
+
+.c-login-header p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* Login Card overrides (if needed on top of components/_cards.css) */
+.c-login-card {
+    background: var(--card-bg);
+    border-radius: var(--radius-xl);
+    padding: 2rem;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-light);
+}
+
+.c-password-wrapper {
+    position: relative;
+}
+
+.c-password-toggle {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 4px;
+    opacity: 0.6;
+    transition: opacity var(--transition-fast);
+}
+
+.c-password-toggle:hover {
+    opacity: 1;
+}
+
+.c-divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.5rem 0;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.c-divider::before, .c-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-light);
+}
+
+.c-portal-link {
+    text-align: center;
+    margin-top: 1.5rem;
+}
+
+.c-portal-link a {
+    color: var(--brand-dorado-dark);
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: color var(--transition-fast);
+}
+
+.c-portal-link a:hover {
+    color: var(--brand-dorado);
+    text-decoration: underline;
+}
+
+/* Error message handled by global Toasts now */
+
+/* Responsive */
+@media (max-width: 900px) {
+    .l-split__left { display: none; }
+    .l-split__right { flex: 1; }
+    .c-login-header__logo-mobile { display: flex; }
+}
+
+@media (max-width: 480px) {
+    .l-split__right { padding: 1.5rem; }
+    .c-login-card { padding: 1.5rem; }
+    .c-welcome h2 { font-size: 1.8rem; }
+}

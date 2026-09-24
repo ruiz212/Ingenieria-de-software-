@@ -19,6 +19,9 @@ def build_css():
         'components/_stepper.css',
         'components/_confirmation.css',
         'components/_data_viz.css',
+        'components/_toast.css',
+        'components/_reports.css',
+        'pages/_login.css',
         '_utilities.css'
     ]
     

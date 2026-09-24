@@ -2417,6 +2417,704 @@ html.dark-theme .ambient-bg {
 }
 
 
+/* --- Source: components/_toast.css --- */
+/* ============================================================
+   TOASTS & NOTIFICATIONS — Brajher's Cake Design System
+   ============================================================ */
+
+/* Container for all toasts */
+.c-toast-container {
+    position: fixed;
+    top: var(--sp-4);
+    right: var(--sp-4);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    pointer-events: none; /* Allows clicking through the container */
+    max-width: 100%;
+    width: 380px;
+}
+
+@media (max-width: 480px) {
+    .c-toast-container {
+        top: var(--sp-2);
+        right: var(--sp-2);
+        left: var(--sp-2);
+        width: auto;
+    }
+}
+
+/* Individual Toast */
+.c-toast {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-elevated);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-light);
+    border-left: 4px solid transparent;
+    pointer-events: auto; /* Re-enable clicks on the toast itself */
+    overflow: hidden;
+    
+    /* Animation */
+    animation: slideInRight var(--transition-smooth) forwards;
+}
+
+.c-toast.is-closing {
+    animation: fadeOutRight var(--transition-smooth) forwards;
+}
+
+/* Icon */
+.c-toast__icon {
+    flex-shrink: 0;
+    margin-right: var(--sp-3);
+    margin-top: 0.125rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.c-toast__icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Content */
+.c-toast__content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.c-toast__title {
+    font-weight: 600;
+    font-size: var(--text-base);
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+.c-toast__message {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* Close Button */
+.c-toast__close {
+    background: transparent;
+    border: none;
+    color: var(--text-faint);
+    cursor: pointer;
+    padding: var(--sp-1);
+    margin-left: var(--sp-2);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+}
+
+.c-toast__close:hover {
+    background: var(--surface-sunken);
+    color: var(--text-main);
+}
+
+/* Progress Bar */
+.c-toast__progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: rgba(0, 0, 0, 0.1);
+    width: 100%;
+}
+
+.c-toast__progress-bar {
+    height: 100%;
+    width: 100%;
+    transform-origin: left;
+    animation: progressShrink linear forwards;
+}
+
+/* Pause animation on hover */
+.c-toast:hover .c-toast__progress-bar {
+    animation-play-state: paused;
+}
+
+/* ─── Variants ─── */
+
+/* Success */
+.c-toast--success { border-left-color: var(--success); }
+.c-toast--success .c-toast__icon { color: var(--success); }
+.c-toast--success .c-toast__progress-bar { background-color: var(--success); }
+
+/* Danger/Error */
+.c-toast--danger { border-left-color: var(--danger); }
+.c-toast--danger .c-toast__icon { color: var(--danger); }
+.c-toast--danger .c-toast__progress-bar { background-color: var(--danger); }
+
+/* Warning */
+.c-toast--warning { border-left-color: var(--warning); }
+.c-toast--warning .c-toast__icon { color: var(--warning); }
+.c-toast--warning .c-toast__progress-bar { background-color: var(--warning); }
+
+/* Info */
+.c-toast--info { border-left-color: var(--info); }
+.c-toast--info .c-toast__icon { color: var(--info); }
+.c-toast--info .c-toast__progress-bar { background-color: var(--info); }
+
+/* ─── Animations ─── */
+@keyframes slideInRight {
+    from {
+        transform: translateX(120%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(120%);
+        opacity: 0;
+    }
+}
+
+@keyframes progressShrink {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+}
+
+
+/* --- Source: components/_reports.css --- */
+/* ============================================================
+   REPORTS — Accounting Double-Entry
+   ============================================================ */
+
+.c-report {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 2rem;
+    position: relative;
+    z-index: 1;
+}
+
+/* Subtle background glow for glassmorphism to look good */
+.c-report::before {
+    content: '';
+    position: absolute;
+    top: 10%;
+    left: 20%;
+    width: 60%;
+    height: 60%;
+    background: radial-gradient(circle, rgba(212, 149, 43, 0.15) 0%, rgba(0,0,0,0) 70%);
+    z-index: -1;
+    filter: blur(60px);
+    pointer-events: none;
+}
+
+.c-report__header {
+    margin-bottom: 3rem;
+    text-align: center;
+}
+
+.c-report__title {
+    font-size: 2.5rem;
+    background: linear-gradient(135deg, var(--brand-dorado) 0%, #F5D061 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+.c-report__subtitle {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    font-weight: 600;
+}
+
+/* Layout for Balance */
+.c-report__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2.5rem;
+    align-items: start;
+}
+
+.c-report__column {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+}
+
+@media (max-width: 900px) {
+    .c-report__grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Glassmorphism Section */
+.c-report__section--glass {
+    background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+    background-color: var(--card-bg);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-top: 1px solid rgba(255,255,255,0.15);
+    border-left: 1px solid rgba(255,255,255,0.15);
+    border-radius: var(--radius-xl);
+    padding: 2.5rem;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    overflow: hidden;
+}
+
+.c-report__section-title {
+    color: var(--brand-dorado);
+    font-size: 1.25rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Tablas Financieras */
+.c-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.c-table__row {
+    transition: background-color 0.2s ease;
+}
+
+.c-table__row:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.c-table__cell {
+    padding: 1rem 0.5rem;
+    color: var(--text-main);
+    font-size: 0.95rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.c-table__cell--code {
+    width: 15%;
+    color: var(--text-faint);
+    font-family: monospace;
+    font-size: 0.85rem;
+}
+
+.c-table__cell--name {
+    width: 50%;
+    font-weight: 500;
+}
+
+.c-table__cell--amount {
+    width: 35%;
+    text-align: right;
+    font-family: 'Outfit', sans-serif;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+}
+
+/* Totales (Alto Contraste) */
+.c-table__row--total .c-table__cell {
+    border-top: 2px solid rgba(255, 255, 255, 0.1);
+    border-bottom: none;
+    padding-top: 1.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.c-table__cell--label {
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+}
+
+.c-table__cell--amount-total {
+    text-align: right;
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: var(--text-main);
+    font-family: 'Outfit', sans-serif;
+}
+
+.c-table__row--supertotal .c-table__cell {
+    border-top: 2px solid var(--brand-dorado);
+    margin-top: 0.5rem;
+    padding-top: 1.5rem;
+}
+
+.c-table__row--supertotal .c-table__cell--label {
+    color: var(--brand-dorado);
+    font-size: 0.95rem;
+}
+
+.c-table__cell--amount-supertotal {
+    text-align: right;
+    font-weight: 800;
+    font-size: 1.5rem;
+    color: var(--brand-dorado);
+    font-family: 'Outfit', sans-serif;
+}
+
+/* Status Indicator */
+.c-report__status-wrapper {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-top: 3rem;
+}
+
+.c-report__status {
+    padding: 1rem 2.5rem;
+    border-radius: var(--radius-full);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    font-weight: 600;
+    font-size: 1.05rem;
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.c-report__status svg {
+    width: 22px;
+    height: 22px;
+}
+
+.c-report__status--success {
+    background: rgba(46, 204, 113, 0.15);
+    color: #55d67b;
+    border: 1px solid rgba(46, 204, 113, 0.3);
+}
+
+.c-report__status--danger {
+    background: rgba(231, 76, 60, 0.15);
+    color: #ff6b5b;
+    border: 1px solid rgba(231, 76, 60, 0.3);
+}
+
+/* Actions Footer */
+.c-report__actions {
+    margin-top: 2rem;
+    display: flex;
+    justify-content: center;
+    padding-bottom: 2rem;
+}
+
+/* Botón Especial para acciones financieras críticas */
+.c-btn-glow {
+    background: linear-gradient(135deg, var(--brand-dorado) 0%, var(--brand-dorado-dark) 100%);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-full);
+    box-shadow: 0 4px 20px rgba(212, 149, 43, 0.4);
+    font-size: 1.05rem;
+    font-weight: 600;
+    padding: 1rem 2.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.c-btn-glow:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(212, 149, 43, 0.6);
+}
+
+.c-btn-glow:disabled {
+    opacity: 0.5;
+    box-shadow: none;
+    cursor: not-allowed;
+    background: var(--surface-elevated);
+    color: var(--text-muted);
+}
+
+
+/* --- Source: pages/_login.css --- */
+/* ============================================================
+   PAGE: LOGIN
+   ============================================================ */
+
+.l-split {
+    display: flex;
+    width: 100%;
+    height: 100vh; /* Ocupar toda la pantalla */
+    overflow: hidden;
+}
+
+/* Left Panel — Brand Showcase */
+.l-split__left {
+    flex: 1.1;
+    position: relative;
+    background-image: url('https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop');
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 3rem;
+    color: white;
+}
+
+.l-split__left::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(135deg, rgba(78, 42, 30, 0.88) 0%, rgba(107, 58, 42, 0.65) 50%, rgba(212, 149, 43, 0.30) 100%);
+    z-index: 1;
+}
+
+.l-split__content-left {
+    position: relative;
+    z-index: 2;
+}
+
+.c-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.c-brand__logo {
+    width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 1.3rem;
+    color: white;
+    box-shadow: var(--shadow-lg);
+}
+
+.c-brand__info h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+}
+
+.c-brand__info p {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    opacity: 0.7;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+.c-welcome {
+    position: relative;
+    z-index: 2;
+    max-width: 420px;
+}
+
+.c-welcome h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 1rem;
+    letter-spacing: -0.02em;
+}
+
+.c-welcome p {
+    font-size: 1rem;
+    line-height: 1.7;
+    opacity: 0.85;
+    font-weight: 400;
+}
+
+.l-split__footer {
+    position: relative;
+    z-index: 2;
+    font-size: 0.75rem;
+    opacity: 0.5;
+}
+
+.c-deco-wheat {
+    position: absolute;
+    z-index: 2;
+    opacity: 0.06;
+    font-size: 8rem;
+    right: -1rem;
+    top: 40%;
+    transform: rotate(-15deg);
+    pointer-events: none;
+}
+
+/* Right Panel — Login Form */
+.l-split__right {
+    flex: 0.9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    background: var(--background);
+    position: relative;
+}
+
+.l-split__right::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: var(--texture-grain);
+    pointer-events: none;
+}
+
+.c-login-container {
+    width: 100%;
+    max-width: 400px;
+    position: relative;
+    z-index: 1;
+}
+
+.c-login-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+}
+
+.c-login-header__logo-mobile {
+    display: none;
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
+    border-radius: var(--radius-md);
+    align-items: center;
+    justify-content: center;
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: white;
+    margin: 0 auto 1.25rem;
+    box-shadow: var(--shadow-md);
+}
+
+.c-login-header h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--brand-cafe-dark);
+    margin-bottom: 0.35rem;
+}
+
+.c-login-header p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* Login Card overrides (if needed on top of components/_cards.css) */
+.c-login-card {
+    background: var(--card-bg);
+    border-radius: var(--radius-xl);
+    padding: 2rem;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-light);
+}
+
+.c-password-wrapper {
+    position: relative;
+}
+
+.c-password-toggle {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 4px;
+    opacity: 0.6;
+    transition: opacity var(--transition-fast);
+}
+
+.c-password-toggle:hover {
+    opacity: 1;
+}
+
+.c-divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.5rem 0;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.c-divider::before, .c-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-light);
+}
+
+.c-portal-link {
+    text-align: center;
+    margin-top: 1.5rem;
+}
+
+.c-portal-link a {
+    color: var(--brand-dorado-dark);
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: color var(--transition-fast);
+}
+
+.c-portal-link a:hover {
+    color: var(--brand-dorado);
+    text-decoration: underline;
+}
+
+/* Error message handled by global Toasts now */
+
+/* Responsive */
+@media (max-width: 900px) {
+    .l-split__left { display: none; }
+    .l-split__right { flex: 1; }
+    .c-login-header__logo-mobile { display: flex; }
+}
+
+@media (max-width: 480px) {
+    .l-split__right { padding: 1.5rem; }
+    .c-login-card { padding: 1.5rem; }
+    .c-welcome h2 { font-size: 1.8rem; }
+}
+
+
 /* --- Source: _utilities.css --- */
 /* ============================================================
    UTILITIES — Brajher's Cake

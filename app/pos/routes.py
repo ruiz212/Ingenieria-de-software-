@@ -313,6 +313,72 @@ def registrar_factura():
                 
             cursor.execute("UPDATE Clientes SET NivelConfianzaID = ? WHERE ID = ?", nuevo_nivel, cliente_id)
 
+        # ============================================================
+        # 5c. INTEGRACIÓN CONTABLE (PARTIDA DOBLE DINÁMICA)
+        # ============================================================
+        mes_actual = datetime.now().month
+        anio_actual = datetime.now().year
+        
+        # 1. Obtener o Auto-Crear Periodo Contable
+        cursor.execute("SELECT ID FROM PeriodosContables WHERE Mes = ? AND Anio = ?", (mes_actual, anio_actual))
+        periodo_row = cursor.fetchone()
+        if periodo_row:
+            periodo_id = periodo_row[0]
+        else:
+            cursor.execute("INSERT INTO PeriodosContables (Mes, Anio, Estado) OUTPUT INSERTED.ID VALUES (?, ?, 'Abierto')", (mes_actual, anio_actual))
+            periodo_id = cursor.fetchone()[0]
+            
+        # 2. Crear Asiento de Diario
+        descripcion_asiento = f"Venta POS {numero_factura}"
+        if es_encargo and datos_encargo:
+            descripcion_asiento += f" (Encargo Cliente: {datos_encargo.get('nombre_cliente', '')})"
+            
+        cursor.execute(
+            "INSERT INTO AsientosDiario (PeriodoID, Descripcion, ReferenciaExterna, TipoDocumento, UsuarioID) OUTPUT INSERTED.ID VALUES (?, ?, ?, 'FacturaVenta', ?)",
+            (periodo_id, descripcion_asiento, numero_factura, current_user.id)
+        )
+        asiento_id = cursor.fetchone()[0]
+        
+        # 3. Registrar Débitos (Cargos a Caja, Bancos o CxC)
+        if es_encargo and datos_encargo:
+            adelanto = float(datos_encargo.get('adelanto', 0))
+            restante = float(total) - adelanto
+            metodo_adelanto = datos_encargo.get('metodo_adelanto', 'Efectivo')
+            
+            if adelanto > 0:
+                cuenta_codigo = '1103' if metodo_adelanto == 'Transferencia' else '1101'
+                cursor.execute("INSERT INTO DetalleAsientos (AsientoID, CuentaID, Debe, Haber) VALUES (?, (SELECT ID FROM CatalogoCuentas WHERE Codigo=?), ?, 0)", (asiento_id, cuenta_codigo, adelanto))
+            
+            if restante > 0:
+                cursor.execute("INSERT INTO DetalleAsientos (AsientoID, CuentaID, Debe, Haber) VALUES (?, (SELECT ID FROM CatalogoCuentas WHERE Codigo='1102'), ?, 0)", (asiento_id, restante))
+        else:
+            if pagos_multiples:
+                cambio_temp = float(datos.get('cambio', 0))
+                for p in pagos_multiples:
+                    monto_p = float(p.get('monto', 0))
+                    metodo_p = p.get('metodo')
+                    
+                    if cambio_temp > 0 and metodo_p in ('Efectivo', 'Efectivo USD'):
+                        if monto_p >= cambio_temp:
+                            monto_p -= cambio_temp
+                            cambio_temp = 0
+                        else:
+                            cambio_temp -= monto_p
+                            monto_p = 0
+                            
+                    if monto_p > 0:
+                        cuenta_codigo = '1103' if metodo_p == 'Transferencia' else '1101'
+                        cursor.execute("INSERT INTO DetalleAsientos (AsientoID, CuentaID, Debe, Haber) VALUES (?, (SELECT ID FROM CatalogoCuentas WHERE Codigo=?), ?, 0)", (asiento_id, cuenta_codigo, monto_p))
+            else:
+                cuenta_codigo = '1103' if metodo_pago_legacy == 'Transferencia' else '1101'
+                cursor.execute("INSERT INTO DetalleAsientos (AsientoID, CuentaID, Debe, Haber) VALUES (?, (SELECT ID FROM CatalogoCuentas WHERE Codigo=?), ?, 0)", (asiento_id, cuenta_codigo, float(total)))
+                
+        # 4. Registrar Créditos (Abonos a Ingresos e IVA)
+        cursor.execute("INSERT INTO DetalleAsientos (AsientoID, CuentaID, Debe, Haber) VALUES (?, (SELECT ID FROM CatalogoCuentas WHERE Codigo='4101'), 0, ?)", (asiento_id, float(subtotal)))
+        if float(iva) > 0:
+            cursor.execute("INSERT INTO DetalleAsientos (AsientoID, CuentaID, Debe, Haber) VALUES (?, (SELECT ID FROM CatalogoCuentas WHERE Codigo='2102'), 0, ?)", (asiento_id, float(iva)))
+        # ============================================================
+
         conn.commit()
 
         # 6. Generar QR de seguimiento

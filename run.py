@@ -9,4 +9,6 @@ from app import create_app
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Usar '::' (IPv6 dual-stack) en lugar de '0.0.0.0' soluciona el lag de 2 segundos 
+    # al acceder vía 'localhost' en navegadores de Windows.
+    app.run(debug=True, host='::', port=5000)
