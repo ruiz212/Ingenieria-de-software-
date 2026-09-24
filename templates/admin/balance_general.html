@@ -1,0 +1,124 @@
+{% extends 'admin_base.html' %}
+
+{% block content %}
+<main class="c-report">
+    <header class="c-report__header">
+        <h1 class="c-report__title">Balance General</h1>
+        <p class="c-report__subtitle">Al {{ fecha_corte }} | Expresado en Córdobas (C$)</p>
+    </header>
+
+    <div class="c-report__grid">
+        <!-- Bloque de Activos -->
+        <section class="c-report__section c-report__section--glass">
+            <h2 class="c-report__section-title">Activos</h2>
+            <table class="c-table">
+                <tbody>
+                    {% for cuenta in activos %}
+                    <tr class="c-table__row">
+                        <td class="c-table__cell c-table__cell--code">{{ cuenta.Codigo }}</td>
+                        <td class="c-table__cell c-table__cell--name">{{ cuenta.Cuenta }}</td>
+                        <td class="c-table__cell c-table__cell--amount">{{ "C$ {:,.2f}".format(cuenta.SaldoFinal) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr class="c-table__row">
+                        <td colspan="3" class="c-table__cell" style="text-align: center; color: var(--text-muted)">No hay movimientos registrados.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="c-table__row c-table__row--total">
+                        <td colspan="2" class="c-table__cell c-table__cell--label">Total Activos</td>
+                        <td class="c-table__cell c-table__cell--amount-total">{{ "C$ {:,.2f}".format(total_activos) }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </section>
+
+        <div class="c-report__column">
+            <!-- Bloque de Pasivos -->
+            <section class="c-report__section c-report__section--glass">
+                <h2 class="c-report__section-title">Pasivos</h2>
+                <table class="c-table">
+                    <tbody>
+                        {% for cuenta in pasivos %}
+                        <tr class="c-table__row">
+                            <td class="c-table__cell c-table__cell--code">{{ cuenta.Codigo }}</td>
+                            <td class="c-table__cell c-table__cell--name">{{ cuenta.Cuenta }}</td>
+                            <td class="c-table__cell c-table__cell--amount">{{ "C$ {:,.2f}".format(cuenta.SaldoFinal) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr class="c-table__row">
+                            <td colspan="3" class="c-table__cell" style="text-align: center; color: var(--text-muted)">No hay movimientos registrados.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="c-table__row c-table__row--total">
+                            <td colspan="2" class="c-table__cell c-table__cell--label">Total Pasivos</td>
+                            <td class="c-table__cell c-table__cell--amount-total">{{ "C$ {:,.2f}".format(total_pasivos) }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </section>
+
+            <!-- Bloque de Capital -->
+            <section class="c-report__section c-report__section--glass">
+                <h2 class="c-report__section-title">Capital Contable</h2>
+                <table class="c-table">
+                    <tbody>
+                        {% for cuenta in capital %}
+                        <tr class="c-table__row">
+                            <td class="c-table__cell c-table__cell--code">{{ cuenta.Codigo }}</td>
+                            <td class="c-table__cell c-table__cell--name">{{ cuenta.Cuenta }}</td>
+                            <td class="c-table__cell c-table__cell--amount">{{ "C$ {:,.2f}".format(cuenta.SaldoFinal) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr class="c-table__row">
+                            <td colspan="3" class="c-table__cell" style="text-align: center; color: var(--text-muted)">No hay movimientos registrados.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="c-table__row c-table__row--total">
+                            <td colspan="2" class="c-table__cell c-table__cell--label">Total Capital</td>
+                            <td class="c-table__cell c-table__cell--amount-total">{{ "C$ {:,.2f}".format(total_capital) }}</td>
+                        </tr>
+                        <tr class="c-table__row c-table__row--supertotal">
+                            <td colspan="2" class="c-table__cell c-table__cell--label">Total Pasivo + Capital</td>
+                            <td class="c-table__cell c-table__cell--amount-supertotal">{{ "C$ {:,.2f}".format(total_pasivos + total_capital) }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </section>
+        </div>
+    </div>
+
+    <!-- Ecuación Contable Status -->
+    <div class="c-report__status-wrapper">
+        {% if (total_activos - (total_pasivos + total_capital))|abs < 0.01 %}
+        <div class="c-report__status c-report__status--success">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            Ecuación Contable Cuadrada
+        </div>
+        {% else %}
+        <div class="c-report__status c-report__status--danger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            Descuadre Contable Detectado: {{ "C$ {:,.2f}".format(total_activos - (total_pasivos + total_capital)) }}
+        </div>
+        {% endif %}
+    </div>
+
+    <footer class="c-report__actions" style="gap: 15px;">
+        <a href="?print=1" target="_blank" class="btn btn-outline" style="border-radius: var(--radius-full); padding: 1rem 2rem; display: flex; align-items: center; gap: 8px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            Imprimir Reporte
+        </a>
+        <form method="POST" action="{{ url_for('admin.cierre_periodo') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-primary c-btn-glow" {% if (total_activos - (total_pasivos + total_capital))|abs > 0.01 %}disabled{% endif %}>
+                Aprobar Estado Financiero
+            </button>
+        </form>
+    </footer>
+</main>
+{% endblock %}

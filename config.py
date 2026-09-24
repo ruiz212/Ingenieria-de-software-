@@ -8,8 +8,8 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'clave-secreta-panaderia-2026'
     SESSION_COOKIE_HTTPONLY = True
     # En desarrollo local (HTTP) SECURE debe ser False, pero en prod (HTTPS) debe ser True. 
-    # Lo dejamos False para pruebas locales, cambiar a True para producción.
-    SESSION_COOKIE_SECURE = False
+    # Usamos una variable de entorno para que Azure lo fuerce a True.
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'False').lower() in ['true', '1', 't']
     SESSION_COOKIE_SAMESITE = 'Lax'
     PERMANENT_SESSION_LIFETIME = 28800  # 8 horas de turno
 

@@ -11,3 +11,4 @@ pyotp
 numpy==1.26.4
 opencv-python-headless==4.5.5.64
 gunicorn==21.2.0
+whitenoise==6.6.0

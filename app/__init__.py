@@ -15,6 +15,18 @@ def create_app(config_class=Config):
     )
     app.config.from_object(config_class)
 
+    # Configuración para producción (Azure App Service)
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    from whitenoise import WhiteNoise
+    
+    # 1. Confiar en los encabezados X-Forwarded-* de los balanceadores de Azure (HTTPS)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+    
+    # 2. Servir archivos estáticos eficientemente en producción
+    import os
+    static_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../static')
+    app.wsgi_app = WhiteNoise(app.wsgi_app, root=static_path, prefix='static/')
+
     # Inicializar extensiones
     from app.extensions import login_manager, csrf
     login_manager.init_app(app)

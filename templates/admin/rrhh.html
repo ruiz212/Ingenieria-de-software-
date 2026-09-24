@@ -104,8 +104,7 @@
         </h3>
     </div>
     <div class="panel-body panel-body-flush">
-        {% if monitor_hoy %}
-        <div class="table-responsive">
+        <div class="table-responsive" id="monitor-table-container" style="{% if not monitor_hoy %}display: none;{% endif %}">
             <table class="data-table">
                 <thead>
                     <tr>
@@ -116,7 +115,7 @@
                         <th>Estado</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="monitor-asistencia-tbody">
                     {% for a in monitor_hoy %}
                     <tr>
                         <td class="cell-bold">{{ a.empleado }}</td>
@@ -133,12 +132,10 @@
                 </tbody>
             </table>
         </div>
-        {% else %}
-        <div class="empty-state">
+        <div class="empty-state" id="monitor-empty-state" style="{% if monitor_hoy %}display: none;{% endif %}">
             <div class="empty-state-icon">⏱️</div>
             <p>Nadie ha marcado asistencia el día de hoy.</p>
         </div>
-        {% endif %}
     </div>
 </div>
 
@@ -785,6 +782,51 @@
                 }
             }
         } catch(e) { console.error('Error cargando alertas'); }
+        
+        // Iniciar polling de asistencia
+        setInterval(fetchAsistencia, 5000);
     });
+
+    // Función para actualizar el monitor de asistencia
+    async function fetchAsistencia() {
+        try {
+            const res = await fetch('/admin/api/rrhh/asistencia_hoy_json');
+            if(res.ok) {
+                const result = await res.json();
+                if(result.status === 'success') {
+                    const data = result.data;
+                    const tbody = document.getElementById('monitor-asistencia-tbody');
+                    const container = document.getElementById('monitor-table-container');
+                    const emptyState = document.getElementById('monitor-empty-state');
+                    
+                    if(data.length > 0) {
+                        let html = '';
+                        data.forEach(a => {
+                            let badgeClass = 'badge-warning';
+                            if(a.estado === 'A Tiempo') badgeClass = 'badge-success';
+                            else if(a.estado === 'Llegada Tardia') badgeClass = 'badge-danger';
+                            
+                            html += `
+                            <tr>
+                                <td class="cell-bold">${a.empleado}</td>
+                                <td class="cell-muted">${a.cargo}</td>
+                                <td class="fw-600">${a.entrada}</td>
+                                <td class="fw-600">${a.salida}</td>
+                                <td><span class="badge ${badgeClass}">${a.estado}</span></td>
+                            </tr>`;
+                        });
+                        tbody.innerHTML = html;
+                        container.style.display = 'block';
+                        emptyState.style.display = 'none';
+                    } else {
+                        container.style.display = 'none';
+                        emptyState.style.display = 'block';
+                    }
+                }
+            }
+        } catch(e) {
+            console.error('Error polling asistencia:', e);
+        }
+    }
 </script>
 {% endblock %}

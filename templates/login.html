@@ -5,417 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Brajher's Cake | Iniciar Sesión</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --brand-cafe: #6B3A2A;
-            --brand-cafe-dark: #4E2A1E;
-            --brand-dorado: #D4952B;
-            --brand-dorado-dark: #B87D1E;
-            --brand-beige: #E8DDD0;
-            --brand-crema: #F5F0EA;
-            --text-main: #3B2218;
-            --text-muted: #7A6456;
-            --danger: #C44536;
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            height: 100vh;
-            display: flex;
-            background-color: var(--brand-crema);
-            overflow: hidden;
-            color: var(--text-main);
-        }
-
-        /* Split Layout */
-        .split-layout {
-            display: flex;
-            width: 100%;
-            height: 100%;
-        }
-
-        /* Left Panel — Brand Showcase */
-        .split-left {
-            flex: 1.1;
-            position: relative;
-            background-image: url('https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop');
-            background-size: cover;
-            background-position: center;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 3rem;
-            color: white;
-        }
-
-        .split-left::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(135deg, rgba(78, 42, 30, 0.88) 0%, rgba(107, 58, 42, 0.65) 50%, rgba(212, 149, 43, 0.30) 100%);
-            z-index: 1;
-        }
-
-        .left-content {
-            position: relative;
-            z-index: 2;
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 0.85rem;
-        }
-
-        .brand-logo {
-            width: 56px;
-            height: 56px;
-            background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: 'Playfair Display', serif;
-            font-weight: 700;
-            font-size: 1.3rem;
-            color: white;
-            box-shadow: 0 8px 24px rgba(212, 149, 43, 0.40);
-        }
-
-        .brand-info h1 {
-            font-family: 'Playfair Display', serif;
-            font-size: 1.5rem;
-            font-weight: 700;
-            letter-spacing: -0.01em;
-            line-height: 1.2;
-        }
-
-        .brand-info p {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-            opacity: 0.7;
-            font-weight: 500;
-            margin-top: 2px;
-        }
-
-        .welcome-text {
-            position: relative;
-            z-index: 2;
-            max-width: 420px;
-        }
-
-        .welcome-text h2 {
-            font-family: 'Playfair Display', serif;
-            font-size: 2.5rem;
-            font-weight: 700;
-            line-height: 1.15;
-            margin-bottom: 1rem;
-            letter-spacing: -0.02em;
-        }
-
-        .welcome-text p {
-            font-size: 1rem;
-            line-height: 1.7;
-            opacity: 0.85;
-            font-weight: 400;
-        }
-
-        .left-footer {
-            position: relative;
-            z-index: 2;
-            font-size: 0.75rem;
-            opacity: 0.5;
-        }
-
-        /* Decorative floating elements */
-        .deco-wheat {
-            position: absolute;
-            z-index: 2;
-            opacity: 0.06;
-            font-size: 8rem;
-            right: -1rem;
-            top: 40%;
-            transform: rotate(-15deg);
-            pointer-events: none;
-        }
-
-        /* Right Panel — Login Form */
-        .split-right {
-            flex: 0.9;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 3rem;
-            background: var(--brand-crema);
-            position: relative;
-        }
-
-        /* Subtle texture on right side */
-        .split-right::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
-            pointer-events: none;
-        }
-
-        .login-container {
-            width: 100%;
-            max-width: 400px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .login-header {
-            text-align: center;
-            margin-bottom: 2.5rem;
-        }
-
-        .login-header .mobile-logo {
-            display: none;
-            width: 52px;
-            height: 52px;
-            background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
-            border-radius: 14px;
-            align-items: center;
-            justify-content: center;
-            font-family: 'Playfair Display', serif;
-            font-weight: 700;
-            font-size: 1.2rem;
-            color: white;
-            margin: 0 auto 1.25rem;
-            box-shadow: 0 6px 20px rgba(212, 149, 43, 0.30);
-        }
-
-        .login-header h2 {
-            font-family: 'Playfair Display', serif;
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: var(--brand-cafe-dark);
-            margin-bottom: 0.35rem;
-        }
-
-        .login-header p {
-            color: var(--text-muted);
-            font-size: 0.9rem;
-        }
-
-        /* Form Card */
-        .login-card {
-            background: #FFFFFF;
-            border-radius: 20px;
-            padding: 2rem;
-            box-shadow: 0 4px 24px rgba(78, 42, 30, 0.06);
-            border: 1px solid rgba(107, 58, 42, 0.06);
-        }
-
-        .form-group {
-            margin-bottom: 1.25rem;
-        }
-
-        .form-label {
-            display: block;
-            font-size: 0.78rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            margin-bottom: 0.4rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.95rem;
-            color: var(--text-main);
-            background: var(--brand-crema);
-            border: 1.5px solid rgba(107, 58, 42, 0.12);
-            border-radius: 12px;
-            outline: none;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .form-input:hover {
-            border-color: rgba(107, 58, 42, 0.20);
-        }
-
-        .form-input:focus {
-            border-color: var(--brand-dorado);
-            box-shadow: 0 0 0 3px rgba(212, 149, 43, 0.15);
-            background: #FFFFFF;
-        }
-
-        .form-input::placeholder {
-            color: #A89585;
-        }
-
-        /* Password toggle */
-        .password-wrapper {
-            position: relative;
-        }
-
-        .password-toggle {
-            position: absolute;
-            right: 0.75rem;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: var(--text-muted);
-            padding: 4px;
-            opacity: 0.6;
-            transition: opacity 0.2s;
-        }
-
-        .password-toggle:hover { opacity: 1; }
-
-        /* Login Button */
-        .btn-login {
-            width: 100%;
-            padding: 0.85rem;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.95rem;
-            font-weight: 700;
-            color: #FFFFFF;
-            background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: 0 4px 16px rgba(212, 149, 43, 0.30);
-            margin-top: 0.5rem;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .btn-login:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(212, 149, 43, 0.40);
-        }
-
-        .btn-login:active {
-            transform: translateY(0);
-        }
-
-        /* Error message */
-        .error-msg {
-            background: rgba(196, 69, 54, 0.08);
-            border: 1px solid rgba(196, 69, 54, 0.20);
-            color: var(--danger);
-            padding: 0.75rem 1rem;
-            border-radius: 10px;
-            font-size: 0.85rem;
-            font-weight: 500;
-            margin-bottom: 1.25rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            animation: fadeSlideUp 0.3s ease;
-        }
-
-        @keyframes fadeSlideUp {
-            from { opacity: 0; transform: translateY(8px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Divider */
-        .divider {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin: 1.5rem 0;
-            color: #A89585;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-        }
-
-        .divider::before, .divider::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: rgba(107, 58, 42, 0.10);
-        }
-
-        /* Client portal link */
-        .portal-link {
-            text-align: center;
-            margin-top: 1.5rem;
-        }
-
-        .portal-link a {
-            color: var(--brand-dorado-dark);
-            font-weight: 600;
-            text-decoration: none;
-            font-size: 0.875rem;
-            transition: color 0.2s;
-        }
-
-        .portal-link a:hover {
-            color: var(--brand-dorado);
-            text-decoration: underline;
-        }
-
-        /* Responsive */
-        @media (max-width: 900px) {
-            .split-left { display: none; }
-            .split-right { flex: 1; }
-            .login-header .mobile-logo { display: flex; }
-        }
-
-        @media (max-width: 480px) {
-            .split-right { padding: 1.5rem; }
-            .login-card { padding: 1.5rem; }
-            .welcome-text h2 { font-size: 1.8rem; }
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle.css') }}">
+    <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
 </head>
 <body>
-    <div class="split-layout">
+    <main class="l-split">
         <!-- Left: Brand Showcase -->
-        <div class="split-left">
-            <div class="left-content">
-                <div class="brand">
-                    <div class="brand-logo">BC</div>
-                    <div class="brand-info">
+        <section class="l-split__left">
+            <div class="l-split__content-left">
+                <div class="c-brand">
+                    <div class="c-brand__logo">BC</div>
+                    <div class="c-brand__info">
                         <h1>Brajher's Cake</h1>
                         <p>Panadería y Repostería</p>
                     </div>
                 </div>
             </div>
 
-            <div class="welcome-text">
+            <article class="c-welcome">
                 <h2>El arte de hornear con amor.</h2>
                 <p>Sistema integral de gestión para controlar ventas, inventario, producción y tu equipo en un solo lugar.</p>
-            </div>
+            </article>
 
-            <div class="left-footer">
+            <footer class="l-split__footer">
                 &copy; 2026 Brajher's Cake — Todos los derechos reservados
-            </div>
+            </footer>
 
-            <div class="deco-wheat">🌾</div>
-        </div>
+            <div class="c-deco-wheat">🌾</div>
+        </section>
 
         <!-- Right: Login Form -->
-        <div class="split-right">
-            <div class="login-container">
-                <div class="login-header">
-                    <div class="mobile-logo">BC</div>
+        <section class="l-split__right">
+            <div class="c-login-container">
+                <header class="c-login-header">
+                    <div class="c-login-header__logo-mobile">BC</div>
                     <h2>Bienvenido de vuelta</h2>
                     <p>Inicia sesión para continuar</p>
-                </div>
+                </header>
 
-                <div class="login-card">
+                <div class="c-card c-login-card">
                     {% if error %}
-                    <div class="error-msg">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        {{ error }}
-                    </div>
+                    <div id="js-server-error" data-message="{{ error }}" hidden></div>
                     {% endif %}
 
                     <form method="POST" action="/login" autocomplete="on">
@@ -437,7 +67,7 @@
 
                         <div class="form-group">
                             <label class="form-label" for="password">Contraseña</label>
-                            <div class="password-wrapper">
+                            <div class="c-password-wrapper">
                                 <input
                                     class="form-input"
                                     type="password"
@@ -447,37 +77,23 @@
                                     required
                                     autocomplete="current-password"
                                 >
-                                <button type="button" class="password-toggle" onclick="togglePassword()" aria-label="Mostrar contraseña">
-                                    <svg id="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <button type="button" class="c-password-toggle" id="js-password-toggle" aria-label="Mostrar u ocultar contraseña">
+                                    <svg id="js-eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                 </button>
                             </div>
                         </div>
 
-                        <button type="submit" class="btn-login">Iniciar Sesión</button>
+                        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">Iniciar Sesión</button>
                     </form>
 
-                    <div class="divider">o</div>
+                    <div class="c-divider">o</div>
 
-                    <div class="portal-link">
+                    <div class="c-portal-link">
                         <a href="/cliente/bienvenida">Ver Menú y Hacer Pedidos →</a>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <script>
-        function togglePassword() {
-            const input = document.getElementById('password');
-            const icon = document.getElementById('eye-icon');
-            if (input.type === 'password') {
-                input.type = 'text';
-                icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
-            } else {
-                input.type = 'password';
-                icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
-            }
-        }
-    </script>
+        </section>
+    </main>
 </body>
 </html>

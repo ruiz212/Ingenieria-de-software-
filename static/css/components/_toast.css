@@ -1,0 +1,178 @@
+/* ============================================================
+   TOASTS & NOTIFICATIONS — Brajher's Cake Design System
+   ============================================================ */
+
+/* Container for all toasts */
+.c-toast-container {
+    position: fixed;
+    top: var(--sp-4);
+    right: var(--sp-4);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    pointer-events: none; /* Allows clicking through the container */
+    max-width: 100%;
+    width: 380px;
+}
+
+@media (max-width: 480px) {
+    .c-toast-container {
+        top: var(--sp-2);
+        right: var(--sp-2);
+        left: var(--sp-2);
+        width: auto;
+    }
+}
+
+/* Individual Toast */
+.c-toast {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-elevated);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-light);
+    border-left: 4px solid transparent;
+    pointer-events: auto; /* Re-enable clicks on the toast itself */
+    overflow: hidden;
+    
+    /* Animation */
+    animation: slideInRight var(--transition-smooth) forwards;
+}
+
+.c-toast.is-closing {
+    animation: fadeOutRight var(--transition-smooth) forwards;
+}
+
+/* Icon */
+.c-toast__icon {
+    flex-shrink: 0;
+    margin-right: var(--sp-3);
+    margin-top: 0.125rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.c-toast__icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Content */
+.c-toast__content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.c-toast__title {
+    font-weight: 600;
+    font-size: var(--text-base);
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+.c-toast__message {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* Close Button */
+.c-toast__close {
+    background: transparent;
+    border: none;
+    color: var(--text-faint);
+    cursor: pointer;
+    padding: var(--sp-1);
+    margin-left: var(--sp-2);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+}
+
+.c-toast__close:hover {
+    background: var(--surface-sunken);
+    color: var(--text-main);
+}
+
+/* Progress Bar */
+.c-toast__progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: rgba(0, 0, 0, 0.1);
+    width: 100%;
+}
+
+.c-toast__progress-bar {
+    height: 100%;
+    width: 100%;
+    transform-origin: left;
+    animation: progressShrink linear forwards;
+}
+
+/* Pause animation on hover */
+.c-toast:hover .c-toast__progress-bar {
+    animation-play-state: paused;
+}
+
+/* ─── Variants ─── */
+
+/* Success */
+.c-toast--success { border-left-color: var(--success); }
+.c-toast--success .c-toast__icon { color: var(--success); }
+.c-toast--success .c-toast__progress-bar { background-color: var(--success); }
+
+/* Danger/Error */
+.c-toast--danger { border-left-color: var(--danger); }
+.c-toast--danger .c-toast__icon { color: var(--danger); }
+.c-toast--danger .c-toast__progress-bar { background-color: var(--danger); }
+
+/* Warning */
+.c-toast--warning { border-left-color: var(--warning); }
+.c-toast--warning .c-toast__icon { color: var(--warning); }
+.c-toast--warning .c-toast__progress-bar { background-color: var(--warning); }
+
+/* Info */
+.c-toast--info { border-left-color: var(--info); }
+.c-toast--info .c-toast__icon { color: var(--info); }
+.c-toast--info .c-toast__progress-bar { background-color: var(--info); }
+
+/* ─── Animations ─── */
+@keyframes slideInRight {
+    from {
+        transform: translateX(120%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(120%);
+        opacity: 0;
+    }
+}
+
+@keyframes progressShrink {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+}
