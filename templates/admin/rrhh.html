@@ -16,17 +16,27 @@
         <a href="{{ url_for('kiosco.kiosco_vista') }}" target="_blank" class="btn btn-outline" style="border-color: #9b59b6; color: #9b59b6; text-decoration: none;">⏱️ Kiosco Asistencia</a>
         <button class="btn btn-outline" onclick="abrirModalPlanilla()" style="border-color: var(--primary-color); color: var(--primary-color);">📝 Generar Planilla Batch</button>
         <button class="btn btn-outline" onclick="abrirModalNomina()" style="border-color: var(--success); color: var(--success);">💰 Indiv.</button>
+        <button class="btn btn-outline" onclick="abrirModalAguinaldo()" style="border-color: #f39c12; color: #f39c12;">🎄 Aguinaldo</button>
         <button class="btn btn-outline" onclick="abrirModalLiquidacion()" style="border-color: var(--warning); color: var(--warning);">📋 Liquidación</button>
     </div>
 </div>
 
-<!-- Info Legal -->
-<div class="mb-3" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+<!-- Info Legal y Validaciones de Ley -->
+<div class="mb-3" style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
     <span class="badge badge-neutral">👥 Expedientes</span>
-    <span class="badge badge-neutral">💰 Nómina General</span>
-    <span class="badge badge-primary">🏥 INSS {{ tasas.get('inss_laboral', '7') }}% Lab / {{ tasas.get('inss_patronal_menos50', '21.5') }}% Pat</span>
+    <span class="badge badge-primary" title="Art. 11 Ley de Seguridad Social">🏥 INSS {{ tasas.get('inss_laboral', '7') }}% Lab / {{ tasas.get('inss_patronal_menos50', '21.5') }}% Pat</span>
     <span class="badge badge-primary">🎓 INATEC {{ tasas.get('inatec', '2') }}%</span>
-    <span class="badge badge-success">👷 {{ total_activos }} Empleados Activos</span>
+    <span class="badge badge-success">👷 {{ total_activos }} Empleados</span>
+    
+    <!-- Enlaces Legales -->
+    <a href="https://www.asamblea.gob.ni/assets/Leyes/Codigo_del_trabajo_de_la_republica_de_Nicaragua.pdf" target="_blank" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 0.75rem; border-color: #3498db; color: #3498db;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:2px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> 
+        Código del Trabajo (Ley 185)
+    </a>
+    <a href="https://www.dgi.gob.ni/documentos/Leyes/LEY-822-LCT.pdf" target="_blank" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 0.75rem; border-color: #9b59b6; color: #9b59b6;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:2px;"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        IR Laboral (Ley 822)
+    </a>
 </div>
 
 <!-- Panel de Alertas HR -->
@@ -312,6 +322,91 @@
         </form>
     </div>
 </div>
+<!-- Modal Generar Aguinaldo Batch -->
+<div id="modal-aguinaldo" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+        <h2>Cálculo de Treceavo Mes (Aguinaldo)</h2>
+        <p class="subtitle">Genera la nómina especial de aguinaldo para los empleados calculando el salario máximo/promedio de los últimos 6 meses. Exento de INSS e IR (Art. 97 Ley 185).</p>
+        <form id="form-aguinaldo">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Año Fiscal de Aguinaldo</label>
+                    <input type="number" id="ag-anio" class="form-input" min="2020" max="2050" value="2026" required>
+                </div>
+                <div class="form-group" style="display:flex; align-items:flex-end;">
+                    <button type="submit" class="btn btn-primary" id="btn-submit-aguinaldo" style="width:100%;">Generar Planilla Aguinaldo</button>
+                </div>
+            </div>
+            <div class="modal-actions mt-3">
+                <button type="button" class="btn btn-outline" onclick="cerrarModalAguinaldo()">Cancelar / Cerrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Nómina Individual -->
+<div id="modal-nomina" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 600px;">
+        <h2>Nómina Individual y Deducciones de Ley</h2>
+        <p class="subtitle">Calcula retenciones (IR, INSS) y horas extras automáticamente.</p>
+        <form id="form-nomina">
+            <div class="form-group">
+                <label class="form-label">Empleado</label>
+                <select id="ni-empleado" class="form-select" required>
+                    <option value="">Seleccione un empleado...</option>
+                    {% for e in empleados %}
+                        {% if e.estado == 'Activo' %}
+                        <option value="{{ e.id }}">{{ e.nombre }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Período Inicio</label>
+                    <input type="date" id="ni-inicio" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Período Fin</label>
+                    <input type="date" id="ni-fin" class="form-input" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">
+                        Horas Extras 
+                        <a href="https://www.asamblea.gob.ni/assets/Leyes/Codigo_del_trabajo_de_la_republica_de_Nicaragua.pdf" target="_blank" title="Art. 62: Se pagan con recargo del 100% (doble)" style="color:var(--primary-color); text-decoration:none;">ⓘ Ley 185</a>
+                    </label>
+                    <input type="number" id="ni-horas-extras" class="form-input form-number" step="1" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        Feriados Trabajados
+                        <a href="https://www.asamblea.gob.ni/assets/Leyes/Codigo_del_trabajo_de_la_republica_de_Nicaragua.pdf" target="_blank" title="Art. 66: Remunerado con el 100% adicional al salario normal" style="color:var(--primary-color); text-decoration:none;">ⓘ Ley 185</a>
+                    </label>
+                    <input type="number" id="ni-feriados" class="form-input form-number" step="1" value="0" placeholder="Días">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">
+                        Días Ausentes
+                        <a href="https://www.asamblea.gob.ni/assets/Leyes/Codigo_del_trabajo_de_la_republica_de_Nicaragua.pdf" target="_blank" title="Art. 64: Pérdida proporcional del 7mo día" style="color:var(--danger); text-decoration:none;">ⓘ Deducción</a>
+                    </label>
+                    <input type="number" id="ni-ausentes" class="form-input form-number" step="1" value="0" placeholder="Días injustificados">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Otros Ingresos (C$)</label>
+                    <input type="number" id="ni-otros-ingresos" class="form-input form-number" step="0.01" value="0">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="cerrarModalNomina()">Cancelar</button>
+                <button type="submit" class="btn btn-primary" id="btn-submit-nomina">Calcular y Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <!-- Modal Horario Empleado -->
 <div id="modal-horario-empleado" class="modal-overlay hidden">
@@ -468,7 +563,87 @@
         }
     }
 
-    function abrirModalNomina() { showToast('Función Nómina Individual en desarrollo', true); }
+    function abrirModalAguinaldo() { document.getElementById('modal-aguinaldo').classList.remove('hidden'); }
+    function cerrarModalAguinaldo() { document.getElementById('modal-aguinaldo').classList.add('hidden'); }
+
+    document.getElementById('form-aguinaldo').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const data = { anio: document.getElementById('ag-anio').value };
+        
+        const btn = document.getElementById('btn-submit-aguinaldo');
+        const oldText = btn.innerHTML;
+        btn.innerHTML = '<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="0.75"/></svg> Generando Aguinaldo...';
+        btn.disabled = true;
+
+        showLoading();
+        try {
+            const res = await fetch('/admin/api/rrhh/aguinaldo/calcular_batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            hideLoading();
+            const result = await res.json();
+            if (res.ok) {
+                showToast(result.mensaje || 'Aguinaldo generado correctamente', false);
+                cerrarModalAguinaldo();
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(result.error || 'Error al generar aguinaldo', true);
+            }
+        } catch (error) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        } finally {
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+        }
+    });
+
+    function abrirModalNomina() { document.getElementById('modal-nomina').classList.remove('hidden'); }
+    function cerrarModalNomina() { document.getElementById('modal-nomina').classList.add('hidden'); }
+
+    document.getElementById('form-nomina').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const data = {
+            empleado_id: document.getElementById('ni-empleado').value,
+            periodo_inicio: document.getElementById('ni-inicio').value,
+            periodo_fin: document.getElementById('ni-fin').value,
+            horas_extras: parseFloat(document.getElementById('ni-horas-extras').value) || 0,
+            dias_feriados_trabajados: parseFloat(document.getElementById('ni-feriados').value) || 0,
+            dias_ausentes: parseFloat(document.getElementById('ni-ausentes').value) || 0,
+            otros_ingresos: parseFloat(document.getElementById('ni-otros-ingresos').value) || 0
+        };
+
+        const btn = document.getElementById('btn-submit-nomina');
+        const oldText = btn.innerHTML;
+        btn.innerHTML = '<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="0.75"/></svg> Calculando...';
+        btn.disabled = true;
+
+        showLoading();
+        try {
+            const res = await fetch('/admin/api/rrhh/nomina/calcular', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            hideLoading();
+            const result = await res.json();
+            if (res.ok) {
+                showToast(result.mensaje || 'Nómina calculada', false);
+                cerrarModalNomina();
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(result.error || 'Error al calcular nómina', true);
+            }
+        } catch (error) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        } finally {
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+        }
+    });
 
     // --- LÓGICA DE CÁMARA E IA ---
     let capturedFaceBase64 = null;
