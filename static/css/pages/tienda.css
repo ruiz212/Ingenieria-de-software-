@@ -201,38 +201,63 @@ body.tienda-body {
     margin: 0 auto;
 }
 
-.store-grid {
+.store-catalog .store-grid {
     display: grid;
-    /* Forzamos exactamente 2 columnas. 
-       El minmax permite que bajen de tamaño en móviles pequeños, 
-       pero que nunca pasen de 350px de ancho en pantallas grandes para evitar que se vean gigantes. */
-    grid-template-columns: repeat(2, minmax(140px, 350px));
-    justify-content: center; /* Centramos el grid en la pantalla */
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1.25rem;
 }
 
 @media (min-width: 768px) {
-    .store-grid {
-        gap: 3rem; /* Más espacio entre tarjetas en pantallas grandes */
+    .store-catalog .store-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 2rem;
     }
 }
 .store-product-card {
     background: white;
     border-radius: 20px;
-    padding: 1.5rem;
     position: relative;
     box-shadow: 0 10px 30px rgba(107, 58, 42, 0.05);
     border: 1px solid rgba(107, 58, 42, 0.05);
     transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    overflow: hidden; /* To keep the rounded borders for the image */
 }
 
 .store-product-card:hover {
-    transform: translateY(-8px);
+    transform: translateY(-6px);
     box-shadow: 0 20px 40px rgba(107, 58, 42, 0.12);
     border-color: rgba(212, 149, 43, 0.3);
+}
+
+.store-product-card .product-visual {
+    aspect-ratio: 4 / 3;
+    height: auto !important;
+    width: 100%;
+    background-color: #fafafa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.store-product-card .product-visual img.product-real-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Looks much more premium */
+    object-position: center;
+    transition: transform 0.4s ease;
+}
+
+.store-product-card:hover .product-visual img.product-real-img {
+    transform: scale(1.05);
+}
+
+.store-product-card > div:not(.product-visual):not(.card-price-add):not(.discount-badge):not(.product-discount-badge) {
+    padding: 1rem 1rem 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
 .card-cat {
@@ -257,10 +282,11 @@ body.tienda-body {
     justify-content: space-between;
     align-items: center;
     margin-top: auto;
+    padding: 0.5rem 1rem 1rem 1rem; /* Padding at the bottom */
 }
 
 .card-price {
-    font-size: 1.35rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: var(--text-main);
     margin: 0;
@@ -283,13 +309,13 @@ body.tienda-body {
     background: var(--brand-beige);
     color: var(--brand-cafe-dark);
     border: none;
-    width: 45px;
-    height: 45px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.4rem;
+    font-size: 1.2rem;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     box-shadow: 0 4px 10px rgba(107, 58, 42, 0.1);

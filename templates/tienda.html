@@ -4,72 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tienda Online - Panadería Amada</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/tienda.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/pos_product_visuals.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/tienda.css', v=2) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/pos_product_visuals.css', v=2) }}">
     <style>
         /* Fallbacks for JS interactions */
         .catalog-panel { display: contents; }
-        .products-grid { display: contents; }
-
-        /* ═══ Tienda product card — diseño completo ═══ */
-        .store-product-card {
-            padding: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            overflow: hidden !important;
-            border-radius: 16px !important;
-        }
-
-        /* ── Zona de imagen: siempre proporción 4:3, llena el espacio sin distorsión ── */
-        .store-product-card .product-visual {
-            aspect-ratio: 4 / 3;
-            height: auto !important;
-            width: 100%;
-            flex-shrink: 0;
-            background-color: white; /* Fondo blanco para las imágenes contain */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .store-product-card .product-visual img.product-real-img {
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
-            object-fit: contain;
-            object-position: center;
-            display: block;
-        }
-
-        /* ── Zona de info: compacta y bien espaciada ── */
-        .store-product-card > div:not(.product-visual):not(.card-price-add):not(.discount-badge):not(.product-discount-badge) {
-            padding: 0.75rem 0.85rem 0;
-        }
-        .store-product-card .card-cat {
-            padding: 0;
-            font-size: 0.65rem;
-            margin-bottom: 0.25rem;
-        }
-        .store-product-card .card-title {
-            padding: 0;
-            font-size: 1rem;
-            margin: 0 0 0.35rem 0;
-            line-height: 1.25;
-        }
-        .store-product-card .card-price-add {
-            padding: 0.35rem 0.85rem 0.75rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .store-product-card .card-price {
-            font-size: 1.05rem;
-        }
-        .store-product-card .btn-add {
-            width: 36px;
-            height: 36px;
-            font-size: 1.1rem;
-        }
     </style>
 
     <!-- Emoji/category maps -->
