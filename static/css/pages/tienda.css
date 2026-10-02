@@ -203,16 +203,17 @@ body.tienda-body {
 
 .store-grid {
     display: grid;
-    /* Por defecto en móvil: 2 columnas exactas */
-    grid-template-columns: repeat(2, 1fr);
+    /* Forzamos exactamente 2 columnas. 
+       El minmax permite que bajen de tamaño en móviles pequeños, 
+       pero que nunca pasen de 350px de ancho en pantallas grandes para evitar que se vean gigantes. */
+    grid-template-columns: repeat(2, minmax(140px, 350px));
+    justify-content: center; /* Centramos el grid en la pantalla */
     gap: 1rem;
 }
 
-/* En pantallas más grandes de tablet/PC: 3 o 4 columnas para que no sean gigantes */
 @media (min-width: 768px) {
     .store-grid {
-        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-        gap: 2rem;
+        gap: 3rem; /* Más espacio entre tarjetas en pantallas grandes */
     }
 }
 .store-product-card {
