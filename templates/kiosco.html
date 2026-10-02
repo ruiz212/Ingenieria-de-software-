@@ -10,11 +10,13 @@
         :root {
             --primary: #8e44ad;
             --primary-dark: #732d91;
-            --bg-color: #0a0a14;
+            --primary-light: rgba(142, 68, 173, 0.15);
+            --bg-color: #080810;
             --text-light: #f5f6fa;
             --success: #2ecc71;
             --error: #e74c3c;
             --warning: #e67e22;
+            --info: #3498db;
             --glass-bg: rgba(255, 255, 255, 0.04);
             --glass-border: rgba(255, 255, 255, 0.08);
         }
@@ -46,27 +48,36 @@
             z-index: 10;
         }
         .kiosco-header .brand {
-            font-size: 1rem;
-            font-weight: 600;
+            font-size: 0.8rem;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 4px;
-            color: var(--primary);
-            opacity: 0.9;
+            letter-spacing: 5px;
+            background: linear-gradient(135deg, rgba(142,68,173,0.9), rgba(155,89,182,0.7));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            opacity: 1;
             margin-bottom: 4px;
         }
         .kiosco-header .clock {
             font-size: 4.5rem;
             font-weight: 800;
-            letter-spacing: 2px;
-            text-shadow: 0 4px 20px rgba(142, 68, 173, 0.3);
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #f5f6fa 0%, rgba(200,180,230,0.85) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: none;
+            filter: drop-shadow(0 4px 20px rgba(142,68,173,0.3));
             line-height: 1;
         }
         .kiosco-header .date {
-            font-size: 1rem;
-            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.45);
             font-weight: 500;
-            letter-spacing: 1px;
-            margin-top: 6px;
+            letter-spacing: 2px;
+            margin-top: 8px;
+            text-transform: uppercase;
         }
 
         /* ═══ CAMERA ═══ */
@@ -84,30 +95,78 @@
             border-radius: 24px;
             overflow: hidden;
             background: #000;
-            border: 2px solid var(--glass-border);
+            border: 1.5px solid rgba(142, 68, 173, 0.20);
             box-shadow:
-                0 20px 60px rgba(0, 0, 0, 0.5),
-                0 0 80px rgba(142, 68, 173, 0.08),
-                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+                0 24px 64px rgba(0, 0, 0, 0.60),
+                0 0 0 1px rgba(255,255,255,0.03),
+                0 0 60px rgba(142, 68, 173, 0.06),
+                inset 0 1px 0 rgba(255,255,255,0.04);
             transition: border-color 0.5s ease, box-shadow 0.5s ease;
         }
+
+        /* Corner brackets — UI Pro Max accent */
+        .camera-container::before,
+        .camera-container::after {
+            content: '';
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            border-color: var(--primary);
+            border-style: solid;
+            opacity: 0.7;
+            z-index: 10;
+            transition: opacity 0.3s;
+        }
+        .camera-container::before {
+            top: 12px; left: 12px;
+            border-width: 2px 0 0 2px;
+            border-radius: 6px 0 0 0;
+        }
+        .camera-container::after {
+            top: 12px; right: 12px;
+            border-width: 2px 2px 0 0;
+            border-radius: 0 6px 0 0;
+        }
+        .camera-wrapper::before,
+        .camera-wrapper::after {
+            content: '';
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            border-color: var(--primary);
+            border-style: solid;
+            opacity: 0.7;
+            z-index: 10;
+            pointer-events: none;
+        }
+        .camera-wrapper::before {
+            bottom: 12px; left: 12px;
+            border-width: 0 0 2px 2px;
+            border-radius: 0 0 0 6px;
+        }
+        .camera-wrapper::after {
+            bottom: 12px; right: 12px;
+            border-width: 0 2px 2px 0;
+            border-radius: 0 0 6px 0;
+        }
+
         .camera-container.flash-entrada {
             border-color: var(--success) !important;
             box-shadow:
-                0 20px 60px rgba(0, 0, 0, 0.5),
-                0 0 40px rgba(46, 204, 113, 0.3) !important;
+                0 24px 64px rgba(0, 0, 0, 0.60),
+                0 0 50px rgba(46, 204, 113, 0.35) !important;
         }
         .camera-container.flash-salida {
-            border-color: #3498db !important;
+            border-color: var(--info) !important;
             box-shadow:
-                0 20px 60px rgba(0, 0, 0, 0.5),
-                0 0 40px rgba(52, 152, 219, 0.3) !important;
+                0 24px 64px rgba(0, 0, 0, 0.60),
+                0 0 50px rgba(52, 152, 219, 0.35) !important;
         }
         .camera-container.flash-error {
             border-color: var(--error) !important;
             box-shadow:
-                0 20px 60px rgba(0, 0, 0, 0.5),
-                0 0 40px rgba(231, 76, 60, 0.3) !important;
+                0 24px 64px rgba(0, 0, 0, 0.60),
+                0 0 50px rgba(231, 76, 60, 0.35) !important;
         }
 
         #video {
@@ -152,44 +211,53 @@
         /* ═══ STATUS BAR ═══ */
         .status-bar {
             margin-top: 24px;
-            padding: 14px 32px;
+            padding: 12px 28px;
             border-radius: 100px;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.07);
             backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             display: flex;
             align-items: center;
-            gap: 12px;
-            font-size: 1rem;
+            gap: 10px;
+            font-size: 0.9rem;
             font-weight: 500;
+            letter-spacing: 0.01em;
             transition: all 0.4s ease;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.20),
+                        inset 0 1px 0 rgba(255,255,255,0.05);
         }
         .status-dot {
-            width: 12px; height: 12px;
+            width: 8px; height: 8px;
             border-radius: 50%;
             background: var(--warning);
             flex-shrink: 0;
-            animation: pulse 1.5s infinite;
+            animation: statusPulse 1.5s infinite;
         }
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.6); }
-            70% { box-shadow: 0 0 0 8px rgba(230, 126, 34, 0); }
+        @keyframes statusPulse {
+            0%   { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.6); }
+            70%  { box-shadow: 0 0 0 6px rgba(230, 126, 34, 0); }
             100% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0); }
         }
         .status-bar.ready .status-dot {
             background: var(--success);
-            box-shadow: 0 0 12px var(--success);
+            box-shadow: 0 0 10px var(--success), 0 0 0 2px rgba(46,204,113,0.25);
             animation: none;
         }
         .status-bar.error-state .status-dot {
             background: var(--error);
-            box-shadow: 0 0 12px var(--error);
+            box-shadow: 0 0 10px var(--error);
             animation: none;
         }
         .status-bar.paused .status-dot {
-            background: #3498db;
-            box-shadow: 0 0 12px #3498db;
-            animation: pulse 2s infinite;
+            background: var(--info);
+            box-shadow: 0 0 10px var(--info);
+            animation: statusPulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%   { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.6); }
+            70%  { box-shadow: 0 0 0 8px rgba(230, 126, 34, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0); }
         }
 
         /* ═══ TOAST ═══ */

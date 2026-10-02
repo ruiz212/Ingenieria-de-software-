@@ -1,21 +1,27 @@
 /* ============================================================
    MODALS & TOASTS — Brajher's Cake Design System
+   UI/UX Pro Max: premium entrances, toast progress, depth
    ============================================================ */
 
 .hidden { display: none !important; }
 
-/* ── Modal Overlay ── */
+/* ══════════════════════════════════════════════════════════
+   MODAL OVERLAY
+   ══════════════════════════════════════════════════════════ */
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.65);
+    background: rgba(30, 18, 10, 0.70);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 2000;
+    z-index: var(--z-modal);
     opacity: 0;
     animation: modalFadeIn 0.25s var(--ease-out) forwards;
     padding: 1rem;
+    /* Subtle radial blur effect for depth */
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
 }
 
 .modal-overlay.active,
@@ -24,37 +30,75 @@
     pointer-events: all;
 }
 
-/* ── Modal Content ── */
+/* ══════════════════════════════════════════════════════════
+   MODAL CONTENT
+   ══════════════════════════════════════════════════════════ */
 .modal-content {
     background: var(--surface);
     padding: 2rem;
     border-radius: var(--radius-xl);
     width: 100%;
     max-width: 480px;
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 32px 64px rgba(30, 18, 10, 0.40),
+                0 8px 24px rgba(30, 18, 10, 0.20),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06);
     max-height: 90vh;
     overflow-y: auto;
-    transform: scale(0.95) translateY(12px);
+    transform: scale(0.95) translateY(16px);
     animation: modalSlideUp 0.35s var(--ease-out) forwards;
     border-top: 3px solid var(--brand-dorado);
     position: relative;
 }
 
+/* ── Close button ── */
+.modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: 1px solid var(--border-light);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    font-size: 1rem;
+    line-height: 1;
+}
+.modal-close:hover {
+    background: var(--surface-sunken);
+    color: var(--text-main);
+    border-color: var(--border-interactive);
+    transform: rotate(90deg);
+}
+
+/* ── Modal Typography ── */
 .modal-content h2,
 .modal-content h3 {
-    font-size: 1.2rem;
+    font-size: var(--text-lg);
     color: var(--text-main);
     margin-bottom: 0.35rem;
     font-family: 'Playfair Display', serif;
+    padding-right: 2rem; /* space for close btn */
 }
 
 .modal-content p.subtitle {
     color: var(--text-muted);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     margin-bottom: 1.5rem;
-    line-height: 1.5;
+    line-height: 1.6;
 }
 
+/* ── Size variants ── */
+.modal-content.modal-sm  { max-width: 380px; }
+.modal-content.modal-wide { max-width: 640px; }
+.modal-content.modal-xl  { max-width: 840px; }
+
+/* ── Modal Actions ── */
 .modal-actions {
     display: flex;
     justify-content: flex-end;
@@ -62,30 +106,22 @@
     margin-top: 1.75rem;
     padding-top: 1.25rem;
     border-top: 1px solid var(--border-light);
+    flex-wrap: wrap;
 }
 
-/* Wide modal variant */
-.modal-content.modal-wide {
-    max-width: 640px;
-}
-
-.modal-content.modal-xl {
-    max-width: 840px;
-}
-
+/* ── Animations ── */
 @keyframes modalFadeIn {
     from { opacity: 0; }
     to   { opacity: 1; }
 }
-
 @keyframes modalSlideUp {
-    from { transform: scale(0.95) translateY(12px); opacity: 0; }
+    from { transform: scale(0.95) translateY(16px); opacity: 0; }
     to   { transform: scale(1) translateY(0); opacity: 1; }
 }
 
-/* ============================================================
-   TOASTS
-   ============================================================ */
+/* ══════════════════════════════════════════════════════════
+   TOASTS — con progress bar y glow
+   ══════════════════════════════════════════════════════════ */
 .toast-container {
     position: fixed;
     bottom: 20px;
@@ -93,40 +129,83 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    z-index: 9999;
+    z-index: var(--z-toast);
+    pointer-events: none;
 }
 
 .toast {
     background: var(--secondary);
     color: white;
-    padding: 0.85rem 1.25rem;
+    padding: 0.9rem 1.25rem;
     border-radius: var(--radius-md);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 500;
     font-family: 'Inter', sans-serif;
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.06);
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    animation: toastSlideIn 0.4s var(--ease-out);
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    animation: toastSlideIn 0.4s var(--ease-spring) both;
     max-width: 380px;
+    pointer-events: all;
+    position: relative;
+    overflow: hidden;
 }
 
-.toast.error   { background: var(--danger); }
-.toast.success { background: var(--success); }
-.toast.warning { background: var(--warning); color: #3B2218; }
+/* Progress bar on toast */
+.toast::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.40);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    animation: toast-progress linear forwards;
+    animation-duration: var(--toast-duration, 4s);
+}
+@keyframes toast-progress {
+    from { width: 100%; }
+    to   { width: 0%; }
+}
+
+.toast.toast-exit {
+    animation: toastSlideOut 0.3s var(--ease-smooth) forwards;
+}
 
 .toast svg { width: 18px; height: 18px; flex-shrink: 0; }
 
-@keyframes toastSlideIn {
-    from { opacity: 0; transform: translateX(20px); }
-    to   { opacity: 1; transform: translateX(0); }
+/* ── Toast Semantic Variants ── */
+.toast.error {
+    background: var(--danger);
+    box-shadow: 0 8px 24px rgba(196, 69, 54, 0.35);
+}
+.toast.success {
+    background: var(--success);
+    box-shadow: 0 8px 24px rgba(74, 157, 91, 0.35);
+}
+.toast.warning {
+    background: var(--warning);
+    color: #3B2218;
+    box-shadow: 0 8px 24px rgba(232, 168, 56, 0.35);
+}
+.toast.info {
+    background: var(--info);
+    box-shadow: 0 8px 24px rgba(59, 124, 194, 0.35);
 }
 
-/* ============================================================
+@keyframes toastSlideIn {
+    from { opacity: 0; transform: translateX(24px) scale(0.92); }
+    to   { opacity: 1; transform: translateX(0)    scale(1); }
+}
+@keyframes toastSlideOut {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(24px); max-height: 0; margin: 0; padding: 0; }
+}
+
+/* ══════════════════════════════════════════════════════════
    SPINNER / LOADING
-   ============================================================ */
+   ══════════════════════════════════════════════════════════ */
 .loading-overlay {
     position: fixed;
     top: 20px;
@@ -137,11 +216,12 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    box-shadow: var(--shadow-lg);
-    z-index: 10000;
-    font-size: 0.875rem;
+    box-shadow: var(--shadow-lg), 0 0 0 1px var(--border-light);
+    z-index: var(--z-toast);
+    font-size: var(--text-sm);
     color: var(--text-main);
     font-family: 'Inter', sans-serif;
+    animation: toastSlideIn 0.3s var(--ease-spring) both;
 }
 
 .spinner {
@@ -151,13 +231,18 @@
     border-top-color: var(--brand-dorado);
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
 }
-
+.spinner-lg {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ============================================================
+/* ══════════════════════════════════════════════════════════
    EMPTY STATE
-   ============================================================ */
+   ══════════════════════════════════════════════════════════ */
 .empty-state {
     text-align: center;
     padding: 3rem 2rem;
@@ -169,27 +254,40 @@
 }
 
 .empty-state-icon {
-    font-size: 2.5rem;
+    font-size: 1.75rem;
     margin-bottom: 1rem;
-    width: 80px;
-    height: 80px;
+    width: 72px;
+    height: 72px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--primary-subtle);
+    background: var(--gradient-glow);
+    border: 1px solid rgba(212, 149, 43, 0.15);
     border-radius: 50%;
     color: var(--brand-dorado);
-    box-shadow: 0 0 0 10px rgba(212, 149, 43, 0.05);
-    opacity: 0.85;
+    box-shadow: 0 0 0 8px rgba(212, 149, 43, 0.05);
+    animation: empty-float 4s ease-in-out infinite;
+}
+@keyframes empty-float {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-6px); }
+}
+
+.empty-state h4 {
+    font-size: var(--text-md);
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 0.4rem;
 }
 
 .empty-state p {
-    font-size: 0.95rem;
+    font-size: var(--text-base);
     font-weight: 500;
-    max-width: 250px;
-    line-height: 1.5;
+    max-width: 260px;
+    line-height: 1.6;
+    color: var(--text-muted);
 }
 
 .empty-state .btn {
-    margin-top: 1rem;
+    margin-top: 1.25rem;
 }

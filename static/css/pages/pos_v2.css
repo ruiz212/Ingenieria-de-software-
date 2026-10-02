@@ -76,20 +76,36 @@ body.pos-body {
     border-radius: var(--radius-sm);
     cursor: pointer;
     font-weight: 600;
+    font-size: var(--text-sm);
     white-space: nowrap;
     transition: all var(--transition-smooth);
+    position: relative;
+    overflow: hidden;
 }
 
 .category-btn:hover {
     background: var(--surface-hover);
     color: var(--text-main);
+    border-color: var(--border-interactive);
 }
 
 .category-btn.active {
     background: var(--primary-color);
-    color: #111; /* Contrast text for primary */
+    color: #1A0F00;
     border-color: transparent;
     box-shadow: var(--shadow-glow);
+    font-weight: 700;
+}
+/* Underline active indicator */
+.category-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 1px;
 }
 
 /* Catalog Grid */
@@ -120,33 +136,73 @@ body.pos-body {
     padding: 1.25rem;
     cursor: pointer;
     position: relative;
-    transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease, background 0.2s;
+    transition: transform 0.2s var(--ease-spring),
+                box-shadow 0.2s ease,
+                background 0.2s ease,
+                border-color 0.2s ease;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     min-height: 120px;
+    overflow: hidden;
+}
+
+/* Premium gradient accent strip on hover */
+.product-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--gradient-primary);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+/* Subtle glow bg on hover */
+.product-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--gradient-glow);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+    border-radius: inherit;
 }
 
 .product-card:hover {
     transform: translateY(-5px) scale(1.02);
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-lg), 0 0 0 1px rgba(212,149,43,0.12);
     background: var(--surface-hover);
-    border-color: var(--border-interactive);
+    border-color: rgba(212, 149, 43, 0.20);
+}
+.product-card:hover::before { opacity: 1; }
+.product-card:hover::after  { opacity: 1; }
+.product-card:hover .price  { color: var(--brand-dorado-dark); }
+
+.product-card:active {
+    transform: translateY(-2px) scale(0.99);
+    transition-duration: 0.08s;
 }
 
 .product-card .category-label {
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.06em;
     color: var(--text-muted);
     margin-bottom: 0.5rem;
+    position: relative;
+    z-index: 1;
 }
 
 .product-card h3 {
     margin: 0 0 0.75rem 0;
-    font-size: 1.1rem;
+    font-size: var(--text-md);
     color: var(--text-main);
     font-weight: 600;
+    line-height: 1.3;
+    position: relative;
+    z-index: 1;
 }
 
 .product-card .price {
@@ -154,6 +210,10 @@ body.pos-body {
     font-weight: 800;
     color: var(--primary-color);
     margin: 0;
+    transition: color 0.2s ease;
+    position: relative;
+    z-index: 1;
+    font-family: 'Outfit', sans-serif;
 }
 
 /* Invoice / Cart Panel */
@@ -227,18 +287,30 @@ body.pos-body {
 
 .qty-btn {
     background: var(--surface-elevated);
-    border: none;
+    border: 1px solid var(--border-light);
     color: var(--text-main);
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-xs);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    transition: all 0.15s var(--ease-out);
+    flex-shrink: 0;
+    line-height: 1;
 }
-
-.qty-btn:hover { background: var(--surface-hover); }
+.qty-btn:hover {
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
+    transform: scale(1.1);
+}
+.qty-btn:active {
+    transform: scale(0.93);
+}
 
 .invoice-footer {
     padding: 1.25rem;
@@ -263,32 +335,45 @@ body.pos-body {
 }
 
 #btn-facturar {
-    background: var(--success);
+    background: linear-gradient(135deg, var(--success), #3D8A4E);
     color: #fff;
     border: none;
     padding: 1.25rem;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 700;
+    letter-spacing: 0.02em;
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease;
     width: 100%;
+    position: relative;
+    overflow: hidden;
 }
+#btn-facturar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at center, rgba(255,255,255,0.18) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+#btn-facturar:active::after { opacity: 1; transition: opacity 0s; }
 
 #btn-facturar:disabled {
     background: var(--surface-sunken);
     color: var(--text-faint);
     cursor: not-allowed;
+    box-shadow: none;
 }
 
 #btn-facturar:not(:disabled):hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px var(--success-border);
+    box-shadow: 0 8px 24px rgba(74, 157, 91, 0.40);
 }
 
 /* Modals for POS — Performance-optimized */
 .modal-overlay {
-    background: rgba(59, 34, 24, 0.55) !important;
+    background: rgba(30, 18, 10, 0.72) !important;
     /* REMOVED backdrop-filter: blur — causes severe scroll jank (repaints every frame) */
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
