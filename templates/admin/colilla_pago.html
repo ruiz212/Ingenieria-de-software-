@@ -385,7 +385,7 @@
                 <div class="logo-placeholder">BC</div>
                 <div class="company-info">
                     <h1>Brajher's Cake</h1>
-                    <p>Nómina de Pago</p>
+                    <p>{% if nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}Comprobante de Aguinaldo{% else %}Nómina de Pago{% endif %}</p>
                 </div>
             </div>
             
@@ -450,7 +450,7 @@
                         {% endif %}
                         {% if nomina.OtrosIngresos > 0 %}
                         <tr>
-                            <td>Comisiones / Otros Ingresos</td>
+                            <td>{% if nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}Treceavo Mes (Aguinaldo){% else %}Comisiones / Otros Ingresos{% endif %}</td>
                             <td>{{ "{:,.2f}".format(nomina.OtrosIngresos) }}</td>
                         </tr>
                         {% endif %}
@@ -522,7 +522,11 @@
 
         <!-- Pie Legal -->
         <div class="legal-note">
+            {% if nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}
+            Este documento constituye el recibo oficial de pago del Treceavo Mes (Aguinaldo), exento de retenciones de INSS e IR según Art. 97 y 98 del Código del Trabajo (Ley 185) y la Ley de Concertación Tributaria (Ley 822).
+            {% else %}
             Este documento constituye el recibo oficial de pago de salario y deducciones de ley aplicables correspondientes al período indicado.
+            {% endif %}
         </div>
 
     </div>

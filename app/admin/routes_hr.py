@@ -12,7 +12,7 @@ from app.admin import admin_bp
 from app.db import get_db_connection
 from app.auth.decorators import roles_required
 from app.extensions import csrf
-from datetime import datetime
+from datetime import datetime, date
 
 @admin_bp.route('/rrhh')
 @login_required
@@ -46,7 +46,8 @@ def rrhh():
     # Nóminas recientes
     cursor.execute("""
         SELECT TOP 20 n.ID, e.NombreCompleto, n.PeriodoInicio, n.PeriodoFin,
-               n.TotalDevengado, n.TotalDeducciones, n.SalarioNeto, n.Estado
+               n.TotalDevengado, n.TotalDeducciones, n.SalarioNeto, n.Estado,
+               n.SalarioBruto, n.OtrosIngresos
         FROM Nomina n
         JOIN Empleados e ON n.EmpleadoID = e.ID
         ORDER BY n.FechaGeneracion DESC
@@ -55,7 +56,8 @@ def rrhh():
         'id': r.ID, 'empleado': r.NombreCompleto,
         'periodo': f"{r.PeriodoInicio.strftime('%d/%m')} - {r.PeriodoFin.strftime('%d/%m/%Y')}",
         'devengado': float(r.TotalDevengado), 'deducciones': float(r.TotalDeducciones),
-        'neto': float(r.SalarioNeto), 'estado': r.Estado
+        'neto': float(r.SalarioNeto), 'estado': r.Estado,
+        'es_aguinaldo': float(r.SalarioBruto) == 0 and float(r.OtrosIngresos) > 0
     } for r in cursor.fetchall()]
 
     # Configuraciones de tasas
@@ -291,6 +293,10 @@ def calcular_nomina():
     periodo_fin = datos.get('periodo_fin')
     horas_extras = float(datos.get('horas_extras', 0))
     otros_ingresos = float(datos.get('otros_ingresos', 0))
+    
+    # Nuevos parámetros (Ley 185)
+    dias_ausentes = float(datos.get('dias_ausentes', 0))
+    dias_feriados_trabajados = float(datos.get('dias_feriados_trabajados', 0))
 
     if not all([empleado_id, periodo_inicio, periodo_fin]):
         return jsonify({'error': 'Faltan datos del período'}), 400
@@ -317,9 +323,17 @@ def calcular_nomina():
         tasa_inatec = float(config.get('inatec', '2.00'))
 
         hora_ordinaria = salario_diario / 8
-        monto_horas_extras = horas_extras * hora_ordinaria * 2
+        monto_horas_extras = horas_extras * hora_ordinaria * 2 # Recargo del 100% (Art. 62 Ley 185)
+        
+        # Feriados Trabajados (Art. 66 Ley 185)
+        monto_feriados = dias_feriados_trabajados * salario_diario
 
-        total_devengado = salario_base + monto_horas_extras + otros_ingresos
+        # Deducciones por ausencias (Incluye proporcional del 7mo día: Art. 64 Ley 185)
+        # Factor 1.1667 equivale a 1 día de falta + 1/6 del domingo
+        monto_ausencias = dias_ausentes * salario_diario * 1.1667
+        salario_base_efectivo = salario_base - monto_ausencias
+
+        total_devengado = salario_base_efectivo + monto_horas_extras + monto_feriados + otros_ingresos
 
         inss_laboral = total_devengado * (tasa_inss_laboral / 100)
 
@@ -364,8 +378,8 @@ def calcular_nomina():
             OUTPUT INSERTED.ID
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Borrador', ?)
         """,
-            int(empleado_id), periodo_inicio, periodo_fin, salario_base,
-            horas_extras, monto_horas_extras, otros_ingresos, total_devengado,
+            int(empleado_id), periodo_inicio, periodo_fin, salario_base_efectivo,
+            horas_extras, monto_horas_extras, (otros_ingresos + monto_feriados), total_devengado,
             inss_laboral, ir_mensual, pension_alimenticia, vales_descontados,
             total_deducciones, salario_neto, inss_patronal, inatec, current_user.id
         )
@@ -432,6 +446,11 @@ def calcular_liquidacion():
             return jsonify({'error': 'Empleado no encontrado'}), 404
 
         fecha_ingreso = emp.FechaIngreso
+        if type(fecha_ingreso) is str:
+            fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
+        elif hasattr(fecha_ingreso, 'date'):
+            fecha_ingreso = fecha_ingreso.date()
+            
         fecha_salida = datetime.strptime(fecha_egreso, '%Y-%m-%d').date()
         salario_base = float(emp.SalarioBase)
         salario_diario = salario_base / 30
@@ -454,9 +473,16 @@ def calcular_liquidacion():
         salarios_6m = nominas_recientes
         salario_max_6m = max(salarios_6m) if salarios_6m else salario_base
 
-        mes_actual = fecha_salida.month
-        meses_ciclo = mes_actual
-        aguinaldo_proporcional = salario_max_6m * (meses_ciclo / 12)
+        # Ciclo de Aguinaldo: 1 de diciembre al 30 de noviembre.
+        if fecha_salida.month == 12:
+            inicio_aguinaldo = date(fecha_salida.year, 12, 1)
+        else:
+            inicio_aguinaldo = date(fecha_salida.year - 1, 12, 1)
+            
+        inicio_aguinaldo_real = max(inicio_aguinaldo, fecha_ingreso)
+        dias_aguinaldo = (fecha_salida - inicio_aguinaldo_real).days + 1
+        
+        aguinaldo_proporcional = salario_max_6m * (dias_aguinaldo / 365.0)
 
         aplica_indemnizacion = motivo in ['Despido Injustificado', 'Renuncia Voluntaria']
 
@@ -505,7 +531,7 @@ def calcular_liquidacion():
                 },
                 'aguinaldo': {
                     'salario_max_6m': salario_max_6m,
-                    'meses_ciclo': meses_ciclo,
+                    'dias_ciclo': dias_aguinaldo,
                     'monto': round(aguinaldo_proporcional, 2),
                     'nota': 'Exento de INSS e IR'
                 },
@@ -617,6 +643,69 @@ def calcular_nomina_batch():
         import logging
         logging.error(f"Internal server error in batch payroll: {e}")
         return jsonify({'error': 'Error procesando la planilla batch. Rollback ejecutado.'}), 500
+    finally:
+        conn.close()
+
+@admin_bp.route('/api/rrhh/aguinaldo/calcular_batch', methods=['POST'])
+@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def calcular_aguinaldo_batch():
+    datos = request.json
+    anio = int(datos.get('anio', datetime.now().year))
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT * FROM Empleados WHERE EstadoEmpleado = 'Activo'")
+        empleados = cursor.fetchall()
+        total_empleados = len(empleados)
+        
+        if total_empleados == 0:
+            return jsonify({'error': 'No hay empleados activos para procesar'}), 400
+            
+        fecha_fin_ciclo = date(anio, 11, 30)
+        fecha_inicio_ciclo = date(anio - 1, 12, 1)
+        
+        for emp in empleados:
+            fecha_ingreso = emp.FechaIngreso
+            if type(fecha_ingreso) is str:
+                fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
+            elif hasattr(fecha_ingreso, 'date'):
+                fecha_ingreso = fecha_ingreso.date()
+                
+            cursor.execute("SELECT TOP 6 SalarioBruto FROM Nomina WHERE EmpleadoID = ? AND PeriodoFin <= ? ORDER BY PeriodoFin DESC", (emp.ID, fecha_fin_ciclo.strftime('%Y-%m-%d')))
+            nominas_recientes = [float(r.SalarioBruto) for r in cursor.fetchall()]
+            salario_base = float(emp.SalarioBase)
+            salario_max_6m = max(nominas_recientes) if nominas_recientes else salario_base
+            
+            inicio_aguinaldo_real = max(fecha_inicio_ciclo, fecha_ingreso)
+            
+            # Solo calcular si ingresó antes del 30 de noviembre del año actual
+            if inicio_aguinaldo_real <= fecha_fin_ciclo:
+                dias_aguinaldo = (fecha_fin_ciclo - inicio_aguinaldo_real).days + 1
+                aguinaldo_proporcional = salario_max_6m * (dias_aguinaldo / 365.0)
+                
+                cursor.execute("""
+                    INSERT INTO Nomina (EmpleadoID, PeriodoInicio, PeriodoFin, SalarioBruto,
+                        HorasExtras, MontoHorasExtras, OtrosIngresos, TotalDevengado,
+                        INSSLaboral, IRMensual, PensionAlimenticia, ValesDescontados,
+                        TotalDeducciones, SalarioNeto, INSSPatronal, INATEC, Estado, GeneradoPor)
+                    VALUES (?, ?, ?, 0, 0, 0, ?, ?, 0, 0, 0, 0, 0, ?, 0, 0, 'Borrador', ?)
+                """,
+                    emp.ID, fecha_inicio_ciclo.strftime('%Y-%m-%d'), fecha_fin_ciclo.strftime('%Y-%m-%d'),
+                    aguinaldo_proporcional, aguinaldo_proporcional, aguinaldo_proporcional, current_user.id
+                )
+
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': f'Planilla de Aguinaldo generada para {total_empleados} empleados.'})
+        
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.error(f"Internal server error in aguinaldo batch: {e}")
+        return jsonify({'error': f'Error procesando aguinaldo: {str(e)}'}), 500
     finally:
         conn.close()
 
