@@ -12,7 +12,7 @@ from app.admin import admin_bp
 from app.db import get_db_connection
 from app.auth.decorators import roles_required
 from app.extensions import csrf
-from datetime import datetime
+from datetime import datetime, date
 
 @admin_bp.route('/rrhh')
 @login_required
@@ -444,6 +444,11 @@ def calcular_liquidacion():
             return jsonify({'error': 'Empleado no encontrado'}), 404
 
         fecha_ingreso = emp.FechaIngreso
+        if type(fecha_ingreso) is str:
+            fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
+        elif hasattr(fecha_ingreso, 'date'):
+            fecha_ingreso = fecha_ingreso.date()
+            
         fecha_salida = datetime.strptime(fecha_egreso, '%Y-%m-%d').date()
         salario_base = float(emp.SalarioBase)
         salario_diario = salario_base / 30
@@ -665,6 +670,8 @@ def calcular_aguinaldo_batch():
             fecha_ingreso = emp.FechaIngreso
             if type(fecha_ingreso) is str:
                 fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
+            elif hasattr(fecha_ingreso, 'date'):
+                fecha_ingreso = fecha_ingreso.date()
                 
             cursor.execute("SELECT TOP 6 SalarioBruto FROM Nomina WHERE EmpleadoID = ? AND PeriodoFin <= ? ORDER BY PeriodoFin DESC", (emp.ID, fecha_fin_ciclo.strftime('%Y-%m-%d')))
             nominas_recientes = [float(r.SalarioBruto) for r in cursor.fetchall()]
@@ -683,7 +690,7 @@ def calcular_aguinaldo_batch():
                         HorasExtras, MontoHorasExtras, OtrosIngresos, TotalDevengado,
                         INSSLaboral, IRMensual, PensionAlimenticia, ValesDescontados,
                         TotalDeducciones, SalarioNeto, INSSPatronal, INATEC, Estado, GeneradoPor)
-                    VALUES (?, ?, ?, 0, 0, 0, ?, ?, 0, 0, 0, 0, 0, ?, 0, 0, 'Borrador', ?)
+                    VALUES (?, ?, ?, 0, 0, 0, ?, ?, 0, 0, 0, 0, 0, ?, 0, 0, 'Aguinaldo', ?)
                 """,
                     emp.ID, fecha_inicio_ciclo.strftime('%Y-%m-%d'), fecha_fin_ciclo.strftime('%Y-%m-%d'),
                     aguinaldo_proporcional, aguinaldo_proporcional, aguinaldo_proporcional, current_user.id

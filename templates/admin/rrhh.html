@@ -29,7 +29,7 @@
     <span class="badge badge-success">👷 {{ total_activos }} Empleados</span>
     
     <!-- Enlaces Legales -->
-    <a href="https://www.asamblea.gob.ni/assets/Leyes/Codigo_del_trabajo_de_la_republica_de_Nicaragua.pdf" target="_blank" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 0.75rem; border-color: #3498db; color: #3498db;">
+    <a href="https://wipolex-res.wipo.int/edocs/lexdocs/laws/es/ni/ni029es.pdf" target="_blank" class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 0.75rem; border-color: #3498db; color: #3498db;">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:2px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> 
         Código del Trabajo (Ley 185)
     </a>
@@ -184,7 +184,7 @@
                         <td class="cell-money text-danger" style="text-align: right;">-C${{ "%.2f"|format(n.deducciones) }}</td>
                         <td class="cell-money text-success fw-700" style="text-align: right;">C${{ "%.2f"|format(n.neto) }}</td>
                         <td style="text-align: center;">
-                            <span class="badge {% if n.estado == 'Pagada' %}badge-success{% elif n.estado == 'Borrador' %}badge-warning{% else %}badge-danger{% endif %}">{{ n.estado }}</span>
+                            <span class="badge {% if n.estado == 'Pagada' %}badge-success{% elif n.estado == 'Borrador' %}badge-warning{% elif n.estado == 'Aguinaldo' %}badge-primary{% else %}badge-danger{% endif %}">{{ n.estado }}</span>
                         </td>
                         <td style="text-align: center;">
                             <a href="{{ url_for('admin.colilla_pago', nomina_id=n.id) }}" target="_blank" class="btn btn-outline btn-sm" title="Ver Colilla PDF">
@@ -375,14 +375,14 @@
                 <div class="form-group">
                     <label class="form-label">
                         Horas Extras 
-                        <a href="https://www.asamblea.gob.ni/assets/Leyes/Codigo_del_trabajo_de_la_republica_de_Nicaragua.pdf" target="_blank" title="Art. 62: Se pagan con recargo del 100% (doble)" style="color:var(--primary-color); text-decoration:none;">ⓘ Ley 185</a>
+                        <a href="https://wipolex-res.wipo.int/edocs/lexdocs/laws/es/ni/ni029es.pdf" target="_blank" title="Art. 62: Se pagan con recargo del 100% (doble)" style="color:var(--primary-color); text-decoration:none;">ⓘ Ley 185</a>
                     </label>
                     <input type="number" id="ni-horas-extras" class="form-input form-number" step="1" value="0">
                 </div>
                 <div class="form-group">
                     <label class="form-label">
                         Feriados Trabajados
-                        <a href="https://www.asamblea.gob.ni/assets/Leyes/Codigo_del_trabajo_de_la_republica_de_Nicaragua.pdf" target="_blank" title="Art. 66: Remunerado con el 100% adicional al salario normal" style="color:var(--primary-color); text-decoration:none;">ⓘ Ley 185</a>
+                        <a href="https://wipolex-res.wipo.int/edocs/lexdocs/laws/es/ni/ni029es.pdf" target="_blank" title="Art. 66: Remunerado con el 100% adicional al salario normal" style="color:var(--primary-color); text-decoration:none;">ⓘ Ley 185</a>
                     </label>
                     <input type="number" id="ni-feriados" class="form-input form-number" step="1" value="0" placeholder="Días">
                 </div>
@@ -391,7 +391,7 @@
                 <div class="form-group">
                     <label class="form-label">
                         Días Ausentes
-                        <a href="https://www.asamblea.gob.ni/assets/Leyes/Codigo_del_trabajo_de_la_republica_de_Nicaragua.pdf" target="_blank" title="Art. 64: Pérdida proporcional del 7mo día" style="color:var(--danger); text-decoration:none;">ⓘ Deducción</a>
+                        <a href="https://wipolex-res.wipo.int/edocs/lexdocs/laws/es/ni/ni029es.pdf" target="_blank" title="Art. 64: Pérdida proporcional del 7mo día" style="color:var(--danger); text-decoration:none;">ⓘ Deducción</a>
                     </label>
                     <input type="number" id="ni-ausentes" class="form-input form-number" step="1" value="0" placeholder="Días injustificados">
                 </div>
