@@ -5,11 +5,66 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tienda Online - Panadería Amada</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/tienda.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/pos_product_visuals.css') }}">
     <style>
         /* Fallbacks for JS interactions */
         .catalog-panel { display: contents; }
         .products-grid { display: contents; }
+        /* Tienda product card overrides */
+        .store-product-card {
+            padding: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+        }
+        .store-product-card .product-visual {
+            height: 130px;
+        }
+        .store-product-card .card-price-add {
+            padding: 0 0.85rem 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .store-product-card .card-cat,
+        .store-product-card .card-title {
+            padding: 0;
+        }
+        .store-product-card > div:not(.product-visual):not(.card-price-add):not(.discount-badge):not(.product-discount-badge) {
+            padding: 0.65rem 0.85rem 0.25rem;
+        }
     </style>
+
+    <!-- Emoji/category maps -->
+    <script>
+    window.PRODUCT_EMOJI_MAP = {
+        'concha': '🥐','dona': '🍩','panuelito': '🥞','milanesa': '🍞','cuerno': '🥐',
+        'bolillo': '🥖','pizza': '🍕','baguette': '🥖','telera': '🥖','torta': '🥪',
+        'pastel': '🎂','tres leches': '🍰','chocolate': '🎂','chiffon': '🍰','ficticio': '🎂',
+        'galleta': '🍪','jamon': '🍪','avena': '🍪',
+        'cafe': '☕','americano': '☕','capuchino': '☕','gaseosa': '🥤','jugo': '🍊',
+        'selva': '🍰','negra': '🍫','brownie': '🍫','flan': '🍮','helado': '🍦',
+    };
+    window.CATEGORY_CLASS_MAP = {
+        'pan dulce':'cat-pan-dulce','pan salado':'cat-pan-salado',
+        'reposteria':'cat-reposteria','repostería':'cat-reposteria',
+        'galletas':'cat-galletas','bebidas':'cat-bebidas',
+        'postres frios':'cat-postres-frios','postres fríos':'cat-postres-frios',
+    };
+    window.CATEGORY_EMOJI_MAP = {
+        'pan dulce':'🍞','pan salado':'🥖','reposteria':'🎂','repostería':'🎂',
+        'galletas':'🍪','bebidas':'☕','postres frios':'🍰','postres fríos':'🍰',
+    };
+    function getProductEmoji(n,c){
+        const nl=n.toLowerCase();
+        for(const[k,e] of Object.entries(window.PRODUCT_EMOJI_MAP)){if(nl.includes(k))return e;}
+        return window.CATEGORY_EMOJI_MAP[(c||'').toLowerCase()]||'🛍️';
+    }
+    function getCategoryClass(c){
+        return window.CATEGORY_CLASS_MAP[(c||'').toLowerCase()]||'cat-default';
+    }
+    </script>
 </head>
 <body class="tienda-body pos-body">
     <!-- Navbar -->
@@ -64,21 +119,30 @@
             <section class="store-catalog">
                 <div class="store-grid products-grid">
                     {% for producto in productos if producto.categoria != 'Reposteria' %}
-                    <article class="store-product-card filterable-product product-card" data-id="{{ producto.id }}" data-nombre="{{ producto.nombre }}" data-precio="{{ producto.precio }}" data-categoria="{{ producto.categoria }}" data-descuento="{{ producto.descuento }}">
+                    <article class="store-product-card filterable-product product-card"
+                        data-id="{{ producto.id }}"
+                        data-nombre="{{ producto.nombre }}"
+                        data-precio="{{ producto.precio }}"
+                        data-categoria="{{ producto.categoria }}"
+                        data-descuento="{{ producto.descuento }}"
+                    >
                         {% if producto.descuento > 0 %}
-                            <div class="discount-badge">-{{ "%.0f"|format(producto.descuento) }}%</div>
+                            <div class="product-discount-badge">-{{ "%.0f"|format(producto.descuento) }}%</div>
                         {% endif %}
-                        
+
+                        <!-- Visual zone (filled by JS, zero HTTP cost) -->
+                        <div class="product-visual"></div>
+
                         <div>
                             <div class="card-cat category-label">{{ producto.categoria }}</div>
                             <h3 class="card-title">{{ producto.nombre }}</h3>
                         </div>
-                        
+
                         <div class="card-price-add">
                             {% if producto.descuento > 0 %}
                                 <div style="display: flex; flex-direction: column;">
-                                    <span style="text-decoration: line-through; color: var(--text-muted); font-size: 0.9rem;">C${{ "%.2f"|format(producto.precio) }}</span>
-                                    <span class="card-price" style="color: #e74c3c;">C${{ "%.2f"|format(producto.precio - (producto.precio * producto.descuento / 100)) }}</span>
+                                    <span style="text-decoration: line-through; color: var(--text-muted); font-size: 0.85rem;">C${{ "%.2f"|format(producto.precio) }}</span>
+                                    <span class="card-price" style="color: var(--danger);">C${{ "%.2f"|format(producto.precio - (producto.precio * producto.descuento / 100)) }}</span>
                                 </div>
                             {% else %}
                                 <p class="card-price price">C${{ "%.2f"|format(producto.precio) }}</p>
@@ -354,5 +418,27 @@
     </script>
     <script src="{{ url_for('static', filename='js/api_services.js') }}"></script>
     <script src="{{ url_for('static', filename='js/pos.js') }}"></script>
+
+    <!-- Inyectar visuales por categoría (non-blocking) -->
+    <script>
+    requestAnimationFrame(function() {
+        document.querySelectorAll('.store-product-card .product-visual, .filterable-product .product-visual').forEach(function(visual) {
+            var card = visual.closest('[data-nombre]');
+            if (!card || visual.children.length > 0) return;
+            var nombre    = card.dataset.nombre    || '';
+            var categoria = card.dataset.categoria || '';
+            visual.classList.add(getCategoryClass(categoria));
+            visual.innerHTML = '<span class="product-visual-emoji" aria-hidden="true">' + getProductEmoji(nombre, categoria) + '</span>';
+        });
+
+        // Feedback al añadir al carrito
+        document.addEventListener('click', function(e) {
+            var card = e.target.closest('.product-card');
+            if (!card) return;
+            card.classList.add('added-to-cart');
+            setTimeout(function() { card.classList.remove('added-to-cart'); }, 500);
+        });
+    });
+    </script>
 </body>
 </html>
