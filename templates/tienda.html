@@ -10,49 +10,65 @@
         /* Fallbacks for JS interactions */
         .catalog-panel { display: contents; }
         .products-grid { display: contents; }
-        /* Tienda product card overrides */
+
+        /* ═══ Tienda product card — diseño completo ═══ */
         .store-product-card {
             padding: 0 !important;
             display: flex !important;
             flex-direction: column !important;
-            min-height: 0 !important;
             overflow: hidden !important;
-            border-radius: 24px !important;
+            border-radius: 16px !important;
         }
+
+        /* ── Zona de imagen: siempre proporción 4:3, llena el espacio sin distorsión ── */
         .store-product-card .product-visual {
-            /* Forzamos que la imagen sea un cuadrado perfecto siempre */
-            aspect-ratio: 1 / 1;
-            height: auto;
+            aspect-ratio: 4 / 3;
+            height: auto !important;
             width: 100%;
+            flex-shrink: 0;
+            background-color: white; /* Fondo blanco para las imágenes contain */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .store-product-card .product-visual img.product-real-img {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            object-position: center;
+            display: block;
+        }
+
+        /* ── Zona de info: compacta y bien espaciada ── */
+        .store-product-card > div:not(.product-visual):not(.card-price-add):not(.discount-badge):not(.product-discount-badge) {
+            padding: 0.75rem 0.85rem 0;
+        }
+        .store-product-card .card-cat {
+            padding: 0;
+            font-size: 0.65rem;
+            margin-bottom: 0.25rem;
+        }
+        .store-product-card .card-title {
+            padding: 0;
+            font-size: 1rem;
+            margin: 0 0 0.35rem 0;
+            line-height: 1.25;
         }
         .store-product-card .card-price-add {
-            padding: 0 0.85rem 0.85rem;
+            padding: 0.35rem 0.85rem 0.75rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-        .store-product-card .card-cat,
-        .store-product-card .card-title {
-            padding: 0;
+        .store-product-card .card-price {
+            font-size: 1.05rem;
         }
-        .store-product-card > div:not(.product-visual):not(.card-price-add):not(.discount-badge):not(.product-discount-badge) {
-            padding: 0.85rem 0.85rem 0.25rem;
-        }
-        
-        /* Ajustar textos para móviles */
-        @media (max-width: 600px) {
-            .store-product-card .card-title {
-                font-size: 1.1rem;
-                margin-bottom: 0.5rem;
-            }
-            .store-product-card .card-price {
-                font-size: 1.15rem;
-            }
-            .store-product-card .btn-add {
-                width: 35px;
-                height: 35px;
-                font-size: 1.2rem;
-            }
+        .store-product-card .btn-add {
+            width: 36px;
+            height: 36px;
+            font-size: 1.1rem;
         }
     </style>
 
