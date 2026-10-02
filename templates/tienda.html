@@ -125,13 +125,23 @@
                         data-precio="{{ producto.precio }}"
                         data-categoria="{{ producto.categoria }}"
                         data-descuento="{{ producto.descuento }}"
+                        data-imagen-url="{{ producto.imagen_url }}"
                     >
                         {% if producto.descuento > 0 %}
                             <div class="product-discount-badge">-{{ "%.0f"|format(producto.descuento) }}%</div>
                         {% endif %}
 
-                        <!-- Visual zone (filled by JS, zero HTTP cost) -->
+                        <!-- Imagen real o emoji fallback -->
+                        {% if producto.imagen_url %}
+                        <div class="product-visual product-visual-img">
+                            <img src="{{ producto.imagen_url }}"
+                                 alt="{{ producto.nombre }}"
+                                 loading="lazy"
+                                 class="product-real-img">
+                        </div>
+                        {% else %}
                         <div class="product-visual"></div>
+                        {% endif %}
 
                         <div>
                             <div class="card-cat category-label">{{ producto.categoria }}</div>
@@ -151,6 +161,7 @@
                         </div>
                     </article>
                     {% endfor %}
+
                 </div>
             </section>
         </div>

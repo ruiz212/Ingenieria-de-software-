@@ -34,9 +34,9 @@ def index():
     """)
     categorias = [{'id': row.ID, 'nombre': row.Nombre} for row in cursor.fetchall()]
 
-    # Obtener productos activos con su categoría
+    # Obtener productos activos con su categoría e imagen
     cursor.execute(
-        "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.PrecioBase, p.EsFicticio, p.PorcentajeDescuento "
+        "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.PrecioBase, p.EsFicticio, p.PorcentajeDescuento, p.ImagenUrl "
         "FROM Productos p "
         "JOIN Categorias c ON p.CategoriaID = c.ID "
         "WHERE p.Activo = 1 "
@@ -44,7 +44,9 @@ def index():
     )
     productos = [
         {'id': row.ID, 'nombre': row.Nombre, 'categoria': row.Categoria,
-         'precio': float(row.PrecioBase), 'es_ficticio': row.EsFicticio, 'descuento': float(row.PorcentajeDescuento)}
+         'precio': float(row.PrecioBase), 'es_ficticio': row.EsFicticio,
+         'descuento': float(row.PorcentajeDescuento),
+         'imagen_url': row.ImagenUrl or ''}
         for row in cursor.fetchall()
     ]
 

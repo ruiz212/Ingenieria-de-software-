@@ -35,6 +35,22 @@
     flex-shrink: 0;
 }
 
+/* ── Imagen real del producto ── */
+.product-visual-img {
+    background: var(--surface-sunken);
+}
+.product-real-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    transition: transform 0.35s var(--ease-spring);
+    display: block;
+}
+.product-card:hover .product-real-img {
+    transform: scale(1.08);
+}
+
 /* ── Emoji/icon central ── */
 .product-visual-emoji {
     font-size: 3.2rem;

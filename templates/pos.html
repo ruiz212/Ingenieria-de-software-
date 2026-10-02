@@ -124,13 +124,23 @@
                         data-categoria="{{ producto.categoria }}"
                         data-descuento="{{ producto.descuento }}"
                         data-cat-slug="{{ producto.categoria | lower | replace(' ', '-') }}"
+                        data-imagen-url="{{ producto.imagen_url }}"
                     >
                         {% if producto.descuento > 0 %}
                         <div class="product-discount-badge">-{{ "%.0f"|format(producto.descuento) }}%</div>
                         {% endif %}
 
-                        <!-- Zona visual por categoría -->
+                        <!-- Zona visual: imagen real o emoji por categoría -->
+                        {% if producto.imagen_url %}
+                        <div class="product-visual product-visual-img">
+                            <img src="{{ producto.imagen_url }}"
+                                 alt="{{ producto.nombre }}"
+                                 loading="lazy"
+                                 class="product-real-img">
+                        </div>
+                        {% else %}
                         <div class="product-visual" id="pvis-{{ producto.id }}"></div>
+                        {% endif %}
 
                         <!-- Zona de texto -->
                         <div class="product-info">
