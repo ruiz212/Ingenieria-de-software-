@@ -203,10 +203,18 @@ body.tienda-body {
 
 .store-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 2.5rem;
+    /* Por defecto en móvil: 2 columnas exactas */
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
 }
 
+/* En pantallas más grandes de tablet/PC: 3 o 4 columnas para que no sean gigantes */
+@media (min-width: 768px) {
+    .store-grid {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 2rem;
+    }
+}
 .store-product-card {
     background: white;
     border-radius: 20px;
