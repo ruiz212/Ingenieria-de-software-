@@ -46,7 +46,8 @@ def rrhh():
     # Nóminas recientes
     cursor.execute("""
         SELECT TOP 20 n.ID, e.NombreCompleto, n.PeriodoInicio, n.PeriodoFin,
-               n.TotalDevengado, n.TotalDeducciones, n.SalarioNeto, n.Estado
+               n.TotalDevengado, n.TotalDeducciones, n.SalarioNeto, n.Estado,
+               n.SalarioBruto, n.OtrosIngresos
         FROM Nomina n
         JOIN Empleados e ON n.EmpleadoID = e.ID
         ORDER BY n.FechaGeneracion DESC
@@ -55,7 +56,8 @@ def rrhh():
         'id': r.ID, 'empleado': r.NombreCompleto,
         'periodo': f"{r.PeriodoInicio.strftime('%d/%m')} - {r.PeriodoFin.strftime('%d/%m/%Y')}",
         'devengado': float(r.TotalDevengado), 'deducciones': float(r.TotalDeducciones),
-        'neto': float(r.SalarioNeto), 'estado': r.Estado
+        'neto': float(r.SalarioNeto), 'estado': r.Estado,
+        'es_aguinaldo': float(r.SalarioBruto) == 0 and float(r.OtrosIngresos) > 0
     } for r in cursor.fetchall()]
 
     # Configuraciones de tasas
@@ -690,7 +692,7 @@ def calcular_aguinaldo_batch():
                         HorasExtras, MontoHorasExtras, OtrosIngresos, TotalDevengado,
                         INSSLaboral, IRMensual, PensionAlimenticia, ValesDescontados,
                         TotalDeducciones, SalarioNeto, INSSPatronal, INATEC, Estado, GeneradoPor)
-                    VALUES (?, ?, ?, 0, 0, 0, ?, ?, 0, 0, 0, 0, 0, ?, 0, 0, 'Aguinaldo', ?)
+                    VALUES (?, ?, ?, 0, 0, 0, ?, ?, 0, 0, 0, 0, 0, ?, 0, 0, 'Borrador', ?)
                 """,
                     emp.ID, fecha_inicio_ciclo.strftime('%Y-%m-%d'), fecha_fin_ciclo.strftime('%Y-%m-%d'),
                     aguinaldo_proporcional, aguinaldo_proporcional, aguinaldo_proporcional, current_user.id
@@ -703,7 +705,7 @@ def calcular_aguinaldo_batch():
         conn.rollback()
         import logging
         logging.error(f"Internal server error in aguinaldo batch: {e}")
-        return jsonify({'error': 'Error procesando la planilla de aguinaldo. Rollback ejecutado.'}), 500
+        return jsonify({'error': f'Error procesando aguinaldo: {str(e)}'}), 500
     finally:
         conn.close()
 

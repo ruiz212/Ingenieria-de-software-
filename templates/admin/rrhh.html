@@ -184,7 +184,7 @@
                         <td class="cell-money text-danger" style="text-align: right;">-C${{ "%.2f"|format(n.deducciones) }}</td>
                         <td class="cell-money text-success fw-700" style="text-align: right;">C${{ "%.2f"|format(n.neto) }}</td>
                         <td style="text-align: center;">
-                            <span class="badge {% if n.estado == 'Pagada' %}badge-success{% elif n.estado == 'Borrador' %}badge-warning{% elif n.estado == 'Aguinaldo' %}badge-primary{% else %}badge-danger{% endif %}">{{ n.estado }}</span>
+                            <span class="badge {% if n.es_aguinaldo %}badge-primary{% elif n.estado == 'Pagada' %}badge-success{% elif n.estado == 'Borrador' %}badge-warning{% else %}badge-danger{% endif %}">{% if n.es_aguinaldo %}Aguinaldo{% else %}{{ n.estado }}{% endif %}</span>
                         </td>
                         <td style="text-align: center;">
                             <a href="{{ url_for('admin.colilla_pago', nomina_id=n.id) }}" target="_blank" class="btn btn-outline btn-sm" title="Ver Colilla PDF">
