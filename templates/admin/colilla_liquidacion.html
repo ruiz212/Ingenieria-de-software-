@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Colilla de Pago - {{ nomina.NombreCompleto }}</title>
+    <title>Liquidación Final - {{ liquidacion.empleado }}</title>
     <!-- Tipografía Moderna -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,6 +25,9 @@
             
             --danger-red: #C44536;         /* Rojo/naranja para deducciones */
             --danger-bg: rgba(196, 69, 54, 0.08);
+            
+            --warning-orange: #d35400;
+            --warning-bg: rgba(211, 84, 0, 0.1);
         }
 
         body {
@@ -153,8 +156,9 @@
         }
         
         .doc-meta .highlight-value {
-            color: var(--brand-dorado);
+            color: var(--warning-orange);
             font-size: 15px;
+            text-transform: uppercase;
         }
 
         /* ── Ficha del Empleado ── */
@@ -188,18 +192,29 @@
             font-weight: 600;
             color: var(--text-dark);
         }
+        
+        .badge-motivo {
+            display: inline-block;
+            background: var(--warning-bg);
+            color: var(--warning-orange);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+        }
 
         /* ── Tablas de Detalle ── */
         .details-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 32px;
+            grid-template-columns: 1fr;
+            gap: 24px;
             margin-bottom: 32px;
         }
 
         .detail-table {
             width: 100%;
             border-collapse: collapse;
+            background: #fff;
         }
 
         .detail-table th {
@@ -239,12 +254,13 @@
         .detail-table tr.total-row td:first-child { border-bottom-left-radius: 8px; }
         .detail-table tr.total-row td:last-child { border-bottom-right-radius: 8px; }
 
-        /* Colores específicos de tabla */
-        .table-incomes th { background-color: var(--brand-cafe); }
-        .table-incomes tr.total-row td { background-color: var(--success-bg); color: var(--success-green); }
-        
-        .table-deductions th { background-color: var(--text-muted); }
-        .table-deductions tr.total-row td { background-color: var(--danger-bg); color: var(--danger-red); }
+        .note-text {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: block;
+            margin-top: 4px;
+            font-style: italic;
+        }
 
         /* ── Resumen Final (Neto) ── */
         .net-summary {
@@ -358,7 +374,7 @@
             }
 
             @page {
-                size: A4; /* Ajustable a A5 si el navegador lo permite en el diálogo de impresión */
+                size: A4;
                 margin: 1.5cm;
             }
         }
@@ -373,7 +389,7 @@
                 <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
                 <rect x="6" y="14" width="12" height="8"></rect>
             </svg>
-            Imprimir Colilla
+            Imprimir Liquidación
         </button>
     </div>
 
@@ -385,22 +401,22 @@
                 <div class="logo-placeholder">BC</div>
                 <div class="company-info">
                     <h1>Brajher's Cake</h1>
-                    <p>{% if nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}Comprobante de Aguinaldo{% else %}Nómina de Pago{% endif %}</p>
+                    <p>Liquidación Final de Prestaciones</p>
                 </div>
             </div>
             
             <div class="doc-meta">
                 <div class="meta-row">
-                    <span class="meta-label">Colilla N°:</span>
-                    <span class="meta-value highlight-value">N-{{ "{:04d}".format(nomina.ID) }}</span>
+                    <span class="meta-label">Documento:</span>
+                    <span class="meta-value highlight-value">LIQUIDACIÓN DE LEY</span>
                 </div>
                 <div class="meta-row">
                     <span class="meta-label">Fecha Emisión:</span>
                     <span class="meta-value">{{ datetime.now().strftime('%d/%m/%Y %H:%M') }}</span>
                 </div>
                 <div class="meta-row">
-                    <span class="meta-label">Período de Pago:</span>
-                    <span class="meta-value">{{ nomina.PeriodoInicio.strftime('%d/%m/%Y') }} al {{ nomina.PeriodoFin.strftime('%d/%m/%Y') }}</span>
+                    <span class="meta-label">Motivo Salida:</span>
+                    <span class="meta-value">{{ liquidacion.motivo }}</span>
                 </div>
             </div>
         </header>
@@ -409,103 +425,88 @@
         <section class="employee-card">
             <div class="emp-data-group">
                 <span class="emp-data-label">Nombre del Empleado</span>
-                <span class="emp-data-value">{{ nomina.NombreCompleto }}</span>
+                <span class="emp-data-value">{{ liquidacion.empleado }}</span>
             </div>
             <div class="emp-data-group">
                 <span class="emp-data-label">Cédula de Identidad</span>
-                <span class="emp-data-value">{{ nomina.Cedula }}</span>
+                <span class="emp-data-value">{{ emp.Cedula }}</span>
             </div>
             <div class="emp-data-group">
                 <span class="emp-data-label">Cargo / Puesto</span>
-                <span class="emp-data-value">{{ nomina.Cargo }}</span>
+                <span class="emp-data-value">{{ emp.Cargo }}</span>
             </div>
             <div class="emp-data-group">
                 <span class="emp-data-label">Número de INSS</span>
-                <span class="emp-data-value">{{ nomina.NumeroINSS or 'No registrado' }}</span>
+                <span class="emp-data-value">{{ emp.NumeroINSS or 'No registrado' }}</span>
+            </div>
+            <div class="emp-data-group" style="grid-column: span 2;">
+                <span class="emp-data-label">Tiempo de Servicio</span>
+                <span class="emp-data-value">
+                    Del {{ liquidacion.fecha_ingreso }} al {{ liquidacion.fecha_egreso }} 
+                    <span style="color: var(--text-muted); font-weight: normal;">({{ liquidacion.dias_trabajados }} días / {{ liquidacion.anios }} años y {{ liquidacion.meses_fraccion }} meses)</span>
+                </span>
+            </div>
+            <div class="emp-data-group" style="grid-column: span 2;">
+                <span class="emp-data-label">Salario Base Utilizado (Mensual / Diario)</span>
+                <span class="emp-data-value">
+                    C$ {{ "{:,.2f}".format(liquidacion.salario_base) }} / C$ {{ "{:,.2f}".format(liquidacion.salario_diario) }}
+                </span>
             </div>
         </section>
 
         <!-- Detalle de Conceptos -->
         <div class="details-grid">
             
-            <!-- Ingresos -->
+            <!-- Prestaciones -->
             <div>
-                <table class="detail-table table-incomes">
+                <table class="detail-table">
                     <thead>
                         <tr>
-                            <th>Conceptos de Ingreso</th>
+                            <th>Conceptos de Prestaciones Sociales (Ley 185)</th>
                             <th>Monto (C$)</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% if not aguinaldo_detalles %}
-                        <tr>
-                            <td>Salario Base</td>
-                            <td>{{ "{:,.2f}".format(nomina.SalarioBruto) }}</td>
-                        </tr>
-                        {% endif %}
-                        {% if nomina.HorasExtras > 0 %}
-                        <tr>
-                            <td>Horas Extras ({{ nomina.HorasExtras }} hrs)</td>
-                            <td>{{ "{:,.2f}".format(nomina.MontoHorasExtras) }}</td>
-                        </tr>
-                        {% endif %}
-                        {% if nomina.OtrosIngresos > 0 %}
+                        <!-- Vacaciones -->
                         <tr>
                             <td>
-                                {% if aguinaldo_detalles %}
-                                    Treceavo Mes / Aguinaldo Proporcional
-                                    <span style="display: block; font-size: 11px; color: var(--text-muted); font-style: italic; margin-top: 4px;">Calculado por {{ aguinaldo_detalles.dias }} días. Base utilizada (Salario Max 6M): C$ {{ "{:,.2f}".format(aguinaldo_detalles.salario_max_6m) }}.<br>Exento de deducciones (Art. 97, Ley 185).</span>
-                                {% elif nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}
-                                    Treceavo Mes (Aguinaldo)
-                                {% else %}
-                                    Comisiones / Otros Ingresos
+                                Vacaciones Proporcionales ({{ liquidacion.vacaciones.dias }} días)
+                                <span class="note-text">Bruto: C$ {{ "{:,.2f}".format(liquidacion.vacaciones.monto_bruto) }} - INSS (7%): C$ {{ "{:,.2f}".format(liquidacion.vacaciones.inss) }}</span>
+                            </td>
+                            <td>{{ "{:,.2f}".format(liquidacion.vacaciones.neto) }}</td>
+                        </tr>
+                        
+                        <!-- Aguinaldo -->
+                        <tr>
+                            <td>
+                                Treceavo Mes / Aguinaldo Proporcional ({{ liquidacion.aguinaldo.dias_ciclo }} días)
+                                <span class="note-text">Calculado sobre salario max 6m: C$ {{ "{:,.2f}".format(liquidacion.aguinaldo.salario_max_6m) }}. Exento de deducciones (Art. 97).</span>
+                            </td>
+                            <td>{{ "{:,.2f}".format(liquidacion.aguinaldo.monto) }}</td>
+                        </tr>
+                        
+                        <!-- Indemnizacion -->
+                        {% if liquidacion.indemnizacion.aplica %}
+                        <tr>
+                            <td>
+                                Indemnización por Antigüedad ({{ liquidacion.indemnizacion.dias }} días)
+                                <span class="note-text">Aplica por: {{ liquidacion.indemnizacion.motivo }}.</span>
+                                {% if liquidacion.indemnizacion.ir > 0 %}
+                                <span class="note-text" style="color: var(--danger-red);">Retención IR (exceso a C$500,000): -C$ {{ "{:,.2f}".format(liquidacion.indemnizacion.ir) }}</span>
                                 {% endif %}
                             </td>
-                            <td>{{ "{:,.2f}".format(nomina.OtrosIngresos) }}</td>
+                            <td>{{ "{:,.2f}".format(liquidacion.indemnizacion.neto) }}</td>
                         </tr>
-                        {% endif %}
-                        <tr class="total-row">
-                            <td>Total Devengado</td>
-                            <td>{{ "{:,.2f}".format(nomina.TotalDevengado) }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Deducciones -->
-            <div>
-                <table class="detail-table table-deductions">
-                    <thead>
+                        {% else %}
                         <tr>
-                            <th>Conceptos de Deducción</th>
-                            <th>Monto (C$)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>INSS Laboral (7%)</td>
-                            <td>{{ "{:,.2f}".format(nomina.INSSLaboral) }}</td>
-                        </tr>
-                        {% if nomina.IRMensual > 0 %}
-                        <tr>
-                            <td>IR (Impuesto sobre la Renta)</td>
-                            <td>{{ "{:,.2f}".format(nomina.IRMensual) }}</td>
-                        </tr>
-                        {% endif %}
-                        {% if nomina.PensionAlimenticia > 0 %}
-                        <tr>
-                            <td>Deducción Judicial / Pensión</td>
-                            <td>{{ "{:,.2f}".format(nomina.PensionAlimenticia) }}</td>
+                            <td>
+                                Indemnización por Antigüedad
+                                <span class="note-text">No aplica por motivo de salida: {{ liquidacion.motivo }}</span>
+                            </td>
+                            <td>0.00</td>
                         </tr>
                         {% endif %}
                         
-                        <!-- NOTA: Eliminado el apartado de préstamos/vales por solicitud del usuario -->
-
-                        <tr class="total-row">
-                            <td>Total Deducciones</td>
-                            <td>{{ "{:,.2f}".format(nomina.TotalDeducciones) }}</td>
-                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -514,8 +515,8 @@
 
         <!-- Resumen Final -->
         <div class="net-summary">
-            <div class="net-label">Neto a Recibir (Córdobas)</div>
-            <div class="net-value">C$ {{ "{:,.2f}".format(nomina.SalarioNeto) }}</div>
+            <div class="net-label">Líquido a Recibir (Córdobas)</div>
+            <div class="net-value">C$ {{ "{:,.2f}".format(liquidacion.total_liquidacion) }}</div>
         </div>
 
         <!-- Firmas -->
@@ -526,18 +527,14 @@
             </div>
             <div class="signature-box">
                 <div class="signature-line"></div>
-                <div class="signature-title">Recibí Conforme (Firma del Empleado)</div>
+                <div class="signature-title">Recibí Conforme (Firma del Trabajador)</div>
                 <div class="signature-date">Fecha: _____ / _____ / _________</div>
             </div>
         </div>
 
         <!-- Pie Legal -->
         <div class="legal-note">
-            {% if nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}
-            Este documento constituye el recibo oficial de pago del Treceavo Mes (Aguinaldo), exento de retenciones de INSS e IR según Art. 97 y 98 del Código del Trabajo (Ley 185) y la Ley de Concertación Tributaria (Ley 822).
-            {% else %}
-            Este documento constituye el recibo oficial de pago de salario y deducciones de ley aplicables correspondientes al período indicado.
-            {% endif %}
+            Este documento constituye el recibo oficial y finiquito de las prestaciones sociales conforme a lo establecido en el Código del Trabajo (Ley N° 185) de la República de Nicaragua. Con la firma de este documento, el trabajador declara haber recibido a su entera satisfacción la cantidad arriba indicada, no quedando saldo pendiente a su favor en concepto de salarios, vacaciones, treceavo mes e indemnización por antigüedad, otorgando el más amplio y completo finiquito a favor del empleador.
         </div>
 
     </div>

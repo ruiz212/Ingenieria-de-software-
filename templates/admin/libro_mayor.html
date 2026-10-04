@@ -1,0 +1,141 @@
+{% extends 'admin_base.html' %}
+
+{% block title %}Libro Mayor | Brajher's Cake{% endblock %}
+{% block page_title %}Libro Mayor (Auxiliar por Cuenta){% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <p>Historial detallado de transacciones de una cuenta específica.</p>
+    <div style="margin-top: 1rem;">
+        <a href="/admin/contabilidad" class="btn btn-outline" style="background: rgba(255,255,255,0.8); backdrop-filter: blur(5px);">← Volver</a>
+    </div>
+</div>
+
+<!-- Filtro Superior -->
+<div class="panel" style="margin-bottom: 2rem;">
+    <div class="panel-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+        <h3 style="margin: 0; font-family: 'Playfair Display', serif; color: var(--text-dark); display: flex; align-items: center; gap: 0.5rem;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Parámetros del Reporte
+        </h3>
+    </div>
+    <div class="panel-body">
+        <form method="GET" action="/admin/contabilidad/mayor" style="display: grid; grid-template-columns: minmax(300px, 2fr) 1fr 1fr auto; gap: 1.5rem; align-items: end;">
+            
+            <!-- Selector Inteligente (Buscador) -->
+            <div style="position: relative;">
+                <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Buscar Cuenta (Código o Nombre)</label>
+                
+                <!-- Input visible para búsqueda -->
+                <input type="text" id="cuenta_search" class="form-control" list="cuentas_datalist" 
+                       placeholder="Ej: 1.1.01.001 o Caja General" 
+                       value="{{ cuenta_seleccionada }}" 
+                       autocomplete="off"
+                       style="width: 100%; border: 1px solid var(--border-color); padding: 0.75rem 1rem; border-radius: 8px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); font-family: monospace; font-size: 1rem;"
+                       oninput="document.getElementById('cuenta_codigo').value = this.value.split(' ')[0]">
+                
+                <!-- Input oculto que envía solo el código -->
+                <input type="hidden" name="cuenta_codigo" id="cuenta_codigo" value="{{ cuenta_seleccionada }}">
+                
+                <datalist id="cuentas_datalist">
+                    {% for c in cuentas %}
+                    <option value="{{ c.codigo }} - {{ c.nombre }}"></option>
+                    {% endfor %}
+                </datalist>
+            </div>
+            
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Mes Contable</label>
+                <select name="mes" class="form-control" style="width: 100%; border: 1px solid var(--border-color); padding: 0.75rem 1rem; border-radius: 8px;">
+                    {% set meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'] %}
+                    {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if mes|int == m %}selected{% endif %}>{{ meses[m-1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Año</label>
+                <select name="anio" class="form-control" style="width: 100%; border: 1px solid var(--border-color); padding: 0.75rem 1rem; border-radius: 8px;">
+                    {% for a in range(2025, 2030) %}
+                    <option value="{{ a }}" {% if anio|int == a %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="height: 46px; padding: 0 1.5rem; border-radius: 8px; font-weight: 600; box-shadow: 0 4px 6px rgba(212, 149, 43, 0.2);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem; vertical-align: text-bottom;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Consultar Mayor
+            </button>
+        </form>
+    </div>
+</div>
+
+{% if cuenta_seleccionada %}
+<div class="panel" style="background: rgba(255, 255, 255, 0.9); border-radius: 12px; border: 1px solid var(--border-color); overflow: hidden;">
+    <div class="panel-header" style="background: linear-gradient(to right, #3498db, #2980b9); color: white; border-bottom: none; padding: 1.5rem;">
+        <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Playfair Display', serif;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            Movimientos: Cuenta {{ cuenta_seleccionada }}
+        </h3>
+    </div>
+    
+    <div class="panel-body panel-body-flush" style="padding: 0;">
+        <div class="table-responsive">
+            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                <thead style="background-color: #f8f9fa; border-bottom: 2px solid var(--border-color);">
+                    <tr>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-dark);">Fecha</th>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-dark);">Comprobante</th>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-dark);">Concepto</th>
+                        <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Debe</th>
+                        <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Haber</th>
+                        <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--brand-cafe);">Saldo Acumulado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mov in movimientos %}
+                    <tr style="border-bottom: 1px solid var(--border-color); transition: background-color 0.2s;" class="hover-row">
+                        <td style="padding: 0.75rem 1rem; color: #555;">{{ mov.Fecha }}</td>
+                        <td style="padding: 0.75rem 1rem; font-family: monospace; color: #3498db; font-weight: 500;">
+                            {{ mov.Comprobante }}
+                        </td>
+                        <td style="padding: 0.75rem 1rem; color: var(--text-dark);">
+                            {{ mov.Descripcion }}
+                            {% if mov.Referencia %}
+                            <br><span style="font-size: 0.75rem; color: #999;">Ref: {{ mov.Referencia }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding: 0.75rem 1rem; text-align: right; font-family: monospace; color: {% if mov.Debe > 0 %}var(--text-dark){% else %}#ddd{% endif %};">
+                            {{ "{:,.2f}".format(mov.Debe) }}
+                        </td>
+                        <td style="padding: 0.75rem 1rem; text-align: right; font-family: monospace; color: {% if mov.Haber > 0 %}var(--text-dark){% else %}#ddd{% endif %};">
+                            {{ "{:,.2f}".format(mov.Haber) }}
+                        </td>
+                        <td style="padding: 0.75rem 1rem; text-align: right; font-family: monospace; font-weight: 700; color: var(--brand-dorado-dark);">
+                            {{ "{:,.2f}".format(mov.Saldo) }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" style="padding: 3rem; text-align: center;">
+                            <div style="color: #888; font-size: 1.1rem;">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity: 0.5; margin-bottom: 1rem;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                <br>No hay movimientos en este período para la cuenta seleccionada.
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.hover-row:hover {
+    background-color: #fdfbf8;
+}
+</style>
+{% endblock %}

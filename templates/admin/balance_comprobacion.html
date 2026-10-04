@@ -1,0 +1,124 @@
+{% extends 'admin_base.html' %}
+
+{% block title %}Balance de Comprobación | Brajher's Cake{% endblock %}
+{% block page_title %}Balance de Comprobación{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <p>Verificación de la partida doble y saldos de las cuentas transaccionales.</p>
+    <div style="margin-top: 1rem; display: flex; gap: 1rem; align-items: center;">
+        <a href="/admin/contabilidad" class="btn btn-outline" style="background: rgba(255,255,255,0.8); backdrop-filter: blur(5px);">← Volver</a>
+        
+        <form method="GET" action="/admin/contabilidad/comprobacion" style="display: flex; gap: 0.5rem; align-items: center; background: white; padding: 0.25rem; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <select name="mes" class="form-control" style="border: none; background: transparent;">
+                {% for m in range(1, 13) %}
+                <option value="{{ m }}" {% if mes|int == m %}selected{% endif %}>Mes {{ m }}</option>
+                {% endfor %}
+            </select>
+            <select name="anio" class="form-control" style="border: none; background: transparent;">
+                {% for a in range(2025, 2030) %}
+                <option value="{{ a }}" {% if anio|int == a %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+        </form>
+    </div>
+</div>
+
+<div class="panel" style="background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.02); overflow: hidden;">
+    <div class="panel-header" style="background: linear-gradient(to right, #2c3e50, #34495e); color: white; border-bottom: none; padding: 1.5rem;">
+        <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Playfair Display', serif;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+            Balance de Comprobación — Período {{ mes }}/{{ anio }}
+        </h3>
+    </div>
+    
+    <div class="panel-body panel-body-flush" style="padding: 0;">
+        <div class="table-responsive">
+            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                <thead style="background-color: #f8f9fa; border-bottom: 2px solid var(--border-color);">
+                    <tr>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-dark);">Código</th>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-dark);">Cuenta</th>
+                        <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Suma Debe</th>
+                        <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Suma Haber</th>
+                        <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Saldo Deudor</th>
+                        <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Saldo Acreedor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set ns = namespace(tot_saldo_deudor=0, tot_saldo_acreedor=0) %}
+                    {% for row in balance %}
+                    <tr style="border-bottom: 1px solid var(--border-color); transition: background-color 0.2s;" class="hover-row">
+                        <td style="padding: 0.75rem 1rem; font-family: monospace; color: #555;">{{ row.Codigo }}</td>
+                        <td style="padding: 0.75rem 1rem; font-weight: 500; color: var(--text-dark);">{{ row.Nombre }}</td>
+                        <td style="padding: 0.75rem 1rem; text-align: right; font-family: monospace; color: #777;">
+                            {{ "{:,.2f}".format(row.TotalDebe) }}
+                        </td>
+                        <td style="padding: 0.75rem 1rem; text-align: right; font-family: monospace; color: #777;">
+                            {{ "{:,.2f}".format(row.TotalHaber) }}
+                        </td>
+                        
+                        {% set diff = row.TotalDebe - row.TotalHaber %}
+                        {% set saldo_deudor = diff if diff > 0 else 0 %}
+                        {% set saldo_acreedor = -diff if diff < 0 else 0 %}
+                        
+                        {% set ns.tot_saldo_deudor = ns.tot_saldo_deudor + saldo_deudor %}
+                        {% set ns.tot_saldo_acreedor = ns.tot_saldo_acreedor + saldo_acreedor %}
+                        
+                        <td style="padding: 0.75rem 1rem; text-align: right; font-family: monospace; font-weight: 600; {% if saldo_deudor > 0 %}color: var(--text-dark);{% else %}color: #bbb;{% endif %}">
+                            {{ "{:,.2f}".format(saldo_deudor) }}
+                        </td>
+                        <td style="padding: 0.75rem 1rem; text-align: right; font-family: monospace; font-weight: 600; {% if saldo_acreedor > 0 %}color: var(--text-dark);{% else %}color: #bbb;{% endif %}">
+                            {{ "{:,.2f}".format(saldo_acreedor) }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" style="padding: 3rem; text-align: center;">
+                            <div style="color: #888; font-size: 1.1rem;">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity: 0.5; margin-bottom: 1rem;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                <br>No hay movimientos contabilizados en este período.
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if balance %}
+                <tfoot style="background-color: rgba(212, 149, 43, 0.1);">
+                    <tr>
+                        <th colspan="2" style="padding: 1rem; text-align: right; font-weight: 700; color: var(--brand-cafe);">SUMAS IGUALES</th>
+                        <th style="padding: 1rem; text-align: right; font-family: monospace; font-weight: 700; color: var(--brand-cafe); border-top: 2px solid var(--brand-cafe);">
+                            {{ "{:,.2f}".format(total_debe) }}
+                        </th>
+                        <th style="padding: 1rem; text-align: right; font-family: monospace; font-weight: 700; color: var(--brand-cafe); border-top: 2px solid var(--brand-cafe);">
+                            {{ "{:,.2f}".format(total_haber) }}
+                        </th>
+                        <th style="padding: 1rem; text-align: right; font-family: monospace; font-weight: 700; color: var(--brand-cafe); border-top: 2px solid var(--brand-cafe);">
+                            {{ "{:,.2f}".format(ns.tot_saldo_deudor) }}
+                        </th>
+                        <th style="padding: 1rem; text-align: right; font-family: monospace; font-weight: 700; color: var(--brand-cafe); border-top: 2px solid var(--brand-cafe);">
+                            {{ "{:,.2f}".format(ns.tot_saldo_acreedor) }}
+                        </th>
+                    </tr>
+                    
+                    {% if '{:.2f}'.format(total_debe) != '{:.2f}'.format(total_haber) or '{:.2f}'.format(ns.tot_saldo_deudor) != '{:.2f}'.format(ns.tot_saldo_acreedor) %}
+                    <tr>
+                        <td colspan="6" style="padding: 1rem; text-align: center; background: #ffeaa7; color: #d63031; font-weight: bold;">
+                            ⚠️ ATENCIÓN: Descuadre detectado en la partida doble. Revise los asientos manuales.
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+.hover-row:hover {
+    background-color: #fdfbf8;
+}
+</style>
+{% endblock %}

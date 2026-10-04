@@ -119,18 +119,40 @@ def registrar_compra():
     cursor = conn.cursor()
     try:
         # Registrar compra
+        monto_total = float(datos.get('costo'))
+        monto_sin_iva = monto_total / 1.15
+        iva = monto_total - monto_sin_iva
+        
         cursor.execute(
             "INSERT INTO ComprasMateriaPrima (MateriaPrimaID, ProveedorID, Cantidad, CostoTotal) OUTPUT INSERTED.ID VALUES (?, ?, ?, ?)",
-            int(datos.get('materia_id')), int(datos.get('proveedor_id')), float(datos.get('cantidad')), float(datos.get('costo'))
+            int(datos.get('materia_id')), int(datos.get('proveedor_id')), float(datos.get('cantidad')), monto_total
         )
         new_id = cursor.fetchone()[0]
+        
         # Sumar stock
         cursor.execute(
             "UPDATE MateriaPrima SET StockActual = StockActual + ? WHERE ID = ?",
             float(datos.get('cantidad')), int(datos.get('materia_id'))
         )
+        
+        # ============================================================
+        # INTEGRACIÓN CONTABLE NIIF
+        # ============================================================
+        from app.services.contabilidad_service import ContabilidadService
+        ContabilidadService.contabilizar_compra(
+            cursor=cursor,
+            usuario_id=current_user.id,
+            compra_id=new_id,
+            monto_sin_iva=monto_sin_iva,
+            iva=iva,
+            monto_total=monto_total,
+            metodo_pago='Credito', # Por defecto a crédito (CxP)
+            ip=request.remote_addr
+        )
+        # ============================================================
+        
         conn.commit()
-        return jsonify({'status': 'success', 'mensaje': 'Compra registrada y stock actualizado', 'id': new_id})
+        return jsonify({'status': 'success', 'mensaje': 'Compra registrada y contabilizada con éxito', 'id': new_id})
     except Exception as e:
         conn.rollback()
         import logging
