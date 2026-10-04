@@ -337,7 +337,11 @@
                     <button type="submit" class="btn btn-primary" id="btn-submit-aguinaldo" style="width:100%;">Generar Planilla Aguinaldo</button>
                 </div>
             </div>
-            <div class="modal-actions mt-3">
+            <div class="modal-actions mt-3" style="display: flex; justify-content: space-between;">
+                <button type="button" class="btn btn-outline" onclick="window.open('/admin/rrhh/reportes/aguinaldo?anio=' + document.getElementById('ag-anio').value, '_blank')" style="border-color: #f39c12; color: #f39c12; display: flex; align-items: center; gap: 8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                    Imprimir Reporte Consolidado (PDF)
+                </button>
                 <button type="button" class="btn btn-outline" onclick="cerrarModalAguinaldo()">Cancelar / Cerrar</button>
             </div>
         </form>
@@ -920,9 +924,14 @@
                     ` : ''}
                     
                     <hr style="border: 0; border-top: 1px solid var(--glass-border); margin: 15px 0;">
-                    <div style="display: flex; justify-content: space-between; font-size: 1.2rem; font-weight: bold; color: var(--text-light);">
+                    <div style="display: flex; justify-content: space-between; font-size: 1.2rem; font-weight: bold; color: var(--text-light); margin-bottom: 15px;">
                         <span>Total a Pagar:</span> <span>C$${l.total_liquidacion.toFixed(2)}</span>
                     </div>
+                    
+                    <a href="/admin/rrhh/liquidacion/reporte?empleado_id=${data.empleado_id}&fecha_egreso=${data.fecha_egreso}&motivo=${data.motivo}" target="_blank" class="btn btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                        Generar PDF de Liquidación
+                    </a>
                 `;
                 document.getElementById('liq-resultado').innerHTML = html;
             } else {

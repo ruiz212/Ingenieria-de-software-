@@ -8,30 +8,73 @@
     <p>Resumen de ingresos, gastos y salud financiera de la empresa.</p>
 </div>
 
-<h3 style="margin-bottom: 1rem; color: var(--text-dark); font-family: 'Playfair Display', serif; font-size: 1.25rem;">Reportes Financieros (Partida Doble)</h3>
-<div class="metrics-grid" style="margin-bottom: 2rem;">
+<h3 style="margin-bottom: 1rem; color: var(--text-dark); font-family: 'Playfair Display', serif; font-size: 1.25rem;">Motor Contable NIIF</h3>
+<div class="metrics-grid" style="margin-bottom: 2rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+    <!-- Catálogo de Cuentas -->
+    <a href="/admin/contabilidad/catalogo" class="metric-card hover-lift" style="text-decoration: none; cursor: pointer;">
+        <div class="metric-icon" style="background-color: rgba(107, 58, 42, 0.1); color: var(--brand-cafe);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h10"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Catálogo de Cuentas</div>
+            <div class="metric-value text-dark" style="font-size: 0.9rem; margin-top: 4px;">Estructura de 87 cuentas</div>
+        </div>
+    </a>
+
+    <!-- Libro Mayor -->
+    <a href="/admin/contabilidad/mayor" class="metric-card hover-lift" style="text-decoration: none; cursor: pointer;">
+        <div class="metric-icon" style="background-color: rgba(52, 152, 219, 0.1); color: #3498db;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Libro Mayor</div>
+            <div class="metric-value text-dark" style="font-size: 0.9rem; margin-top: 4px;">Movimientos por cuenta</div>
+        </div>
+    </a>
+
+    <!-- Balance de Comprobación -->
+    <a href="/admin/contabilidad/comprobacion" class="metric-card hover-lift" style="text-decoration: none; cursor: pointer;">
+        <div class="metric-icon" style="background-color: rgba(155, 89, 182, 0.1); color: #9b59b6;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        </div>
+        <div class="metric-body">
+            <div class="metric-title">Balance Comprobación</div>
+            <div class="metric-value text-dark" style="font-size: 0.9rem; margin-top: 4px;">Sumas y Saldos</div>
+        </div>
+    </a>
+
     <!-- Balance General -->
-    <a href="/admin/contabilidad/balance" class="metric-card" style="text-decoration: none; cursor: pointer; transition: transform 0.2s;">
+    <a href="/admin/contabilidad/balance" class="metric-card hover-lift" style="text-decoration: none; cursor: pointer;">
         <div class="metric-icon" style="background-color: rgba(212, 149, 43, 0.1); color: var(--brand-dorado);">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
         </div>
         <div class="metric-body">
             <div class="metric-title">Balance General</div>
-            <div class="metric-value text-dark" style="font-size: 1rem; margin-top: 4px;">Activo = Pasivo + Capital</div>
+            <div class="metric-value text-dark" style="font-size: 0.9rem; margin-top: 4px;">Estado de Situación</div>
         </div>
     </a>
     
     <!-- Estado de Resultados -->
-    <a href="/admin/contabilidad/estado-resultados" class="metric-card" style="text-decoration: none; cursor: pointer; transition: transform 0.2s;">
+    <a href="/admin/contabilidad/estado-resultados" class="metric-card hover-lift" style="text-decoration: none; cursor: pointer;">
         <div class="metric-icon" style="background-color: rgba(46, 204, 113, 0.1); color: var(--success);">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         </div>
         <div class="metric-body">
             <div class="metric-title">Estado de Resultados</div>
-            <div class="metric-value text-dark" style="font-size: 1rem; margin-top: 4px;">Ingresos y Gastos</div>
+            <div class="metric-value text-dark" style="font-size: 0.9rem; margin-top: 4px;">Pérdidas y Ganancias</div>
         </div>
     </a>
 </div>
+
+<style>
+.hover-lift {
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+}
+</style>
 
 <h3 style="margin-bottom: 1rem; color: var(--text-dark); font-family: 'Playfair Display', serif; font-size: 1.25rem;">Resumen de Operaciones (Hoy)</h3>
 <div class="metrics-grid">

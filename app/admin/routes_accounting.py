@@ -108,12 +108,27 @@ def crear_egreso():
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO EgresosPrivados (Concepto, Monto, UsuarioID) OUTPUT INSERTED.EgresoID VALUES (?, ?, ?)",
+            "INSERT INTO EgresosPrivados (Concepto, Monto, UsuarioID) OUTPUT INSERTED.ID VALUES (?, ?, ?)",
             concepto, float(monto), current_user.id
         )
         new_id = cursor.fetchone()[0]
+        
+        # ============================================================
+        # INTEGRACIÓN CONTABLE NIIF
+        # ============================================================
+        from app.services.contabilidad_service import ContabilidadService
+        ContabilidadService.contabilizar_egreso(
+            cursor=cursor,
+            usuario_id=current_user.id,
+            concepto=concepto,
+            monto=float(monto),
+            referencia=f"EGR-{new_id}",
+            ip=request.remote_addr
+        )
+        # ============================================================
+        
         conn.commit()
-        return jsonify({'status': 'success', 'mensaje': 'Egreso registrado', 'id': new_id})
+        return jsonify({'status': 'success', 'mensaje': 'Egreso registrado y contabilizado', 'id': new_id})
     except Exception as e:
         conn.rollback()
         import logging
@@ -139,12 +154,31 @@ def crear_vale():
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO ValesEmpleados (EmpleadoID, Monto, FechaAlta) OUTPUT INSERTED.ValeID VALUES (?, ?, GETDATE())",
+            "INSERT INTO ValesEmpleados (EmpleadoID, Monto, Fecha) OUTPUT INSERTED.ID VALUES (?, ?, GETDATE())",
             int(empleado_id), float(monto)
         )
         new_id = cursor.fetchone()[0]
+        
+        # Necesitamos el nombre del empleado para la glosa
+        cursor.execute("SELECT NombreCompleto FROM Usuarios WHERE ID = ?", (int(empleado_id),))
+        emp_nombre = cursor.fetchone()[0]
+        
+        # ============================================================
+        # INTEGRACIÓN CONTABLE NIIF
+        # ============================================================
+        from app.services.contabilidad_service import ContabilidadService
+        ContabilidadService.contabilizar_vale(
+            cursor=cursor,
+            usuario_id=current_user.id,
+            empleado_nombre=emp_nombre,
+            monto=float(monto),
+            referencia=f"VALE-{new_id}",
+            ip=request.remote_addr
+        )
+        # ============================================================
+        
         conn.commit()
-        return jsonify({'status': 'success', 'mensaje': 'Vale registrado', 'id': new_id})
+        return jsonify({'status': 'success', 'mensaje': 'Vale registrado y contabilizado', 'id': new_id})
     except Exception as e:
         conn.rollback()
         import logging
@@ -188,7 +222,7 @@ def balance_general():
     
     fecha_corte = request.args.get('fecha_corte', datetime.now().strftime('%Y-%m-%d'))
     
-    # 1. Consulta con CTE para obtener Saldos Finales de Activo, Pasivo y Capital
+    # 1. Consulta con CTE para obtener Saldos Finales de TODAS las cuentas
     sql_balance = """
     WITH SaldosHistoricos AS (
         SELECT 
@@ -203,7 +237,6 @@ def balance_general():
         JOIN AsientosDiario A ON D.AsientoID = A.ID
         JOIN CatalogoCuentas C ON D.CuentaID = C.ID
         WHERE A.Estado = 'Contabilizado' 
-          AND C.Clase IN ('Activo', 'Pasivo', 'Capital')
           AND A.Fecha <= ?
         GROUP BY C.Clase, C.Grupo, C.Codigo, C.Nombre, C.Naturaleza
     )
@@ -233,6 +266,7 @@ def balance_general():
     total_activos = 0
     total_pasivos = 0
     total_capital = 0
+    utilidad_ejercicio = 0
     
     for row in cuentas:
         cuenta_obj = {
@@ -250,6 +284,21 @@ def balance_general():
         elif row.Clase == 'Capital':
             capital.append(cuenta_obj)
             total_capital += cuenta_obj['SaldoFinal']
+        elif row.Clase == 'Ingreso':
+            utilidad_ejercicio += cuenta_obj['SaldoFinal']
+        elif row.Clase == 'Costo':
+            utilidad_ejercicio -= cuenta_obj['SaldoFinal']
+        elif row.Clase == 'Gasto':
+            utilidad_ejercicio -= cuenta_obj['SaldoFinal']
+            
+    # Agregar la Utilidad del Ejercicio al Capital (Ecuación contable ampliada)
+    if utilidad_ejercicio != 0:
+        capital.append({
+            'Codigo': '3.X', 
+            'Cuenta': 'Utilidad (Pérdida) del Ejercicio en Curso', 
+            'SaldoFinal': utilidad_ejercicio
+        })
+        total_capital += utilidad_ejercicio
             
     if request.args.get('print') == '1':
         return render_template('admin/balance_imprimir.html',
@@ -358,7 +407,7 @@ def estado_resultados():
     sql_resultados = """
     WITH MovimientosResultados AS (
         SELECT 
-            C.Grupo,
+            C.Clase,
             C.Codigo,
             C.Nombre AS Cuenta,
             C.Naturaleza,
@@ -370,10 +419,10 @@ def estado_resultados():
         WHERE A.Estado = 'Contabilizado' 
           AND C.Clase IN ('Ingreso', 'Costo', 'Gasto')
           AND A.PeriodoID = ?
-        GROUP BY C.Grupo, C.Codigo, C.Nombre, C.Naturaleza
+        GROUP BY C.Clase, C.Codigo, C.Nombre, C.Naturaleza
     )
     SELECT 
-        Grupo,
+        Clase,
         Codigo,
         Cuenta,
         CASE 
@@ -383,8 +432,8 @@ def estado_resultados():
     FROM MovimientosResultados
     WHERE (TotalDebe - TotalHaber) != 0
     ORDER BY 
-        CASE WHEN Grupo LIKE '%Ingreso%' THEN 1 
-             WHEN Grupo LIKE '%Costo%' THEN 2 
+        CASE WHEN Clase = 'Ingreso' THEN 1 
+             WHEN Clase = 'Costo' THEN 2 
              ELSE 3 END, Codigo;
     """
     
@@ -408,12 +457,11 @@ def estado_resultados():
             'SaldoNeto': float(row.SaldoNeto)
         }
         
-        # Categorizar heurísticamente según el nombre del grupo
-        grupo_lower = row.Grupo.lower()
-        if 'ingreso' in grupo_lower or 'venta' in grupo_lower:
+        # Categorizar estrictamente según Clase NIIF
+        if row.Clase == 'Ingreso':
             ingresos.append(cuenta_obj)
             total_ingresos += cuenta_obj['SaldoNeto']
-        elif 'costo' in grupo_lower:
+        elif row.Clase == 'Costo':
             costos.append(cuenta_obj)
             total_costos += cuenta_obj['SaldoNeto']
         else:
@@ -441,6 +489,91 @@ def estado_resultados():
                            gastos=gastos, total_gastos=total_gastos,
                            utilidad_bruta=utilidad_bruta,
                            utilidad_neta=utilidad_neta)
+
+# ============================================================
+# NUEVAS RUTAS NIIF PROFESIONALES
+# ============================================================
+
+from app.services.contabilidad_service import ContabilidadService
+
+@admin_bp.route('/contabilidad/catalogo', methods=['GET'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def catalogo_cuentas():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cuentas = ContabilidadService.obtener_catalogo_cuentas(cursor)
+        return render_template('admin/catalogo_cuentas.html', user=current_user, cuentas=cuentas)
+    except Exception as e:
+        flash(f'Error al cargar catálogo: {str(e)}', 'error')
+        return redirect(url_for('admin.contabilidad'))
+    finally:
+        conn.close()
+
+@admin_bp.route('/contabilidad/comprobacion', methods=['GET'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def balance_comprobacion():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        mes = request.args.get('mes', datetime.now().month)
+        anio = request.args.get('anio', datetime.now().year)
+        
+        cursor.execute("SELECT ID FROM PeriodosContables WHERE Mes = ? AND Anio = ?", (mes, anio))
+        periodo_row = cursor.fetchone()
+        
+        if periodo_row:
+            balance = ContabilidadService.obtener_balance_comprobacion(cursor, periodo_id=periodo_row[0])
+            total_debe = sum(item['TotalDebe'] for item in balance)
+            total_haber = sum(item['TotalHaber'] for item in balance)
+        else:
+            balance = []
+            total_debe = total_haber = 0
+            
+        return render_template('admin/balance_comprobacion.html', 
+                               user=current_user, 
+                               balance=balance, 
+                               mes=mes, anio=anio,
+                               total_debe=total_debe, total_haber=total_haber)
+    except Exception as e:
+        flash(f'Error al cargar balance: {str(e)}', 'error')
+        return redirect(url_for('admin.contabilidad'))
+    finally:
+        conn.close()
+
+@admin_bp.route('/contabilidad/mayor', methods=['GET'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def libro_mayor():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cuenta_codigo = request.args.get('cuenta_codigo')
+        mes = request.args.get('mes', datetime.now().month)
+        anio = request.args.get('anio', datetime.now().year)
+        
+        cuentas = ContabilidadService.obtener_catalogo_cuentas(cursor, solo_transaccionales=True)
+        
+        movimientos = []
+        if cuenta_codigo:
+            cursor.execute("SELECT ID FROM PeriodosContables WHERE Mes = ? AND Anio = ?", (mes, anio))
+            periodo_row = cursor.fetchone()
+            if periodo_row:
+                movimientos = ContabilidadService.obtener_libro_mayor(cursor, cuenta_codigo, periodo_id=periodo_row[0])
+                
+        return render_template('admin/libro_mayor.html', 
+                               user=current_user, 
+                               cuentas=cuentas,
+                               movimientos=movimientos,
+                               cuenta_seleccionada=cuenta_codigo,
+                               mes=mes, anio=anio)
+    except Exception as e:
+        flash(f'Error al cargar libro mayor: {str(e)}', 'error')
+        return redirect(url_for('admin.contabilidad'))
+    finally:
+        conn.close()
 
 # ============================================================
 # MÓDULO DE CONFIGURACIÓN

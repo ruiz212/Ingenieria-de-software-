@@ -12,7 +12,7 @@ from app.admin import admin_bp
 from app.db import get_db_connection
 from app.auth.decorators import roles_required
 from app.extensions import csrf
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 @admin_bp.route('/rrhh')
 @login_required
@@ -282,6 +282,57 @@ def actualizar_horario_empleado(id):
     finally:
         conn.close()
 
+def obtener_dias_ausentes_auto(cursor, empleado_id, periodo_inicio, periodo_fin):
+    if isinstance(periodo_inicio, str):
+        periodo_inicio = datetime.strptime(periodo_inicio, '%Y-%m-%d').date()
+    if isinstance(periodo_fin, str):
+        periodo_fin = datetime.strptime(periodo_fin, '%Y-%m-%d').date()
+        
+    dias_totales = (periodo_fin - periodo_inicio).days + 1
+    
+    # 1. Contar domingos en el período (Días de descanso remunerados, no se marcan)
+    domingos = sum(1 for i in range(dias_totales) if (periodo_inicio + timedelta(days=i)).weekday() == 6)
+    dias_laborables_esperados = dias_totales - domingos
+    if dias_laborables_esperados <= 0:
+        return 0
+        
+    # Salvaguarda: Verificar si hay uso del módulo de asistencia en la empresa
+    cursor.execute("SELECT COUNT(*) FROM Asistencia WHERE Fecha BETWEEN ? AND ?", periodo_inicio, periodo_fin)
+    total_marcas_empresa = cursor.fetchone()[0]
+    if total_marcas_empresa == 0:
+        return 0 # Si nadie marcó en toda la empresa, no penalizamos asumiendo que no usaron el kiosco.
+        
+    # 2. Contar días con marca de asistencia
+    cursor.execute("""
+        SELECT COUNT(DISTINCT Fecha) 
+        FROM Asistencia 
+        WHERE EmpleadoID = ? AND Fecha BETWEEN ? AND ?
+    """, empleado_id, periodo_inicio, periodo_fin)
+    dias_asistidos = cursor.fetchone()[0]
+    
+    # 3. Contar días de licencia justificada
+    cursor.execute("""
+        SELECT FechaInicio, FechaFin, TipoLicencia 
+        FROM LicenciasEmpleados 
+        WHERE EmpleadoID = ? AND (FechaInicio <= ? AND FechaFin >= ?)
+    """, empleado_id, periodo_fin, periodo_inicio)
+    licencias = cursor.fetchall()
+    
+    dias_ya_contados_licencia = set()
+    for lic in licencias:
+        f_ini = max(periodo_inicio, lic.FechaInicio)
+        f_fin = min(periodo_fin, lic.FechaFin)
+        for i in range((f_fin - f_ini).days + 1):
+            dia_actual = f_ini + timedelta(days=i)
+            if dia_actual.weekday() != 6: # Si no es domingo
+                dias_ya_contados_licencia.add(dia_actual)
+    
+    dias_justificados = len(dias_ya_contados_licencia)
+    
+    # 4. Cálculo final de ausencias injustificadas
+    ausencias_injustificadas = max(0, dias_laborables_esperados - dias_asistidos - dias_justificados)
+    return ausencias_injustificadas
+
 @admin_bp.route('/api/rrhh/nomina/calcular', methods=['POST'])
 @csrf.exempt
 @login_required
@@ -304,6 +355,10 @@ def calcular_nomina():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        if dias_ausentes == 0:
+            # Si el usuario no especificó manualmente días ausentes, calcular automático
+            dias_ausentes = obtener_dias_ausentes_auto(cursor, empleado_id, periodo_inicio, periodo_fin)
+            
         cursor.execute("SELECT * FROM Empleados WHERE ID = ? AND EstadoEmpleado = 'Activo'", int(empleado_id))
         emp = cursor.fetchone()
         if not emp:
@@ -376,7 +431,7 @@ def calcular_nomina():
                 INSSLaboral, IRMensual, PensionAlimenticia, ValesDescontados,
                 TotalDeducciones, SalarioNeto, INSSPatronal, INATEC, Estado, GeneradoPor)
             OUTPUT INSERTED.ID
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Borrador', ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Generada', ?)
         """,
             int(empleado_id), periodo_inicio, periodo_fin, salario_base_efectivo,
             horas_extras, monto_horas_extras, (otros_ingresos + monto_feriados), total_devengado,
@@ -387,6 +442,28 @@ def calcular_nomina():
 
         if vales_descontados > 0 and emp.UsuarioID:
             cursor.execute("UPDATE ValesEmpleados SET Descontado = 1 WHERE EmpleadoID = ? AND Descontado = 0", emp.UsuarioID)
+
+        # ============================================================
+        # INTEGRACIÓN CONTABLE NIIF
+        # ============================================================
+        from app.services.contabilidad_service import ContabilidadService
+        ContabilidadService.contabilizar_nomina(
+            cursor=cursor,
+            usuario_id=current_user.id,
+            nomina_id=nomina_id,
+            empleado_nombre=emp.NombreCompleto,
+            salario_bruto=salario_base_efectivo + monto_horas_extras + otros_ingresos + monto_feriados,
+            inss_laboral=inss_laboral,
+            ir_retenido=ir_mensual,
+            inss_patronal=inss_patronal,
+            inatec=inatec,
+            pension_alimenticia=pension_alimenticia,
+            vales_descontados=vales_descontados,
+            salario_neto=salario_neto,
+            cargo=emp.Cargo,
+            ip=request.remote_addr
+        )
+        # ============================================================
 
         conn.commit()
 
@@ -552,6 +629,136 @@ def calcular_liquidacion():
         logging.error(f"Internal server error: {e}")
         return jsonify({'error': 'Error interno del servidor al procesar la solicitud.'}), 500
 
+@admin_bp.route('/rrhh/liquidacion/reporte', methods=['GET'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def reporte_liquidacion():
+    empleado_id = request.args.get('empleado_id')
+    fecha_egreso = request.args.get('fecha_egreso')
+    motivo = request.args.get('motivo', 'Renuncia Voluntaria')
+
+    if not all([empleado_id, fecha_egreso]):
+        flash('Faltan datos para generar el reporte.', 'error')
+        return redirect(url_for('admin.rrhh'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM Empleados WHERE ID = ?", int(empleado_id))
+        emp = cursor.fetchone()
+        if not emp:
+            flash('Empleado no encontrado', 'error')
+            return redirect(url_for('admin.rrhh'))
+
+        fecha_ingreso = emp.FechaIngreso
+        if type(fecha_ingreso) is str:
+            fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
+        elif hasattr(fecha_ingreso, 'date'):
+            fecha_ingreso = fecha_ingreso.date()
+            
+        fecha_salida = datetime.strptime(fecha_egreso, '%Y-%m-%d').date()
+        salario_base = float(emp.SalarioBase)
+        salario_diario = salario_base / 30
+
+        dias_trabajados = (fecha_salida - fecha_ingreso).days
+        anios_completos = dias_trabajados // 365
+        meses_fraccion = (dias_trabajados % 365) // 30
+        
+        dias_vacaciones_totales = dias_trabajados * (30 / 365)
+        dias_vacaciones_pendientes = dias_vacaciones_totales
+
+        cursor.execute("SELECT TOP 6 SalarioBruto FROM Nomina WHERE EmpleadoID = ? ORDER BY PeriodoFin DESC", int(empleado_id))
+        nominas_recientes = [float(r.SalarioBruto) for r in cursor.fetchall()]
+        salario_promedio_6m = sum(nominas_recientes) / len(nominas_recientes) if nominas_recientes else salario_base
+        salario_diario_vacaciones = salario_promedio_6m / 30
+
+        monto_vacaciones = dias_vacaciones_pendientes * salario_diario_vacaciones
+        inss_vacaciones = monto_vacaciones * 0.07
+
+        salarios_6m = nominas_recientes
+        salario_max_6m = max(salarios_6m) if salarios_6m else salario_base
+
+        if fecha_salida.month == 12:
+            inicio_aguinaldo = date(fecha_salida.year, 12, 1)
+        else:
+            inicio_aguinaldo = date(fecha_salida.year - 1, 12, 1)
+            
+        inicio_aguinaldo_real = max(inicio_aguinaldo, fecha_ingreso)
+        dias_aguinaldo = (fecha_salida - inicio_aguinaldo_real).days + 1
+        
+        aguinaldo_proporcional = salario_max_6m * (dias_aguinaldo / 365.0)
+
+        aplica_indemnizacion = motivo in ['Despido Injustificado', 'Renuncia Voluntaria']
+
+        dias_indemnizacion = 0
+        if aplica_indemnizacion:
+            anios_tramo1 = min(anios_completos, 3)
+            dias_tramo1 = anios_tramo1 * 30
+
+            anios_tramo2 = max(0, anios_completos - 3)
+            dias_tramo2 = anios_tramo2 * 20
+
+            dias_indemnizacion = dias_tramo1 + dias_tramo2
+
+            if anios_completos < 3:
+                dias_indemnizacion += meses_fraccion * 2.5
+            else:
+                dias_indemnizacion += meses_fraccion * 1.667
+
+            dias_indemnizacion = min(dias_indemnizacion, 150)
+
+        monto_indemnizacion = dias_indemnizacion * salario_diario
+        ir_indemnizacion = 0
+        if monto_indemnizacion > 500000:
+            ir_indemnizacion = (monto_indemnizacion - 500000) * 0.15
+
+        total_liquidacion = monto_vacaciones - inss_vacaciones + aguinaldo_proporcional + monto_indemnizacion - ir_indemnizacion
+
+        liquidacion_data = {
+            'empleado': emp.NombreCompleto,
+            'fecha_ingreso': fecha_ingreso.strftime('%d/%m/%Y'),
+            'fecha_egreso': fecha_salida.strftime('%d/%m/%Y'),
+            'dias_trabajados': dias_trabajados,
+            'anios': anios_completos,
+            'meses_fraccion': meses_fraccion,
+            'salario_base': salario_base,
+            'salario_diario': round(salario_diario, 2),
+            'vacaciones': {
+                'dias': round(dias_vacaciones_pendientes, 2),
+                'salario_diario_usado': round(salario_diario_vacaciones, 2),
+                'monto_bruto': round(monto_vacaciones, 2),
+                'inss': round(inss_vacaciones, 2),
+                'neto': round(monto_vacaciones - inss_vacaciones, 2)
+            },
+            'aguinaldo': {
+                'salario_max_6m': salario_max_6m,
+                'dias_ciclo': dias_aguinaldo,
+                'monto': round(aguinaldo_proporcional, 2),
+                'nota': 'Exento de INSS e IR'
+            },
+            'indemnizacion': {
+                'aplica': aplica_indemnizacion,
+                'motivo': motivo,
+                'dias': round(dias_indemnizacion, 2),
+                'monto_bruto': round(monto_indemnizacion, 2),
+                'ir': round(ir_indemnizacion, 2),
+                'neto': round(monto_indemnizacion - ir_indemnizacion, 2),
+                'nota': 'Exento INSS. IR exento hasta C$500,000'
+            },
+            'total_liquidacion': round(total_liquidacion, 2),
+            'motivo': motivo
+        }
+
+        return render_template('admin/colilla_liquidacion.html', liquidacion=liquidacion_data, emp=emp, datetime=datetime)
+    except Exception as e:
+        import logging
+        logging.error(f"Internal server error: {e}")
+        flash('Error interno al generar el reporte.', 'error')
+        return redirect(url_for('admin.rrhh'))
+    finally:
+        conn.close()
+
+
 @admin_bp.route('/api/rrhh/nomina/calcular_batch', methods=['POST'])
 @csrf.exempt
 @login_required
@@ -587,7 +794,15 @@ def calcular_nomina_batch():
         nomina_ids = []
         for emp in empleados:
             salario_base = float(emp.SalarioBase)
-            total_devengado = salario_base
+            salario_diario = salario_base / 30
+            
+            # Cálculo automático de ausencias
+            dias_ausentes = obtener_dias_ausentes_auto(cursor, emp.ID, periodo_inicio, periodo_fin)
+            # Factor 1.1667 equivale a 1 día de falta + 1/6 del domingo proporcional (Ley 185)
+            monto_ausencias = dias_ausentes * salario_diario * 1.1667
+            salario_base_efectivo = max(0, salario_base - monto_ausencias)
+            
+            total_devengado = salario_base_efectivo
             
             inss_laboral = total_devengado * (tasa_inss_laboral / 100)
             
@@ -625,7 +840,7 @@ def calcular_nomina_batch():
                 OUTPUT INSERTED.ID
                 VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Borrador', ?)
             """,
-                emp.ID, periodo_inicio, periodo_fin, salario_base, total_devengado,
+                emp.ID, periodo_inicio, periodo_fin, salario_base_efectivo, total_devengado,
                 inss_laboral, ir_mensual, pension_alimenticia, vales_descontados,
                 total_deducciones, salario_neto, inss_patronal, inatec, current_user.id
             )
@@ -716,7 +931,7 @@ def colilla_pago(nomina_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT n.*, e.NombreCompleto, e.Cargo, e.Cedula, e.NumeroINSS
+        SELECT n.*, e.NombreCompleto, e.Cargo, e.Cedula, e.NumeroINSS, e.FechaIngreso
         FROM Nomina n
         JOIN Empleados e ON n.EmpleadoID = e.ID
         WHERE n.ID = ?
@@ -728,7 +943,36 @@ def colilla_pago(nomina_id):
         flash('Nómina no encontrada', 'error')
         return redirect(url_for('admin.rrhh'))
         
-    return render_template('admin/colilla_pago.html', nomina=nomina, datetime=datetime)
+    aguinaldo_detalles = None
+    if float(nomina.SalarioBruto) == 0 and float(nomina.OtrosIngresos) > 0:
+        fecha_ingreso = nomina.FechaIngreso
+        if type(fecha_ingreso) is str:
+            fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
+        elif hasattr(fecha_ingreso, 'date'):
+            fecha_ingreso = fecha_ingreso.date()
+            
+        periodo_fin = nomina.PeriodoFin
+        if type(periodo_fin) is str:
+            periodo_fin = datetime.strptime(periodo_fin, '%Y-%m-%d').date()
+        elif hasattr(periodo_fin, 'date'):
+            periodo_fin = periodo_fin.date()
+            
+        fecha_inicio_ciclo = date(periodo_fin.year - 1, 12, 1) if periodo_fin.month == 11 else date(periodo_fin.year, 12, 1)
+        if periodo_fin.month == 11 and periodo_fin.day == 30:
+            fecha_inicio_ciclo = date(periodo_fin.year - 1, 12, 1)
+            
+        inicio_aguinaldo_real = max(fecha_inicio_ciclo, fecha_ingreso)
+        dias_aguinaldo = (periodo_fin - inicio_aguinaldo_real).days + 1
+        
+        aguinaldo_proporcional = float(nomina.OtrosIngresos)
+        salario_max_6m = aguinaldo_proporcional / (dias_aguinaldo / 365.0) if dias_aguinaldo > 0 else 0
+        
+        aguinaldo_detalles = {
+            'dias': dias_aguinaldo,
+            'salario_max_6m': round(salario_max_6m, 2)
+        }
+        
+    return render_template('admin/colilla_pago.html', nomina=nomina, datetime=datetime, aguinaldo_detalles=aguinaldo_detalles)
 
 @admin_bp.route('/rrhh/reportes/inss_patronal')
 @login_required
@@ -762,6 +1006,69 @@ def reporte_inss_patronal():
         total_inatec=total_inatec,
         total_general=total_general,
         mes=mes, anio=anio, datetime=datetime)
+
+@admin_bp.route('/rrhh/reportes/aguinaldo')
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def reporte_aguinaldo():
+    anio = request.args.get('anio', datetime.now().year)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT e.NombreCompleto, e.Cedula, e.FechaIngreso, n.PeriodoFin, n.OtrosIngresos AS AguinaldoMonto
+        FROM Nomina n
+        JOIN Empleados e ON n.EmpleadoID = e.ID
+        WHERE YEAR(n.PeriodoFin) = ? AND n.SalarioBruto = 0 AND n.OtrosIngresos > 0
+        ORDER BY e.NombreCompleto
+    """, int(anio))
+    
+    nominas_aguinaldo = cursor.fetchall()
+    
+    registros = []
+    total_aguinaldo = 0
+    
+    for n in nominas_aguinaldo:
+        # Reconstruct calculations
+        fecha_ingreso = n.FechaIngreso
+        if type(fecha_ingreso) is str:
+            fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
+        elif hasattr(fecha_ingreso, 'date'):
+            fecha_ingreso = fecha_ingreso.date()
+            
+        periodo_fin = n.PeriodoFin
+        if type(periodo_fin) is str:
+            periodo_fin = datetime.strptime(periodo_fin, '%Y-%m-%d').date()
+        elif hasattr(periodo_fin, 'date'):
+            periodo_fin = periodo_fin.date()
+            
+        fecha_inicio_ciclo = date(periodo_fin.year - 1, 12, 1) if periodo_fin.month == 11 else date(periodo_fin.year, 12, 1)
+        if periodo_fin.month == 11 and periodo_fin.day == 30:
+            fecha_inicio_ciclo = date(periodo_fin.year - 1, 12, 1)
+            
+        inicio_aguinaldo_real = max(fecha_inicio_ciclo, fecha_ingreso)
+        dias_aguinaldo = (periodo_fin - inicio_aguinaldo_real).days + 1
+        
+        aguinaldo_proporcional = float(n.AguinaldoMonto)
+        salario_max_6m = aguinaldo_proporcional / (dias_aguinaldo / 365.0) if dias_aguinaldo > 0 else 0
+        
+        registros.append({
+            'nombre': n.NombreCompleto,
+            'cedula': n.Cedula,
+            'fecha_ingreso': fecha_ingreso.strftime('%d/%m/%Y'),
+            'dias': dias_aguinaldo,
+            'salario_base': round(salario_max_6m, 2),
+            'monto': round(aguinaldo_proporcional, 2)
+        })
+        total_aguinaldo += aguinaldo_proporcional
+        
+    conn.close()
+    
+    return render_template('admin/reporte_aguinaldo.html',
+        registros=registros,
+        total_aguinaldo=total_aguinaldo,
+        anio=anio, datetime=datetime)
 
 @admin_bp.route('/api/rrhh/alertas', methods=['GET'])
 @login_required
