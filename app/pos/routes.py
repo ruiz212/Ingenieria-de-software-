@@ -155,6 +155,7 @@ def registrar_factura():
         es_invitado = getattr(current_user, 'rol_nombre', '') == 'Invitado'
         
         turno_id = None
+        usuario_vendedor_id = current_user.id if not (es_cliente_registrado or es_invitado) else 1
         if not (es_cliente_registrado or es_invitado):
             turno_id = obtener_o_crear_turno(current_user.id)
         # 2. Generar número de factura correlativo desde la BD
@@ -193,10 +194,10 @@ def registrar_factura():
         # 4. Insertar la factura
         incluye_ruc = 1 if ruc_datos else 0
         cursor.execute(
-            "INSERT INTO Facturas (NumeroFactura, CodigoSeguimiento, UsuarioID, ClienteID, TurnoID, Subtotal, IVA, Total, EsEncargo, IncluyeRUC) "
+            "SET NOCOUNT ON; INSERT INTO Facturas (NumeroFactura, CodigoSeguimiento, UsuarioID, ClienteID, TurnoID, Subtotal, IVA, Total, EsEncargo, IncluyeRUC) "
             "OUTPUT INSERTED.ID "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            numero_factura, codigo_seguimiento, current_user.id, cliente_id, turno_id,
+            numero_factura, codigo_seguimiento, usuario_vendedor_id, cliente_id, turno_id,
             subtotal, iva, total, 1 if es_encargo else 0, incluye_ruc
         )
         factura_id = cursor.fetchone()[0]
@@ -215,7 +216,7 @@ def registrar_factura():
             prod_id = int(prod_id_str.split('_')[0])
 
             cursor.execute(
-                "INSERT INTO DetalleFacturas (FacturaID, ProductoID, Cantidad, PrecioUnitario, Subtotal) "
+                "SET NOCOUNT ON; INSERT INTO DetalleFacturas (FacturaID, ProductoID, Cantidad, PrecioUnitario, Subtotal) "
                 "OUTPUT INSERTED.ID "
                 "VALUES (?, ?, ?, ?, ?)",
                 factura_id, prod_id, item.get('cantidad', 1),
@@ -237,7 +238,7 @@ def registrar_factura():
                         ing_id = ing_row.ID
                     else:
                         cursor.execute(
-                            "INSERT INTO Ingredientes (Nombre, PrecioAdicional, Activo) OUTPUT INSERTED.ID VALUES (?, ?, 1)",
+                            "SET NOCOUNT ON; INSERT INTO Ingredientes (Nombre, PrecioAdicional, Activo) OUTPUT INSERTED.ID VALUES (?, ?, 1)",
                             nombre_extra, precio_extra
                         )
                         ing_id = cursor.fetchone()[0]
@@ -343,7 +344,7 @@ def registrar_factura():
         
         ContabilidadService.contabilizar_venta(
             cursor=cursor,
-            usuario_id=current_user.id,
+            usuario_id=usuario_vendedor_id,
             numero_factura=numero_factura,
             subtotal=subtotal,
             iva=iva,
@@ -425,7 +426,7 @@ def crear_cotizacion():
         
     try:
         cursor.execute(
-            "INSERT INTO Cotizaciones (ClienteID, SessionID, Especificaciones, FechaEntrega, RutaImagenReferencia, TelefonoContacto, Estado, NombreContacto) "
+            "SET NOCOUNT ON; INSERT INTO Cotizaciones (ClienteID, SessionID, Especificaciones, FechaEntrega, RutaImagenReferencia, TelefonoContacto, Estado, NombreContacto) "
             "OUTPUT INSERTED.ID "
             "VALUES (?, ?, ?, ?, ?, ?, 'Pendiente', ?)",
             cliente_id, session_id, especificaciones, fecha_entrega, ruta_imagen, telefono, nombre_contacto

@@ -176,7 +176,7 @@ class ContabilidadService:
         
         # Crear periodo automáticamente
         cursor.execute(
-            "INSERT INTO PeriodosContables (Mes, Anio, Estado) OUTPUT INSERTED.ID VALUES (?, ?, 'Abierto')",
+            "SET NOCOUNT ON; INSERT INTO PeriodosContables (Mes, Anio, Estado) OUTPUT INSERTED.ID VALUES (?, ?, 'Abierto')",
             (mes, anio)
         )
         return cursor.fetchone()[0]
@@ -255,6 +255,7 @@ class ContabilidadService:
         
         # 5. Insertar cabecera del asiento
         cursor.execute("""
+            SET NOCOUNT ON;
             INSERT INTO AsientosDiario 
                 (PeriodoID, Descripcion, ReferenciaExterna, TipoDocumento, 
                  Estado, UsuarioID, TipoComprobanteID, NumeroComprobante, IP)

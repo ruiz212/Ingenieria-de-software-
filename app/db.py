@@ -75,7 +75,7 @@ def obtener_o_crear_turno(user_id):
         turno_id = row.ID
     else:
         row = execute_query(
-            "INSERT INTO TurnosCaja (UsuarioID) OUTPUT INSERTED.ID VALUES (?)",
+            "SET NOCOUNT ON; INSERT INTO TurnosCaja (UsuarioID) OUTPUT INSERTED.ID VALUES (?)",
             (user_id,),
             fetch=True,
             commit=True
