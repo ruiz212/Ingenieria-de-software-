@@ -1,3 +1,4 @@
+from app.services.validation import amount
 # app/admin/routes_pos.py
 from flask import render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
@@ -102,15 +103,14 @@ def arqueos():
 
 
 @admin_bp.route('/api/arqueo/etapa1-conteo', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Estandar', 'Admin', 'SuperAdmin')
 def arqueo_etapa1_conteo():
     """Etapa 1: Cajero envía conteo desglosado por denominación."""
     datos = request.json
-    efectivo_contado = float(datos.get('efectivo_contado', 0))
-    transferencias_contadas = float(datos.get('transferencias_contadas', 0))
-    dolares_contados = float(datos.get('dolares_contados', 0))
+    efectivo_contado = float(amount(datos.get('efectivo_contado', 0)))
+    transferencias_contadas = float(amount(datos.get('transferencias_contadas', 0)))
+    dolares_contados = float(amount(datos.get('dolares_contados', 0)))
     tipo_cambio = float(datos.get('tipo_cambio', 0))
     observaciones = datos.get('observaciones', '')
     denominaciones = datos.get('denominaciones', [])
@@ -119,18 +119,21 @@ def arqueo_etapa1_conteo():
     cursor = conn.cursor()
     try:
         # Buscar turno activo del usuario
-        cursor.execute("SELECT ID FROM TurnosCaja WHERE UsuarioID = ? AND Cerrado = 0", current_user.id)
+        cursor.execute("SELECT ID FROM TurnosCaja WITH(UPDLOCK,HOLDLOCK) WHERE UsuarioID = ? AND Cerrado = 0", current_user.id)
         turno_row = cursor.fetchone()
         if not turno_row:
             return jsonify({'error': 'No tienes un turno activo para cerrar'}), 400
 
         turno_id = turno_row.ID
+        cursor.execute("SELECT ID FROM ArqueoCaja WHERE TurnoID=? AND EstadoArqueo IN ('Pendiente','Verificado')",turno_id)
+        if cursor.fetchone():
+            return jsonify(error='Ya existe un arqueo pendiente para este turno.'),409
 
         # Calcular valores del sistema
         cursor.execute("""
             SELECT
-                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo' THEN p.Monto ELSE 0 END), 0) AS EfectivoCordobasSistema,
-                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo USD' THEN p.Monto ELSE 0 END), 0) AS EfectivoUSDSistema,
+                ISNULL(SUM(CASE WHEN (p.MetodoPago = 'Efectivo' OR (p.MetodoPago='Efectivo USD' AND p.MonedaRegistro='NIO')) THEN p.Monto ELSE 0 END), 0) AS EfectivoCordobasSistema,
+                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo USD' AND p.MonedaRegistro<>'NIO' THEN p.Monto ELSE 0 END), 0) AS EfectivoUSDSistema,
                 ISNULL(SUM(CASE WHEN p.MetodoPago = 'Transferencia' THEN p.Monto ELSE 0 END), 0) AS TransferenciasSistema
             FROM Pagos p
             JOIN Facturas f ON p.FacturaID = f.ID
@@ -160,7 +163,7 @@ def arqueo_etapa1_conteo():
         requiere_justificacion = abs(dif_efectivo) >= umbral or abs(dif_transferencias) >= umbral
 
         # Total ventas del turno
-        cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE TurnoID = ?", turno_id)
+        cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND TurnoID = ?", turno_id)
         total_ventas = float(cursor.fetchone()[0])
 
         # Insertar arqueo en estado Pendiente
@@ -222,7 +225,6 @@ def arqueo_etapa1_conteo():
 
 
 @admin_bp.route('/api/arqueo/<int:arqueo_id>/verificar', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def arqueo_etapa2_verificar(arqueo_id):
@@ -234,7 +236,7 @@ def arqueo_etapa2_verificar(arqueo_id):
     cursor = conn.cursor()
     try:
         # Obtener el arqueo
-        cursor.execute("SELECT UsuarioID, RequiereJustificacion, EstadoArqueo FROM ArqueoCaja WHERE ID = ?", arqueo_id)
+        cursor.execute("SELECT UsuarioID, RequiereJustificacion, EstadoArqueo FROM ArqueoCaja WITH(UPDLOCK,HOLDLOCK) WHERE ID = ?", arqueo_id)
         arqueo = cursor.fetchone()
         if not arqueo:
             return jsonify({'error': 'Arqueo no encontrado'}), 404
@@ -261,7 +263,7 @@ def arqueo_etapa2_verificar(arqueo_id):
         """, current_user.id, notas_discrepancia if notas_discrepancia.strip() else None, arqueo_id)
 
         # Cerrar el turno
-        cursor.execute("SELECT TurnoID FROM ArqueoCaja WHERE ID = ?", arqueo_id)
+        cursor.execute("SELECT TurnoID FROM ArqueoCaja WITH(UPDLOCK,HOLDLOCK) WHERE ID = ?", arqueo_id)
         turno_id = cursor.fetchone().TurnoID
 
         cursor.execute("""
@@ -269,7 +271,7 @@ def arqueo_etapa2_verificar(arqueo_id):
         """, arqueo_id)
         ar = cursor.fetchone()
 
-        cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE TurnoID = ?", turno_id)
+        cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND TurnoID = ?", turno_id)
         total_ventas = float(cursor.fetchone()[0])
 
         cursor.execute("""
@@ -337,101 +339,10 @@ def arqueo_detalle(arqueo_id):
 
 
 @admin_bp.route('/api/turno/cerrar', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Estandar', 'Admin', 'SuperAdmin')
 def cerrar_turno():
-    """Cierre de turno con arqueo ciego de caja."""
-    datos = request.json
-    efectivo_contado = float(datos.get('efectivo_contado', 0))
-    transferencias_contadas = float(datos.get('transferencias_contadas', 0))
-    dolares_contados = float(datos.get('dolares_contados', 0))
-    tipo_cambio = float(datos.get('tipo_cambio', 0))
-    observaciones = datos.get('observaciones', '')
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # Buscar turno activo del usuario
-        cursor.execute("SELECT ID FROM TurnosCaja WHERE UsuarioID = ? AND Cerrado = 0", current_user.id)
-        turno_row = cursor.fetchone()
-        if not turno_row:
-            return jsonify({'error': 'No tienes un turno activo para cerrar'}), 400
-
-        turno_id = turno_row.ID
-
-        # Calcular valores del sistema
-        # Se suma el Efectivo en córdobas y el Efectivo USD convertido a córdobas según el tipo_cambio ingresado para el arqueo.
-        cursor.execute("""
-            SELECT 
-                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo' THEN p.Monto ELSE 0 END), 0) AS EfectivoCordobasSistema,
-                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo USD' THEN p.Monto ELSE 0 END), 0) AS EfectivoUSDSistema,
-                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Transferencia' THEN p.Monto ELSE 0 END), 0) AS TransferenciasSistema
-            FROM Pagos p
-            JOIN Facturas f ON p.FacturaID = f.ID
-            WHERE f.TurnoID = ?
-        """, turno_id)
-        row = cursor.fetchone()
-        
-        efectivo_cordobas = float(row.EfectivoCordobasSistema)
-        efectivo_usd_sistema = float(row.EfectivoUSDSistema)
-        transferencias_sistema = float(row.TransferenciasSistema)
-
-        # Convertir los dólares registrados en sistema a córdobas
-        efectivo_sistema = efectivo_cordobas + (efectivo_usd_sistema * tipo_cambio if tipo_cambio > 0 else 0)
-
-        # Convertir dólares a córdobas
-        dolares_en_cordobas = dolares_contados * tipo_cambio if tipo_cambio > 0 else 0
-        efectivo_total_contado = efectivo_contado + dolares_en_cordobas
-
-        # Calcular diferencias
-        dif_efectivo = efectivo_total_contado - efectivo_sistema
-        dif_transferencias = transferencias_contadas - transferencias_sistema
-
-        # Total venta neta del turno
-        cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE TurnoID = ?", turno_id)
-        total_ventas = float(cursor.fetchone()[0])
-
-        # Insertar arqueo
-        cursor.execute("""
-            INSERT INTO ArqueoCaja (TurnoID, UsuarioID, EfectivoContado, TransferenciasContadas, 
-                DolaresContados, TipoCambioUsado, EfectivoSistema, TransferenciasSistema,
-                DiferenciaEfectivo, DiferenciaTransferencias, Observaciones)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, turno_id, current_user.id, efectivo_contado, transferencias_contadas,
-            dolares_contados, tipo_cambio if tipo_cambio > 0 else None,
-            efectivo_sistema, transferencias_sistema,
-            dif_efectivo, dif_transferencias, observaciones)
-
-        # Cerrar turno
-        cursor.execute("""
-            UPDATE TurnosCaja SET Cerrado = 1, FechaCierre = GETDATE(), 
-                EfectivoCalculado = ?, TransferenciasCalculadas = ?, TotalVentaNeta = ?
-            WHERE ID = ?
-        """, efectivo_sistema, transferencias_sistema, total_ventas, turno_id)
-
-        conn.commit()
-        return jsonify({
-            'status': 'success',
-            'mensaje': 'Turno cerrado y arqueo registrado',
-            'arqueo': {
-                'efectivo_sistema': efectivo_sistema,
-                'transferencias_sistema': transferencias_sistema,
-                'efectivo_contado': efectivo_total_contado,
-                'transferencias_contadas': transferencias_contadas,
-                'diferencia_efectivo': dif_efectivo,
-                'diferencia_transferencias': dif_transferencias,
-                'total_ventas': total_ventas
-            }
-        })
-    except Exception as e:
-        conn.rollback()
-        import logging
-        logging.error(f"Internal server error: {e}")
-        return jsonify({'error': 'Error interno del servidor al procesar la solicitud.'}), 500
-    finally:
-        conn.close()
-
+    return arqueo_etapa1_conteo()
 
 
 @admin_bp.route('/api/tipo_cambio', methods=['GET'])
@@ -453,7 +364,6 @@ def obtener_tipo_cambio():
 
 
 @admin_bp.route('/api/mermas', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Estandar', 'Admin', 'SuperAdmin')
 def registrar_merma():

@@ -5,6 +5,8 @@ from flask import render_template, request, jsonify
 from app.kiosco import kiosco_bp
 from app.db import get_db_connection
 from app.extensions import csrf
+from flask_login import login_required
+from app.auth.decorators import roles_required
 from datetime import datetime, timedelta
 import logging
 
@@ -17,7 +19,8 @@ def kiosco_vista():
     return render_template('kiosco.html')
 
 @kiosco_bp.route('/api/empleados/registrar_rostro', methods=['POST'])
-@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
 def registrar_rostro():
     """Endpoint para registrar/actualizar el rostro de un empleado desde un archivo de imagen."""
     empleado_id = request.form.get('empleado_id')
@@ -61,7 +64,6 @@ def registrar_rostro():
         conn.close()
 
 @kiosco_bp.route('/api/kiosco/reconocer', methods=['POST'])
-@csrf.exempt
 def reconocer():
     """Recibe un frame base64 del kiosco, busca coincidencias y marca asistencia automáticamente."""
     datos = request.json
@@ -170,7 +172,8 @@ def _procesar_marcaje(empleado_id):
 
 # Mantenemos el endpoint de /api/marcar antiguo por compatibilidad o pruebas manuales
 @kiosco_bp.route('/api/marcar', methods=['POST'])
-@csrf.exempt
+@login_required
+@roles_required('Admin', 'SuperAdmin')
 def marcar_asistencia():
     datos = request.json
     empleado_id = datos.get('empleado_id')

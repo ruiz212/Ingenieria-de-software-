@@ -38,13 +38,14 @@ export function calcularSubtotal() {
     return carrito.reduce((sum, item) => sum + item.subtotal, 0);
 }
 
-export function calcularTotales(ivaPorcentaje = 0.15) {
-    let subtotal = 0;
-    carrito.forEach(item => subtotal += item.subtotal);
-    const iva = subtotal * ivaPorcentaje;
-    return { subtotal, iva, total: subtotal + iva };
+export function calcularTotales() {
+    const round = value => Math.round((value + Number.EPSILON) * 100) / 100;
+    const subtotal = round(carrito.reduce((sum,item)=>sum+round(item.subtotal),0));
+    const config=window.configuracionGlobal || {};
+    const rates=window.tasasProductos || {};
+    const iva=config.fiscal_regimen === 'General' ? round(carrito.reduce((sum,item)=>sum+round(round(item.subtotal)*(Number(rates[String(item.id).split('_')[0]]) || 0)/100),0)) : 0;
+    return {subtotal,iva,total:round(subtotal+iva)};
 }
-
 export function vaciarCarrito() {
     carrito = [];
 }

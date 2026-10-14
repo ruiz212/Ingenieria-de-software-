@@ -20,7 +20,7 @@ def dashboard():
 
     # 1. Ingresos totales del día y Ticket Promedio
     cursor.execute(
-        "SELECT ISNULL(SUM(Total), 0), ISNULL(COUNT(ID), 0) FROM Facturas WHERE CONVERT(date, FechaHora) = CONVERT(date, GETDATE())"
+        "SELECT ISNULL(SUM(Total), 0), ISNULL(COUNT(ID), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND CONVERT(date, FechaHora) = CONVERT(date, GETDATE())"
     )
     row_ventas = cursor.fetchone()
     ventas_hoy = float(row_ventas[0])
@@ -45,7 +45,7 @@ def dashboard():
         "SELECT TOP 5 p.Nombre, SUM(df.Cantidad) as Cantidad "
         "FROM DetalleFacturas df "
         "JOIN Productos p ON df.ProductoID = p.ID "
-        "JOIN Facturas f ON df.FacturaID = f.ID "
+        "JOIN Facturas f ON df.FacturaID = f.ID AND f.EstadoFiscal='Emitida' "
         "WHERE CONVERT(date, f.FechaHora) = CONVERT(date, GETDATE()) "
         "GROUP BY p.Nombre "
         "ORDER BY Cantidad DESC"
@@ -58,7 +58,7 @@ def dashboard():
         "FROM DetalleFacturas df "
         "JOIN Productos p ON df.ProductoID = p.ID "
         "JOIN Categorias c ON p.CategoriaID = c.ID "
-        "JOIN Facturas f ON df.FacturaID = f.ID "
+        "JOIN Facturas f ON df.FacturaID = f.ID AND f.EstadoFiscal='Emitida' "
         "WHERE CONVERT(date, f.FechaHora) = CONVERT(date, GETDATE()) "
         "GROUP BY c.Nombre "
         "ORDER BY TotalGenerado DESC"
@@ -108,7 +108,7 @@ def estadistica():
     cursor.execute("""
         SELECT DATEPART(HOUR, FechaHora) AS Hora, COUNT(*) AS Cantidad, ISNULL(SUM(Total), 0) AS Total
         FROM Facturas
-        WHERE FechaHora >= DATEADD(DAY, -30, GETDATE())
+        WHERE EstadoFiscal='Emitida' AND FechaHora >= DATEADD(DAY, -30, GETDATE())
         GROUP BY DATEPART(HOUR, FechaHora)
         ORDER BY Hora
     """)
@@ -118,7 +118,7 @@ def estadistica():
     cursor.execute("""
         SELECT CONVERT(date, FechaHora) AS Dia, COUNT(*) AS Cantidad, ISNULL(SUM(Total), 0) AS Total
         FROM Facturas
-        WHERE FechaHora >= DATEADD(DAY, -30, GETDATE())
+        WHERE EstadoFiscal='Emitida' AND FechaHora >= DATEADD(DAY, -30, GETDATE())
         GROUP BY CONVERT(date, FechaHora)
         ORDER BY Dia
     """)
@@ -129,7 +129,7 @@ def estadistica():
         SELECT TOP 15 p.Nombre, SUM(df.Cantidad) AS Vendidos, SUM(df.Subtotal) AS Ingresos
         FROM DetalleFacturas df
         JOIN Productos p ON df.ProductoID = p.ID
-        JOIN Facturas f ON df.FacturaID = f.ID
+        JOIN Facturas f ON df.FacturaID = f.ID AND f.EstadoFiscal='Emitida'
         WHERE f.FechaHora >= DATEADD(DAY, -30, GETDATE())
         GROUP BY p.Nombre
         ORDER BY Vendidos DESC
@@ -227,7 +227,7 @@ def estadistica():
     cursor.execute("""
         SELECT CONVERT(date, FechaHora) AS Dia, ISNULL(SUM(Total), 0) AS Total
         FROM Facturas
-        WHERE FechaHora >= DATEADD(DAY, -30, GETDATE())
+        WHERE EstadoFiscal='Emitida' AND FechaHora >= DATEADD(DAY, -30, GETDATE())
         GROUP BY CONVERT(date, FechaHora)
         ORDER BY Dia
     """)

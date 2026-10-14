@@ -241,9 +241,7 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <button class="btn btn-outline btn-sm" onclick="toggleVale({{ v.id }})">
-                                    {{ 'Marcar Pendiente' if v.descontado else 'Marcar Descontado' }}
-                                </button>
+                                <span class="text-muted">Se liquida en nómina</span>
                             </td>
                         </tr>
                         {% else %}
@@ -413,7 +411,7 @@
                     <td class="cell-money text-warning">C$${parseFloat(monto).toFixed(2)}</td>
                     <td><span class="badge badge-danger badge-live">Pendiente</span></td>
                     <td>
-                        <button class="btn btn-outline btn-sm" onclick="toggleVale(${data.id})">Marcar Descontado</button>
+                        <span class="text-muted">Se liquida en nómina</span>
                     </td>
                 `;
                 tbody.prepend(tr);

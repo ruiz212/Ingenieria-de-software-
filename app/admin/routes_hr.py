@@ -13,6 +13,39 @@ from app.db import get_db_connection
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime, date, timedelta
+from app.services.validation import amount, required_text
+
+def validar_periodo_nomina(cursor, empleado_id, inicio, fin, aguinaldo=False):
+    inicio=date.fromisoformat(str(inicio)); fin=date.fromisoformat(str(fin))
+    if not aguinaldo:
+        import calendar
+        if inicio.day != 1 or fin != date(inicio.year, inicio.month, calendar.monthrange(inicio.year, inicio.month)[1]):
+            raise ValueError('El cálculo mensual requiere el primer y último día del mismo mes.')
+    if fin<inicio:
+        raise ValueError('El período final no puede ser anterior al inicial.')
+    cursor.execute('SELECT ID FROM Empleados WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',empleado_id)
+    if not cursor.fetchone():
+        raise ValueError('Empleado inexistente.')
+    # Aguinaldo se guarda actualmente como nómina sin salario base.
+    comparison='=' if aguinaldo else '>'
+    cursor.execute(f"SELECT ID FROM Nomina WHERE EmpleadoID=? AND PeriodoInicio<=? AND PeriodoFin>=? AND SalarioBruto {comparison} 0",empleado_id,fin,inicio)
+    if cursor.fetchone():
+        raise ValueError('Ya existe una nómina para este empleado y período. Revise el registro anterior.')
+
+
+def calcular_deducciones_judiciales(cursor, empleado_id, salario_neto_pre, fecha):
+    """Calcula obligaciones vigentes por porcentaje y monto fijo."""
+    cursor.execute(
+        "SELECT PorcentajeSalarioNeto, MontoFijo FROM DeduccionesJudiciales "
+        "WHERE EmpleadoID=? AND Activa=1 AND FechaInicio<=? "
+        "AND (FechaFin IS NULL OR FechaFin>=?)",
+        empleado_id, fecha, fecha
+    )
+    rows = cursor.fetchall()
+    porcentaje = min(sum(float(row.PorcentajeSalarioNeto or 0) for row in rows), 60)
+    monto_fijo = sum(float(row.MontoFijo or 0) for row in rows)
+    return min(max(0, salario_neto_pre * porcentaje / 100 + monto_fijo), max(0, salario_neto_pre))
+
 
 @admin_bp.route('/rrhh')
 @login_required
@@ -126,7 +159,6 @@ def rrhh_asistencia_hoy_json():
 
 
 @admin_bp.route('/api/rrhh/empleado', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def crear_empleado():
@@ -204,6 +236,9 @@ def crear_empleado():
             face_service.actualizar_cache_empleado(nuevo_id, json.loads(descriptor_str))
             
         return jsonify({'status': 'success', 'mensaje': 'Empleado registrado'})
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)),400
     except Exception as e:
         conn.rollback()
         import logging
@@ -213,32 +248,13 @@ def crear_empleado():
         conn.close()
 
 @admin_bp.route('/api/rrhh/empleado/<int:id>', methods=['DELETE'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def eliminar_empleado(id):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # 1. Eliminar dependencias en cascada (Nóminas, Asistencia, etc) para permitir el borrado
-        cursor.execute("DELETE FROM DetalleNomina WHERE NominaID IN (SELECT ID FROM Nomina WHERE EmpleadoID = ?)", (id,))
-        cursor.execute("DELETE FROM Nomina WHERE EmpleadoID = ?", (id,))
-        
-        # Intentamos borrar tablas de asistencia si existen
-        try:
-            cursor.execute("DELETE FROM Asistencia WHERE EmpleadoID = ?", (id,))
-        except Exception:
-            pass # Si la tabla Asistencia no existe en su esquema, ignoramos
-            
-        try:
-            cursor.execute("DELETE FROM LicenciasEmpleados WHERE EmpleadoID = ?", (id,))
-            cursor.execute("DELETE FROM DeduccionesJudiciales WHERE EmpleadoID = ?", (id,))
-            cursor.execute("DELETE FROM IncidentesLaborales WHERE EmpleadoID = ?", (id,))
-        except Exception:
-            pass
-
-        # 2. Intentamos borrar al empleado
-        cursor.execute("DELETE FROM Empleados WHERE ID = ?", (id,))
+        cursor.execute("UPDATE Empleados SET EstadoEmpleado='Suspendido' WHERE ID=?", id)
         if cursor.rowcount == 0:
             return jsonify({'error': 'Empleado no encontrado'}), 404
             
@@ -248,7 +264,10 @@ def eliminar_empleado(id):
         if id in face_service.encodings_cache:
             del face_service.encodings_cache[id]
             
-        return jsonify({'status': 'success', 'mensaje': 'Empleado eliminado junto con sus registros dependientes.'})
+        return jsonify({'status': 'success', 'mensaje': 'Empleado suspendido. Se conserva todo el historial laboral y contable.'})
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)),400
     except Exception as e:
         conn.rollback()
         import logging
@@ -261,7 +280,6 @@ def eliminar_empleado(id):
         conn.close()
 
 @admin_bp.route('/api/rrhh/empleado/<int:id>/horario', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def actualizar_horario_empleado(id):
@@ -274,11 +292,125 @@ def actualizar_horario_empleado(id):
         cursor.execute("UPDATE Empleados SET HoraEntrada = ?, HoraSalida = ? WHERE ID = ?", hora_entrada, hora_salida, id)
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Horario actualizado'})
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)),400
     except Exception as e:
         conn.rollback()
         import logging
         logging.error(f"Error updating schedule: {e}")
         return jsonify({'error': 'Error interno'}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/rrhh/deducciones', methods=['GET', 'POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def deducciones_judiciales():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if request.method == 'GET':
+            cursor.execute(
+                "SELECT d.ID, d.EmpleadoID, e.NombreCompleto, d.TipoDeduccion, d.Beneficiario, "
+                "d.PorcentajeSalarioNeto, d.MontoFijo, d.NumeroJuzgado, d.FechaInicio, d.FechaFin, d.Activa "
+                "FROM DeduccionesJudiciales d JOIN Empleados e ON e.ID=d.EmpleadoID ORDER BY d.Activa DESC, d.ID DESC"
+            )
+            return jsonify([{
+                'id': row.ID, 'empleado_id': row.EmpleadoID, 'empleado': row.NombreCompleto,
+                'tipo': row.TipoDeduccion, 'beneficiario': row.Beneficiario,
+                'porcentaje': float(row.PorcentajeSalarioNeto),
+                'monto_fijo': float(row.MontoFijo) if row.MontoFijo is not None else None,
+                'juzgado': row.NumeroJuzgado, 'fecha_inicio': row.FechaInicio.isoformat(),
+                'fecha_fin': row.FechaFin.isoformat() if row.FechaFin else None, 'activa': bool(row.Activa)
+            } for row in cursor.fetchall()])
+
+        data = request.get_json(silent=True) or {}
+        empleado_id = positive_int(data.get('empleado_id'), 'Empleado')
+        tipo = data.get('tipo')
+        if tipo not in ('Pension Alimenticia', 'Embargo Comercial'):
+            raise ValueError('Tipo de deducción inválido.')
+        beneficiario = required_text(data.get('beneficiario'), 'Beneficiario', 150)
+        porcentaje = amount(data.get('porcentaje', 0), 'Porcentaje', maximum=60)
+        monto_fijo = amount(data.get('monto_fijo', 0), 'Monto fijo')
+        if porcentaje == 0 and monto_fijo == 0:
+            raise ValueError('Indique un porcentaje o un monto fijo.')
+        fecha_inicio = data.get('fecha_inicio')
+        if not fecha_inicio:
+            raise ValueError('La fecha de inicio es obligatoria.')
+        datetime.fromisoformat(fecha_inicio)
+        cursor.execute("SELECT ID FROM Empleados WHERE ID=?", empleado_id)
+        if not cursor.fetchone():
+            return jsonify(error='Empleado inexistente.'), 400
+        cursor.execute(
+            "INSERT INTO DeduccionesJudiciales (EmpleadoID,TipoDeduccion,Beneficiario,PorcentajeSalarioNeto,MontoFijo,NumeroJuzgado,FechaInicio,FechaFin) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            empleado_id, tipo, beneficiario, porcentaje, monto_fijo or None,
+            (data.get('juzgado') or '').strip()[:50] or None, fecha_inicio, data.get('fecha_fin') or None
+        )
+        conn.commit()
+        return jsonify(status='success', mensaje='Deducción judicial registrada.'), 201
+    except ValueError as error:
+        conn.rollback()
+        return jsonify(error=str(error)), 400
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/rrhh/incidentes', methods=['GET', 'POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def incidentes_laborales():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if request.method == 'GET':
+            cursor.execute(
+                "SELECT i.ID, i.EmpleadoID, e.NombreCompleto, i.TipoIncidente, i.Gravedad, i.Descripcion, "
+                "i.FechaIncidente, i.NotificadoMITRAB, i.AccionesCorrectivas "
+                "FROM IncidentesLaborales i JOIN Empleados e ON e.ID=i.EmpleadoID ORDER BY i.FechaIncidente DESC"
+            )
+            return jsonify([{
+                'id': row.ID, 'empleado_id': row.EmpleadoID, 'empleado': row.NombreCompleto,
+                'tipo': row.TipoIncidente, 'gravedad': row.Gravedad, 'descripcion': row.Descripcion,
+                'fecha': row.FechaIncidente.isoformat(), 'notificado_mitrab': bool(row.NotificadoMITRAB),
+                'acciones_correctivas': row.AccionesCorrectivas
+            } for row in cursor.fetchall()])
+
+        data = request.get_json(silent=True) or {}
+        empleado_id = positive_int(data.get('empleado_id'), 'Empleado')
+        tipo = data.get('tipo')
+        gravedad = data.get('gravedad')
+        if tipo not in ('Accidente', 'Casi Accidente', 'Enfermedad Ocupacional'):
+            raise ValueError('Tipo de incidente inválido.')
+        if gravedad not in ('Leve', 'Grave', 'Muy Grave', 'Mortal'):
+            raise ValueError('Gravedad inválida.')
+        descripcion = required_text(data.get('descripcion'), 'Descripción', 4000)
+        fecha = data.get('fecha') or datetime.now().isoformat()
+        datetime.fromisoformat(fecha)
+        cursor.execute("SELECT ID FROM Empleados WHERE ID=?", empleado_id)
+        if not cursor.fetchone():
+            return jsonify(error='Empleado inexistente.'), 400
+        notificado = bool(data.get('notificado_mitrab'))
+        cursor.execute(
+            "INSERT INTO IncidentesLaborales (EmpleadoID,TipoIncidente,Gravedad,Descripcion,FechaIncidente,NotificadoMITRAB,FechaNotificacionMITRAB,AccionesCorrectivas,RegistradoPor) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            empleado_id, tipo, gravedad, descripcion, fecha, notificado,
+            datetime.now() if notificado else None,
+            (data.get('acciones_correctivas') or '').strip()[:4000] or None, current_user.id
+        )
+        conn.commit()
+        return jsonify(status='success', mensaje='Incidente laboral registrado.'), 201
+    except ValueError as error:
+        conn.rollback()
+        return jsonify(error=str(error)), 400
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -334,7 +466,6 @@ def obtener_dias_ausentes_auto(cursor, empleado_id, periodo_inicio, periodo_fin)
     return ausencias_injustificadas
 
 @admin_bp.route('/api/rrhh/nomina/calcular', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def calcular_nomina():
@@ -342,12 +473,12 @@ def calcular_nomina():
     empleado_id = datos.get('empleado_id')
     periodo_inicio = datos.get('periodo_inicio')
     periodo_fin = datos.get('periodo_fin')
-    horas_extras = float(datos.get('horas_extras', 0))
-    otros_ingresos = float(datos.get('otros_ingresos', 0))
+    horas_extras = float(amount(datos.get('horas_extras', 0)))
+    otros_ingresos = float(amount(datos.get('otros_ingresos', 0)))
     
     # Nuevos parámetros (Ley 185)
-    dias_ausentes = float(datos.get('dias_ausentes', 0))
-    dias_feriados_trabajados = float(datos.get('dias_feriados_trabajados', 0))
+    dias_ausentes = float(amount(datos.get('dias_ausentes', 0),maximum=31))
+    dias_feriados_trabajados = float(amount(datos.get('dias_feriados_trabajados', 0),maximum=31))
 
     if not all([empleado_id, periodo_inicio, periodo_fin]):
         return jsonify({'error': 'Faltan datos del período'}), 400
@@ -355,7 +486,8 @@ def calcular_nomina():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        if dias_ausentes == 0:
+        validar_periodo_nomina(cursor,empleado_id,periodo_inicio,periodo_fin)
+        if 'dias_ausentes' not in datos:
             # Si el usuario no especificó manualmente días ausentes, calcular automático
             dias_ausentes = obtener_dias_ausentes_auto(cursor, empleado_id, periodo_inicio, periodo_fin)
             
@@ -411,13 +543,9 @@ def calcular_nomina():
             vales_descontados = vales_pendientes
 
         salario_neto_pre = total_devengado - inss_laboral - ir_mensual
-        pension_alimenticia = 0
-        cursor.execute("SELECT PorcentajeSalarioNeto FROM DeduccionesJudiciales WHERE EmpleadoID = ? AND Activa = 1 AND TipoDeduccion = 'Pension Alimenticia'", int(empleado_id))
-        deducciones_judiciales = cursor.fetchall()
-        total_porcentaje_pension = sum(float(d.PorcentajeSalarioNeto) for d in deducciones_judiciales)
-        if total_porcentaje_pension > 60:
-            total_porcentaje_pension = 60
-        pension_alimenticia = salario_neto_pre * (total_porcentaje_pension / 100)
+        pension_alimenticia = calcular_deducciones_judiciales(
+            cursor, int(empleado_id), salario_neto_pre, periodo_fin
+        )
 
         total_deducciones = inss_laboral + ir_mensual + pension_alimenticia + vales_descontados
         salario_neto = total_devengado - total_deducciones
@@ -425,13 +553,26 @@ def calcular_nomina():
         inss_patronal = total_devengado * (tasa_inss_patronal / 100)
         inatec = total_devengado * (tasa_inatec / 100)
 
+        salario_base_efectivo=float(amount(salario_base_efectivo, 'Salario efectivo'))
+        monto_horas_extras=float(amount(monto_horas_extras))
+        otros_ingresos=float(amount(otros_ingresos))
+        monto_feriados=float(amount(monto_feriados))
+        total_devengado=amount(salario_base_efectivo)+amount(monto_horas_extras)+amount(otros_ingresos)+amount(monto_feriados)
+        inss_laboral=amount(inss_laboral); ir_mensual=amount(ir_mensual)
+        pension_alimenticia=amount(pension_alimenticia); vales_descontados=amount(vales_descontados)
+        total_deducciones=inss_laboral+ir_mensual+pension_alimenticia+vales_descontados
+        salario_neto=amount(total_devengado-total_deducciones, 'Salario neto')
+        inss_patronal=amount(inss_patronal); inatec=amount(inatec)
+        if total_devengado <= 0:
+            raise ValueError('Revise las ausencias: no hay salario devengado para contabilizar.')
+
         cursor.execute("""
             INSERT INTO Nomina (EmpleadoID, PeriodoInicio, PeriodoFin, SalarioBruto,
                 HorasExtras, MontoHorasExtras, OtrosIngresos, TotalDevengado,
                 INSSLaboral, IRMensual, PensionAlimenticia, ValesDescontados,
                 TotalDeducciones, SalarioNeto, INSSPatronal, INATEC, Estado, GeneradoPor)
             OUTPUT INSERTED.ID
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Generada', ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Contabilizada', ?)
         """,
             int(empleado_id), periodo_inicio, periodo_fin, salario_base_efectivo,
             horas_extras, monto_horas_extras, (otros_ingresos + monto_feriados), total_devengado,
@@ -452,7 +593,7 @@ def calcular_nomina():
             usuario_id=current_user.id,
             nomina_id=nomina_id,
             empleado_nombre=emp.NombreCompleto,
-            salario_bruto=salario_base_efectivo + monto_horas_extras + otros_ingresos + monto_feriados,
+            salario_bruto=total_devengado,
             inss_laboral=inss_laboral,
             ir_retenido=ir_mensual,
             inss_patronal=inss_patronal,
@@ -461,7 +602,8 @@ def calcular_nomina():
             vales_descontados=vales_descontados,
             salario_neto=salario_neto,
             cargo=emp.Cargo,
-            ip=request.remote_addr
+            ip=request.remote_addr,
+            fecha=datetime.fromisoformat(periodo_fin)
         )
         # ============================================================
 
@@ -493,6 +635,9 @@ def calcular_nomina():
                 'total_empleados': total_empleados
             }
         })
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)),400
     except Exception as e:
         conn.rollback()
         import logging
@@ -502,7 +647,6 @@ def calcular_nomina():
         conn.close()
 
 @admin_bp.route('/api/rrhh/liquidacion/calcular', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def calcular_liquidacion():
@@ -760,7 +904,6 @@ def reporte_liquidacion():
 
 
 @admin_bp.route('/api/rrhh/nomina/calcular_batch', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def calcular_nomina_batch():
@@ -793,6 +936,7 @@ def calcular_nomina_batch():
         
         nomina_ids = []
         for emp in empleados:
+            validar_periodo_nomina(cursor,emp.ID,periodo_inicio,periodo_fin)
             salario_base = float(emp.SalarioBase)
             salario_diario = salario_base / 30
             
@@ -820,11 +964,9 @@ def calcular_nomina_batch():
                 vales_descontados = float(cursor.fetchone()[0])
             
             salario_neto_pre = total_devengado - inss_laboral - ir_mensual
-            pension_alimenticia = 0
-            cursor.execute("SELECT PorcentajeSalarioNeto FROM DeduccionesJudiciales WHERE EmpleadoID = ? AND Activa = 1 AND TipoDeduccion = 'Pension Alimenticia'", emp.ID)
-            deducciones_judiciales = cursor.fetchall()
-            total_porcentaje_pension = min(sum(float(d.PorcentajeSalarioNeto) for d in deducciones_judiciales), 60)
-            pension_alimenticia = salario_neto_pre * (total_porcentaje_pension / 100)
+            pension_alimenticia = calcular_deducciones_judiciales(
+                cursor, emp.ID, salario_neto_pre, periodo_fin
+            )
             
             total_deducciones = inss_laboral + ir_mensual + pension_alimenticia + vales_descontados
             salario_neto = total_devengado - total_deducciones
@@ -832,13 +974,23 @@ def calcular_nomina_batch():
             inss_patronal = total_devengado * (tasa_inss_patronal / 100)
             inatec = total_devengado * (tasa_inatec / 100)
             
+            salario_base_efectivo=amount(salario_base_efectivo)
+            total_devengado=salario_base_efectivo
+            inss_laboral=amount(inss_laboral); ir_mensual=amount(ir_mensual)
+            pension_alimenticia=amount(pension_alimenticia); vales_descontados=amount(vales_descontados)
+            total_deducciones=inss_laboral+ir_mensual+pension_alimenticia+vales_descontados
+            salario_neto=amount(total_devengado-total_deducciones, 'Salario neto')
+            inss_patronal=amount(inss_patronal); inatec=amount(inatec)
+            if total_devengado <= 0:
+                raise ValueError(f'Revise las ausencias de {emp.NombreCompleto}: no hay salario devengado.')
+
             cursor.execute("""
                 INSERT INTO Nomina (EmpleadoID, PeriodoInicio, PeriodoFin, SalarioBruto,
                     HorasExtras, MontoHorasExtras, OtrosIngresos, TotalDevengado,
                     INSSLaboral, IRMensual, PensionAlimenticia, ValesDescontados,
                     TotalDeducciones, SalarioNeto, INSSPatronal, INATEC, Estado, GeneradoPor)
                 OUTPUT INSERTED.ID
-                VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Borrador', ?)
+                VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Contabilizada', ?)
             """,
                 emp.ID, periodo_inicio, periodo_fin, salario_base_efectivo, total_devengado,
                 inss_laboral, ir_mensual, pension_alimenticia, vales_descontados,
@@ -846,6 +998,11 @@ def calcular_nomina_batch():
             )
             nomina_id = cursor.fetchone()[0]
             nomina_ids.append(nomina_id)
+            from app.services.contabilidad_service import ContabilidadService
+            ContabilidadService.contabilizar_nomina(cursor, current_user.id, nomina_id,
+                emp.NombreCompleto, total_devengado, inss_laboral, ir_mensual,
+                inss_patronal, inatec, pension_alimenticia, vales_descontados,
+                salario_neto, emp.Cargo, request.remote_addr,fecha=datetime.fromisoformat(periodo_fin))
             
             if vales_descontados > 0 and emp.UsuarioID:
                 cursor.execute("UPDATE ValesEmpleados SET Descontado = 1 WHERE EmpleadoID = ? AND Descontado = 0", emp.UsuarioID)
@@ -853,6 +1010,9 @@ def calcular_nomina_batch():
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': f'Planilla generada para {total_empleados} empleados.'})
         
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)),400
     except Exception as e:
         conn.rollback()
         import logging
@@ -862,7 +1022,6 @@ def calcular_nomina_batch():
         conn.close()
 
 @admin_bp.route('/api/rrhh/aguinaldo/calcular_batch', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def calcular_aguinaldo_batch():
@@ -884,6 +1043,7 @@ def calcular_aguinaldo_batch():
         fecha_inicio_ciclo = date(anio - 1, 12, 1)
         
         for emp in empleados:
+            validar_periodo_nomina(cursor,emp.ID,date(anio-1,12,1),date(anio,11,30),aguinaldo=True)
             fecha_ingreso = emp.FechaIngreso
             if type(fecha_ingreso) is str:
                 fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
@@ -916,6 +1076,9 @@ def calcular_aguinaldo_batch():
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': f'Planilla de Aguinaldo generada para {total_empleados} empleados.'})
         
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)),400
     except Exception as e:
         conn.rollback()
         import logging
@@ -1117,7 +1280,6 @@ def get_empleados_referencias():
 
 
 @admin_bp.route('/api/rrhh/kiosco/marcar', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def kiosco_marcar():
@@ -1198,6 +1360,9 @@ def kiosco_marcar():
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': msg})
         
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)),400
     except Exception as e:
         conn.rollback()
         import logging

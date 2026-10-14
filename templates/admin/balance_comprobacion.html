@@ -40,8 +40,8 @@
                     <tr>
                         <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-dark);">Código</th>
                         <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-dark);">Cuenta</th>
-                        <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Suma Debe</th>
-                        <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Suma Haber</th>
+                        <th>Saldo anterior C$</th><th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Movimiento Debe</th>
+                        <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Movimiento Haber</th>
                         <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Saldo Deudor</th>
                         <th style="padding: 1rem; text-align: right; font-weight: 600; color: var(--text-dark);">Saldo Acreedor</th>
                     </tr>
@@ -53,13 +53,13 @@
                         <td style="padding: 0.75rem 1rem; font-family: monospace; color: #555;">{{ row.Codigo }}</td>
                         <td style="padding: 0.75rem 1rem; font-weight: 500; color: var(--text-dark);">{{ row.Nombre }}</td>
                         <td style="padding: 0.75rem 1rem; text-align: right; font-family: monospace; color: #777;">
-                            {{ "{:,.2f}".format(row.TotalDebe) }}
+                            {{ "{:,.2f}".format(row.SaldoAnterior) }}</td><td>{{ "{:,.2f}".format(row.TotalDebe) }}
                         </td>
                         <td style="padding: 0.75rem 1rem; text-align: right; font-family: monospace; color: #777;">
                             {{ "{:,.2f}".format(row.TotalHaber) }}
                         </td>
                         
-                        {% set diff = row.TotalDebe - row.TotalHaber %}
+                        {% set diff = row.SaldoFinal %}
                         {% set saldo_deudor = diff if diff > 0 else 0 %}
                         {% set saldo_acreedor = -diff if diff < 0 else 0 %}
                         
@@ -75,7 +75,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6" style="padding: 3rem; text-align: center;">
+                        <td colspan="7" style="padding: 3rem; text-align: center;">
                             <div style="color: #888; font-size: 1.1rem;">
                                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity: 0.5; margin-bottom: 1rem;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                                 <br>No hay movimientos contabilizados en este período.
@@ -87,7 +87,7 @@
                 {% if balance %}
                 <tfoot style="background-color: rgba(212, 149, 43, 0.1);">
                     <tr>
-                        <th colspan="2" style="padding: 1rem; text-align: right; font-weight: 700; color: var(--brand-cafe);">SUMAS IGUALES</th>
+                        <th colspan="3" style="padding: 1rem; text-align: right; font-weight: 700; color: var(--brand-cafe);">SUMAS IGUALES</th>
                         <th style="padding: 1rem; text-align: right; font-family: monospace; font-weight: 700; color: var(--brand-cafe); border-top: 2px solid var(--brand-cafe);">
                             {{ "{:,.2f}".format(total_debe) }}
                         </th>
@@ -104,7 +104,7 @@
                     
                     {% if '{:.2f}'.format(total_debe) != '{:.2f}'.format(total_haber) or '{:.2f}'.format(ns.tot_saldo_deudor) != '{:.2f}'.format(ns.tot_saldo_acreedor) %}
                     <tr>
-                        <td colspan="6" style="padding: 1rem; text-align: center; background: #ffeaa7; color: #d63031; font-weight: bold;">
+                        <td colspan="7" style="padding: 1rem; text-align: center; background: #ffeaa7; color: #d63031; font-weight: bold;">
                             ⚠️ ATENCIÓN: Descuadre detectado en la partida doble. Revise los asientos manuales.
                         </td>
                     </tr>

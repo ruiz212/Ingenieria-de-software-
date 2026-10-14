@@ -5,7 +5,8 @@ class Config:
     SQL_SERVER_CONNECTION_STRING = os.environ.get('DB_CONNECTION_STRING') or r'DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost\SQLDEV;DATABASE=PanaderiaDB;Trusted_Connection=yes;Encrypt=yes;TrustServerCertificate=yes;'
     
     # Seguridad de Sesión
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'clave-secreta-panaderia-2026'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+    MAX_CONTENT_LENGTH = 6 * 1024 * 1024
     SESSION_COOKIE_HTTPONLY = True
     # En desarrollo local (HTTP) SECURE debe ser False, pero en prod (HTTPS) debe ser True. 
     # Usamos una variable de entorno para que Azure lo fuerce a True.

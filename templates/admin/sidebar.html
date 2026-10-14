@@ -34,6 +34,9 @@
         {% endif %}
 
         <div class="menu-label">GESTIÓN</div>
+        {% if current_user.rol_nombre in ['SuperAdmin','Admin'] %}
+        <a href="/admin/fiscal" class="dock-item {% if request.path.startswith('/admin/fiscal') %}active{% endif %}"><span aria-hidden="true">▤</span><span class="dock-item-text">Control fiscal DGI</span></a>
+        {% endif %}
 
         {% if current_user.rol_nombre in ['SuperAdmin', 'Admin'] %}
         <a href="/admin/contabilidad" class="dock-item {% if request.path.startswith('/admin/contabilidad') %}active{% endif %}">

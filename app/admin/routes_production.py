@@ -1,3 +1,4 @@
+from app.services.validation import amount, positive_int
 # app/admin/routes_production.py
 from flask import render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
@@ -67,7 +68,6 @@ def produccion():
 
 
 @admin_bp.route('/api/produccion/receta', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin', 'Operativo')
 def crear_receta():
@@ -83,14 +83,17 @@ def crear_receta():
         existente = cursor.fetchone()
         
         if existente:
-            cursor.execute("UPDATE RecetaProducto SET CantidadNecesaria = ? WHERE ID = ?", float(datos.get('cantidad')), existente.ID)
+            cursor.execute("UPDATE RecetaProducto SET CantidadNecesaria = ? WHERE ID = ?", amount(datos.get('cantidad'), 'Cantidad', minimum=0.01), existente.ID)
         else:
             cursor.execute(
                 "INSERT INTO RecetaProducto (ProductoID, MateriaPrimaID, CantidadNecesaria) VALUES (?, ?, ?)",
-                int(datos.get('producto_id')), int(datos.get('materia_id')), float(datos.get('cantidad'))
+                int(datos.get('producto_id')), int(datos.get('materia_id')), amount(datos.get('cantidad'), 'Cantidad', minimum=0.01)
             )
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Receta actualizada con éxito'})
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)),400
     except Exception as e:
         conn.rollback()
         import logging
@@ -102,7 +105,6 @@ def crear_receta():
 
 
 @admin_bp.route('/api/produccion/receta/<int:receta_id>/delete', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin', 'Operativo')
 def eliminar_receta(receta_id):
@@ -112,6 +114,9 @@ def eliminar_receta(receta_id):
         cursor.execute("DELETE FROM RecetaProducto WHERE ID = ?", receta_id)
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Ingrediente removido de la receta'})
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)),400
     except Exception as e:
         conn.rollback()
         import logging
@@ -123,7 +128,6 @@ def eliminar_receta(receta_id):
 
 
 @admin_bp.route('/api/produccion/lote', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin', 'Operativo')
 def registrar_lote():
@@ -134,7 +138,7 @@ def registrar_lote():
     if not producto_id or not cantidad or int(cantidad) <= 0:
         return jsonify({'error': 'Datos inválidos'}), 400
         
-    cantidad = int(cantidad)
+    cantidad = positive_int(cantidad)
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -142,7 +146,7 @@ def registrar_lote():
         cursor.execute("""
             SELECT m.ID, m.Nombre, m.StockActual, (r.CantidadNecesaria * ?) AS Requerido
             FROM RecetaProducto r
-            JOIN MateriaPrima m ON r.MateriaPrimaID = m.ID
+            JOIN MateriaPrima m WITH (UPDLOCK,HOLDLOCK) ON r.MateriaPrimaID = m.ID
             WHERE r.ProductoID = ?
         """, cantidad, int(producto_id))
         
@@ -162,11 +166,16 @@ def registrar_lote():
         
         # Descontar stock e insertar consumo (Si hay race condition y StockActual queda en negativo, el CHECK constraint abortará la transacción)
         for mat in materiales:
-            cursor.execute("UPDATE MateriaPrima SET StockActual = StockActual - ? WHERE ID = ?", mat.Requerido, mat.ID)
+            cursor.execute("UPDATE MateriaPrima SET StockActual = StockActual - ? WHERE ID = ? AND StockActual >= ?", mat.Requerido, mat.ID, mat.Requerido)
+            if cursor.rowcount != 1:
+                raise ValueError("Stock insuficiente; actualice la página.")
             cursor.execute("INSERT INTO ConsumoLote (LoteID, MateriaPrimaID, CantidadUsada) VALUES (?, ?, ?)", lote_id, mat.ID, mat.Requerido)
             
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': f'Lote producido con éxito. Se crearon {cantidad} unidades.'})
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)),400
     except Exception as e:
         conn.rollback()
         import logging

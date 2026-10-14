@@ -7,6 +7,7 @@ from werkzeug.security import check_password_hash, generate_password_hash  # typ
 from werkzeug.utils import secure_filename  # type: ignore
 import os
 import random
+import time
 import pyotp
 import qrcode
 import base64
@@ -17,6 +18,27 @@ from twilio.rest import Client
 from app.auth import auth_bp
 from app.models import User, Cliente
 from app.db import get_db_connection
+from urllib.parse import urlsplit
+
+def safe_next(target):
+    if target and target.startswith('/') and not target.startswith('//') and not urlsplit(target).netloc and '\\' not in target:
+        return target
+    return url_for('hub.main_hub')
+
+
+def totp_is_required():
+    """Lee la política global de TOTP sin imponerla si aún no existe."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT Valor FROM ConfiguracionSistema WHERE Clave = 'totp_obligatorio'")
+        row = cursor.fetchone()
+        conn.close()
+        return bool(row and str(row[0]).strip().lower() in {'1', 'true', 'si', 'sí', 'yes'})
+    except Exception:
+        current_app.logger.exception('No se pudo leer la política global de TOTP')
+        return False
+
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -32,14 +54,14 @@ def login():
         # 1. Intentar como Administrador / Empleado
         user, password_hash = User.get_by_username(identificador)
         if user and check_password_hash(password_hash, password):
-            if getattr(user, 'totp_enabled', False):
+            if getattr(user, 'totp_enabled', False) or totp_is_required():
                 session['pre_totp_user_id'] = user.id
                 session['next_page'] = request.args.get('next')
                 return redirect(url_for('auth.login_totp'))
             else:
                 login_user(user, remember=True)
                 next_page = request.args.get('next')
-                return redirect(next_page or url_for('hub.main_hub'))
+                return redirect(safe_next(next_page))
 
         # 2. Intentar como Cliente
         cliente, password_hash_cli = Cliente.get_by_telefono(identificador)
@@ -74,7 +96,7 @@ def login_totp():
             login_user(user, remember=True)
             session.pop('pre_totp_user_id', None)
             next_page = session.pop('next_page', None)
-            return redirect(next_page or url_for('hub.main_hub'))
+            return redirect(safe_next(next_page))
         else:
             flash("Código incorrecto.", "error")
             
@@ -177,6 +199,12 @@ def cliente_registro():
         if not telefono:
             flash("El número de teléfono es obligatorio.", "error")
             return redirect(url_for('auth.cliente_registro'))
+
+        if (session.get('sms_phone') != telefono or
+                not session.get('telefono_verificado') or
+                session.get('sms_expires_at', 0) < time.time()):
+            flash("Verifique el número de teléfono antes de crear la cuenta.", "error")
+            return redirect(url_for('auth.cliente_registro'))
         
         foto = request.files.get('foto')
         ruta_foto = None
@@ -190,7 +218,7 @@ def cliente_registro():
         # Manejo de la foto de perfil
         if foto and foto.filename != '':
             filename = secure_filename(foto.filename)
-            upload_folder = os.path.join(current_app.root_path, 'static', 'uploads', 'perfiles')
+            upload_folder = os.path.join(current_app.static_folder, 'uploads', 'perfiles')
             os.makedirs(upload_folder, exist_ok=True)
             
             # Guardamos la ruta relativa para usarla en templates
@@ -232,7 +260,6 @@ def cliente_registro():
 # ============================================================
 
 @auth_bp.route('/api/enviar_codigo_sms', methods=['POST'])
-@csrf.exempt
 def enviar_codigo_sms():
     data = request.json
     telefono = data.get('telefono')
@@ -249,6 +276,7 @@ def enviar_codigo_sms():
     session['sms_code'] = codigo
     session['sms_phone'] = telefono
     session['telefono_verificado'] = False
+    session['sms_expires_at'] = time.time() + 600
     
     try:
         account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
@@ -279,7 +307,6 @@ def enviar_codigo_sms():
         return jsonify({'error': f'No se pudo enviar el SMS. Verifica que el número sea correcto y tenga formato internacional (ej. +505...). Detalle: {str(e)}'}), 500
 
 @auth_bp.route('/api/verificar_codigo_sms', methods=['POST'])
-@csrf.exempt
 def verificar_codigo_sms():
     data = request.json
     codigo_ingresado = data.get('codigo')
@@ -290,6 +317,11 @@ def verificar_codigo_sms():
     
     if not codigo_ingresado or not codigo_guardado:
         return jsonify({'error': 'No hay código pendiente de verificación'}), 400
+
+    if session.get('sms_expires_at', 0) < time.time():
+        session.pop('sms_code', None)
+        session['telefono_verificado'] = False
+        return jsonify({'error': 'El código de verificación expiró'}), 400
         
     if str(codigo_ingresado) == str(codigo_guardado) and str(telefono) == str(telefono_guardado):
         session['telefono_verificado'] = True

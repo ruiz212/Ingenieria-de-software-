@@ -40,6 +40,10 @@
         return window.CATEGORY_CLASS_MAP[(c||'').toLowerCase()]||'cat-default';
     }
     </script>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/accessibility.css', v=1) }}">
+<script>window.tasasProductos = Object.fromEntries({{ productos|tojson }}.map(p=>[p.id,p.tasa_iva]));</script>
 </head>
 <body class="tienda-body pos-body">
     <!-- Navbar -->
@@ -163,7 +167,7 @@
                 <span id="subtotal-display">C$0.00</span>
             </div>
             <div class="summary-row">
-                <span>IVA (15%):</span>
+                <span>IVA:</span>
                 <span id="iva-display">C$0.00</span>
             </div>
             <div class="summary-row total-row">
@@ -249,6 +253,7 @@
                 <option value="Transferencia">Transferencia Bancaria</option>
             </select>
             
+            <div class="form-group"><label for="modal-referencia-encargo">Referencia de transferencia (si aplica)</label><input id="modal-referencia-encargo" class="form-control" maxlength="100"></div>
             <div id="encargo-efectivo-container" style="display: none;">
                 <input type="number" id="modal-efectivo-encargo" class="form-control" value="0">
                 <input type="text" id="modal-cambio-encargo">
@@ -314,6 +319,7 @@
     <div id="toast-container" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px;"></div>
 
     <script>
+        window.esClienteOnline = true;
         window.configuracionGlobal = {{ configuracion|tojson|safe if configuracion else '{}' }};
         
         // Update cart badge dynamically (intercepting DOM changes in pos.js)
@@ -361,7 +367,7 @@
                                         </strong>
                                         <span style="background: ${badgeColor}; color: white; padding: 0.3rem 0.6rem; border-radius: 50px; font-size: 0.75rem; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">${c.estado}</span>
                                     </div>
-                                    <p style="font-size: 0.95rem; color: var(--text-main); margin: 0.5rem 0;">${c.especificaciones}</p>
+                                    <p style="font-size: 0.95rem; color: var(--text-main); margin: 0.5rem 0;">${escapeHTML(c.especificaciones)}</p>
                                     ${c.precio_asignado ? `<p style="font-size: 1.15rem; color: var(--brand-dorado-dark); font-weight: bold; margin-top: 0.5rem;">C$${parseFloat(c.precio_asignado).toFixed(2)}</p>` : ''}
                                 </div>
                             `;

@@ -26,7 +26,7 @@ def seguimiento(codigo):
         "FROM Facturas f "
         "JOIN Encargos e ON e.FacturaID = f.ID "
         "LEFT JOIN Clientes c ON f.ClienteID = c.ID "
-        "WHERE f.CodigoSeguimiento = ?", codigo
+        "WHERE f.EstadoFiscal='Emitida' AND f.CodigoSeguimiento = ?", codigo
     )
     row = cursor.fetchone()
 
@@ -48,7 +48,7 @@ def seguimiento(codigo):
         "FROM DetalleFacturas df "
         "JOIN Productos p ON df.ProductoID = p.ID "
         "JOIN Facturas f ON df.FacturaID = f.ID "
-        "WHERE f.CodigoSeguimiento = ?", codigo
+        "WHERE f.EstadoFiscal='Emitida' AND f.CodigoSeguimiento = ?", codigo
     )
     productos = [
         {'nombre': r.Nombre, 'cantidad': r.Cantidad,
@@ -86,7 +86,7 @@ def seguimiento(codigo):
 
 @monitor_bp.route('/monitor')
 @login_required
-@roles_required('Estandar', 'Admin', 'SuperAdmin', 'Invitado', 'Operativo')
+@roles_required('Estandar', 'Admin', 'SuperAdmin', 'Operativo')
 def monitor_pedidos():
     """Panel interno para que la panadería vea y actualice los pedidos."""
     conn = get_db_connection()
@@ -98,7 +98,7 @@ def monitor_pedidos():
         "FROM Facturas f "
         "JOIN Encargos e ON e.FacturaID = f.ID "
         "LEFT JOIN Clientes c ON f.ClienteID = c.ID "
-        "WHERE e.Estado != 'Entregado' "
+        "WHERE f.EstadoFiscal='Emitida' AND e.Estado != 'Entregado' "
         "ORDER BY e.FechaEntrega ASC"
     )
     encargos = []
@@ -128,7 +128,6 @@ def monitor_pedidos():
 # ============================================================
 
 @monitor_bp.route('/api/seguimiento/<codigo>/estado', methods=['PUT'])
-@csrf.exempt
 @login_required
 @roles_required('Estandar', 'Admin', 'SuperAdmin', 'Operativo')
 def actualizar_estado(codigo):
@@ -143,15 +142,26 @@ def actualizar_estado(codigo):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        cursor.execute("SELECT e.Estado,f.ID FROM Encargos e WITH(UPDLOCK,HOLDLOCK) JOIN Facturas f ON f.ID=e.FacturaID WHERE f.EstadoFiscal='Emitida' AND f.CodigoSeguimiento=?",codigo)
+        previous=cursor.fetchone()
+        if not previous:
+            return jsonify(error='Encargo no encontrado.'),404
+        transitions={'Pendiente':'En Proceso','En Proceso':'Listo','Listo':'Entregado'}
+        if nuevo_estado == previous[0]:
+            return jsonify(status='success',nuevo_estado=nuevo_estado)
+        if transitions.get(previous[0]) != nuevo_estado:
+            return jsonify(error='Actualice el pedido en orden: Pendiente, En Proceso, Listo y Entregado.'),409
         cursor.execute(
             "UPDATE Encargos SET Estado = ? "
             "FROM Encargos e JOIN Facturas f ON e.FacturaID = f.ID "
-            "WHERE f.CodigoSeguimiento = ?",
+            "WHERE f.EstadoFiscal='Emitida' AND f.CodigoSeguimiento = ?",
             nuevo_estado, codigo
         )
         if cursor.rowcount == 0:
             return jsonify({'error': 'Encargo no encontrado'}), 404
 
+        from app.services.fiscal_service import audit
+        audit(cursor,current_user.id,'ESTADO_ENCARGO','Factura',previous[1],{'antes':previous[0],'despues':nuevo_estado},request.remote_addr)
         conn.commit()
         return jsonify({
             'status': 'success',
@@ -160,6 +170,8 @@ def actualizar_estado(codigo):
         }), 200
     except Exception as e:
         conn.rollback()
-        return jsonify({'error': str(e)}), 500
+        import logging
+        logging.exception('Error actualizando encargo')
+        return jsonify(error='No se pudo actualizar el encargo.'),500
     finally:
         conn.close()

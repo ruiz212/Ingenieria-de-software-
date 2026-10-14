@@ -99,7 +99,7 @@ const API = {
     // ==========================================
     obtenerTipoCambio: async () => {
         try {
-            const res = await fetch('/api/tipo_cambio');
+            const res = await fetch('/admin/api/tipo_cambio');
             if (res.ok) {
                 const data = await res.json();
                 return data.tipo_cambio;
@@ -111,6 +111,14 @@ const API = {
     },
 
     procesarFactura: async (datosFactura) => {
+        // Mantener la clave si una respuesta se pierde; cambiarla al cambiar el contenido.
+        const fingerprint = JSON.stringify(datosFactura);
+        let pending = JSON.parse(sessionStorage.getItem('venta-pendiente') || 'null');
+        if (!pending || pending.fingerprint !== fingerprint) {
+            pending = {fingerprint, key: crypto.randomUUID()};
+            sessionStorage.setItem('venta-pendiente', JSON.stringify(pending));
+        }
+        datosFactura.clave_solicitud = pending.key;
         try {
             const response = await fetch('/api/factura', {
                 method: 'POST',
@@ -119,6 +127,7 @@ const API = {
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || 'Error al registrar factura');
+            sessionStorage.removeItem('venta-pendiente');
             return result;
         } catch (error) {
             console.error('API Error:', error);
@@ -131,7 +140,7 @@ const API = {
     // ==========================================
     cerrarTurno: async (datosArqueo) => {
         try {
-            const response = await fetch('/api/turno/cerrar', {
+            const response = await fetch('/admin/api/arqueo/etapa1-conteo', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(datosArqueo)

@@ -68,6 +68,7 @@
                         <th>Compras Realizadas</th>
                         <th>Última Compra</th>
                         <th>Total Gastado (Histórico)</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -87,10 +88,11 @@
                         <td class="fw-700">{{ c.total_compras }}</td>
                         <td class="cell-muted">{{ c.ultima_compra }}</td>
                         <td class="cell-money">C${{ "%.2f"|format(c.total_gastado) }}</td>
+                        <td><button type="button" class="btn btn-outline btn-sm btn-cliente-detalle" data-id="{{ c.id }}">Ver / editar</button></td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6">
+                        <td colspan="7">
                             <div class="empty-state">
                                 <div class="empty-state-icon">👥</div>
                                 <p>No hay clientes registrados con compras.</p>
@@ -101,6 +103,21 @@
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<div id="cliente-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cliente-modal-title">
+    <div class="modal-content">
+        <h2 id="cliente-modal-title">Editar cliente</h2>
+        <form id="cliente-form">
+            <input type="hidden" id="cliente-id">
+            <div class="form-group"><label for="cliente-nombre">Nombre</label><input id="cliente-nombre" class="form-control" required maxlength="100"></div>
+            <div class="form-group"><label for="cliente-apellidos">Apellidos</label><input id="cliente-apellidos" class="form-control" maxlength="100"></div>
+            <div class="form-group"><label for="cliente-telefono">Teléfono</label><input id="cliente-telefono" class="form-control" required maxlength="30"></div>
+            <div class="form-group"><label for="cliente-nivel">Nivel</label><select id="cliente-nivel" class="form-control"><option value="1">Nuevo</option><option value="2">Frecuente</option><option value="3">VIP</option></select></div>
+            <div id="cliente-historial" class="modal-section"></div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline" id="cliente-cerrar">Cancelar</button><button type="submit" class="btn btn-primary">Guardar</button></div>
+        </form>
     </div>
 </div>
 {% endblock %}
@@ -122,6 +139,43 @@
                 }
             }
         });
+    });
+
+    const modal = document.getElementById('cliente-modal');
+    const historyBox = document.getElementById('cliente-historial');
+    document.querySelectorAll('.btn-cliente-detalle').forEach(button => {
+        button.addEventListener('click', async () => {
+            const response = await fetch(`/admin/api/fidelizacion/clientes/${button.dataset.id}`);
+            if (!response.ok) return;
+            const data = (await response.json()).cliente;
+            document.getElementById('cliente-id').value = data.id;
+            document.getElementById('cliente-nombre').value = data.nombre || '';
+            document.getElementById('cliente-apellidos').value = data.apellidos || '';
+            document.getElementById('cliente-telefono').value = data.telefono || '';
+            document.getElementById('cliente-nivel').value = data.nivel_id;
+            historyBox.innerHTML = '<strong>Historial</strong><br>' + (data.historial.length
+                ? data.historial.map(item => `${item.numero || item.id}: C$${Number(item.total).toFixed(2)} (${item.estado})`).join('<br>')
+                : 'Sin compras registradas.');
+            modal.classList.remove('hidden');
+        });
+    });
+    document.getElementById('cliente-cerrar').addEventListener('click', () => modal.classList.add('hidden'));
+    document.getElementById('cliente-form').addEventListener('submit', async event => {
+        event.preventDefault();
+        const id = document.getElementById('cliente-id').value;
+        const payload = {
+            nombre: document.getElementById('cliente-nombre').value,
+            apellidos: document.getElementById('cliente-apellidos').value,
+            telefono: document.getElementById('cliente-telefono').value,
+            nivel_id: Number(document.getElementById('cliente-nivel').value)
+        };
+        const response = await fetch(`/admin/api/fidelizacion/clientes/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content},
+            body: JSON.stringify(payload)
+        });
+        if (response.ok) window.location.reload();
+        else if (typeof showToast === 'function') showToast((await response.json()).error || 'No se pudo actualizar.', true);
     });
 </script>
 {% endblock %}

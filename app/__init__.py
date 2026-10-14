@@ -31,6 +31,8 @@ def create_app(config_class=Config):
     from app.extensions import login_manager, csrf
     login_manager.init_app(app)
     csrf.init_app(app)
+    from app.security import init_security
+    init_security(app)
 
     # Importar modelos para registrar el user_loader
     from app import models  # noqa: F401

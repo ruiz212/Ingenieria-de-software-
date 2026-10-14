@@ -78,6 +78,10 @@
         return window.CATEGORY_CLASS_MAP[cat] || 'cat-default';
     }
     </script>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/accessibility.css', v=1) }}">
+<script>window.tasasProductos = Object.fromEntries({{ productos|tojson }}.map(p=>[p.id,p.tasa_iva]));</script>
 </head>
 <body class="pos-body">
     <!-- Header para el Vendedor -->
@@ -103,6 +107,15 @@
     </header>
     
     <main class="pos-layout">
+        {% if not turno_activo %}
+        <section class="empty-state" style="grid-column: 1 / -1; min-height: 50vh; display: grid; place-items: center; text-align: center;">
+            <div>
+                <h2>Turno cerrado</h2>
+                <p>Abra un turno para habilitar las ventas y el arqueo de caja.</p>
+                <button type="button" class="btn btn-primary" id="btn-abrir-turno">Abrir turno</button>
+            </div>
+        </section>
+        {% else %}
         <!-- Izquierda: Catálogo -->
         <section class="pos-main">
             <!-- Navegación de Categorías Horizontal -->
@@ -112,6 +125,9 @@
                 <button class="category-btn" data-filter="{{ cat.nombre }}">{{ cat.nombre }}</button>
                 {% endfor %}
             </nav>
+            <div class="form-search" style="max-width: 420px; margin: 0.75rem 0 1rem;">
+                <input type="search" id="pos-product-search" class="form-input" placeholder="Buscar producto..." aria-label="Buscar producto">
+            </div>
 
             <div class="catalog-panel">
                 <h2 id="current-category-title">Mostrador - Todos</h2>
@@ -180,7 +196,7 @@
                     <span id="subtotal-display">C$0.00</span>
                 </div>
                 <div class="summary-row">
-                    <span>IVA (15%):</span>
+                    <span>IVA:</span>
                     <span id="iva-display">C$0.00</span>
                 </div>
                 <div class="summary-row total-row">
@@ -192,6 +208,7 @@
                 </button>
             </div>
         </aside>
+        {% endif %}
     </main>
 
     <!-- Modals Background -->
@@ -231,6 +248,7 @@
                 </select>
             </div>
             
+            <div class="form-group"><label for="modal-referencia-encargo">Referencia de transferencia (si aplica)</label><input id="modal-referencia-encargo" class="form-control" maxlength="100"></div>
             <div id="encargo-efectivo-container" class="form-group" style="background: var(--surface-sunken); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
                 <label>Efectivo Recibido (C$):</label>
                 <input type="number" id="modal-efectivo-encargo" class="form-control" min="0" step="0.01" placeholder="0.00">
@@ -423,7 +441,7 @@
                 <div id="ticket-productos"></div>
                 <div style="border-top: 1px dashed black; margin-top: 1rem; padding-top: 1rem;">
                     <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span id="ticket-subtotal">C$0.00</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>IVA (15%):</span><span id="ticket-iva">C$0.00</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span>IVA:</span><span id="ticket-iva">C$0.00</span></div>
                     <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:1.2rem; margin-top:0.5rem;"><span>TOTAL:</span><span id="ticket-total">C$0.00</span></div>
                 </div>
                 <div id="ticket-encargo-section" class="hidden" style="margin-top: 1rem; border-top: 1px dashed black; padding-top: 1rem;">
@@ -464,7 +482,30 @@
     </div>
 
     <script>
+        document.getElementById('btn-abrir-turno')?.addEventListener('click', async () => {
+            const button = document.getElementById('btn-abrir-turno');
+            button.disabled = true;
+            try {
+                const response = await fetch('/api/turno/abrir', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content }
+                });
+                if (!response.ok) throw new Error('No se pudo abrir el turno');
+                window.location.reload();
+            } catch (error) {
+                button.disabled = false;
+                if (typeof showToast === 'function') showToast(error.message, true);
+            }
+        });
+
         window.configuracionGlobal = {{ configuracion|tojson|safe if configuracion else '{}' }};
+        document.getElementById('pos-product-search')?.addEventListener('input', function() {
+            const query = this.value.trim().toLowerCase();
+            document.querySelectorAll('.product-card.filterable-product').forEach(card => {
+                const matches = !query || (card.dataset.nombre || '').toLowerCase().includes(query);
+                card.classList.toggle('hidden', !matches);
+            });
+        });
         // Dummy overrides so pos.js won't crash when missing user info
         if (!document.getElementById('modal-nombre-cliente')) {
             document.body.insertAdjacentHTML('beforeend', '<input type="hidden" id="modal-nombre-cliente" value="">');

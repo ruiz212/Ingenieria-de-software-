@@ -1,0 +1,33 @@
+{% extends 'admin_base.html' %}
+
+{% block title %}Auditoría | Panadería Amada{% endblock %}
+{% block page_title %}Auditoría del sistema{% endblock %}
+
+{% block content %}
+<div class="page-header"><p>Consulta de solo lectura sobre cambios registrados.</p></div>
+<form method="get" class="panel panel-accent-primary" style="padding: 1rem; display: flex; gap: 1rem; align-items: end; flex-wrap: wrap;">
+    <div class="form-group"><label for="desde">Desde</label><input id="desde" name="desde" type="date" value="{{ desde }}" class="form-input"></div>
+    <div class="form-group"><label for="hasta">Hasta</label><input id="hasta" name="hasta" type="date" value="{{ hasta }}" class="form-input"></div>
+    <div class="form-group"><label for="entidad">Entidad</label><input id="entidad" name="entidad" value="{{ entidad }}" maxlength="50" class="form-input" placeholder="Productos, Usuarios..."></div>
+    <button class="btn btn-primary" type="submit">Filtrar</button>
+</form>
+
+<div class="panel panel-full">
+    <div class="panel-body panel-body-flush table-responsive">
+        <table class="data-table">
+            <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Entidad</th><th>ID</th><th>IP</th><th>Antes</th><th>Después</th></tr></thead>
+            <tbody>
+            {% for evento in eventos %}
+                <tr>
+                    <td>{{ evento.fecha }}</td><td>{{ evento.usuario }}</td><td>{{ evento.accion }}</td>
+                    <td>{{ evento.entidad }}</td><td>{{ evento.entidad_id or '' }}</td><td>{{ evento.ip }}</td>
+                    <td><pre>{{ evento.antes or '' }}</pre></td><td><pre>{{ evento.despues or '' }}</pre></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="8"><div class="empty-state"><p>No hay eventos para los filtros seleccionados.</p></div></td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -243,6 +243,8 @@
         <p class="subtitle">Añade stock y registra el costo de la compra.</p>
         
         <form id="form-compra">
+            <div class="form-group"><label for="compra_factura">Comprobante del proveedor</label><input id="compra_factura" class="form-input" maxlength="50" required></div>
+            <div class="form-group"><label for="compra_iva">IVA acreditable según soporte (C$)</label><input id="compra_iva" type="number" class="form-input" value="0" min="0" step="0.01" required><small>Solo registre crédito fiscal respaldado y procedente según su régimen. El sistema no presume IVA en todas las compras.</small></div>
             <div class="form-group">
                 <label class="form-label" for="compra_materia">Materia Prima Adquirida</label>
                 <select id="compra_materia" class="form-select" required>
@@ -430,7 +432,9 @@
             materia_id: selectMateria.value,
             proveedor_id: selectProveedor.value,
             cantidad: document.getElementById('compra_cantidad').value,
-            costo: document.getElementById('compra_costo').value
+            costo: document.getElementById('compra_costo').value,
+            factura_proveedor: document.getElementById('compra_factura').value,
+            iva_documentado: document.getElementById('compra_iva').value
         };
         try {
             const res = await fetchWithTimeout('/api/inventario/compra', {

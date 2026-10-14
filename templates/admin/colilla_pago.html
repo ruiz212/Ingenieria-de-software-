@@ -363,6 +363,9 @@
             }
         }
     </style>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/accessibility.css', v=1) }}">
 </head>
 <body>
 

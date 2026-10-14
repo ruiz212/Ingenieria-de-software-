@@ -854,7 +854,8 @@ function initModule1() {
 
     if (btnImprimirTicket) {
         btnImprimirTicket.addEventListener('click', () => {
-            window.print();
+            // La impresión utiliza la copia guardada por el servidor.
+
         });
     }
 }
@@ -926,13 +927,7 @@ function renderizarCarrito() {
 
 
     
-    const iva = subtotal * ivaPorcentaje;
-    return { subtotal, iva, total: subtotal + iva };
-}
-
- = calcularTotales();
-    return total;
-}
+function calcularTotal() { return calcularTotales().total; }
 
 async function procesarFactura(esEncargo = false, datosExtra = null) {
     showLoading(true);
@@ -1006,6 +1001,11 @@ async function procesarFactura(esEncargo = false, datosExtra = null) {
     return "<strong>Entregar:</strong><br>" + resultado.join('<br>');
 }
 function mostrarTicket(factura) {
+    const printButton=document.getElementById('btn-imprimir-ticket');
+    if(printButton) printButton.onclick=()=>window.open(factura.url_impresion, '_blank', 'noopener');
+    let notice=document.getElementById('ticket-aviso-fiscal');
+    if(!notice){notice=document.createElement('p'); notice.id='ticket-aviso-fiscal'; document.getElementById('ticket-printable').prepend(notice);}
+    notice.textContent=factura.aviso || '';
     // Llenar datos del ticket
     document.getElementById('ticket-numero').textContent = factura.numero_factura;
     document.getElementById('ticket-fecha').textContent = factura.fecha;

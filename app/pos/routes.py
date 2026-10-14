@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 from flask_login import login_required, current_user
 
 from app.pos import pos_bp
-from app.db import get_db_connection, obtener_o_crear_turno
+from app.db import get_db_connection
 from app.extensions import csrf
 from app.utils.qr import generar_qr_base64
 from app.auth.decorators import roles_required
@@ -36,7 +36,7 @@ def index():
 
     # Obtener productos activos con su categoría e imagen
     cursor.execute(
-        "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.PrecioBase, p.EsFicticio, p.PorcentajeDescuento, p.ImagenUrl "
+        "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.PrecioBase, p.EsFicticio, p.PorcentajeDescuento, p.ImagenUrl, p.TasaIVA "
         "FROM Productos p "
         "JOIN Categorias c ON p.CategoriaID = c.ID "
         "WHERE p.Activo = 1 "
@@ -46,6 +46,7 @@ def index():
         {'id': row.ID, 'nombre': row.Nombre, 'categoria': row.Categoria,
          'precio': float(row.PrecioBase), 'es_ficticio': row.EsFicticio,
          'descuento': float(row.PorcentajeDescuento),
+         'tasa_iva': float(row.TasaIVA) if row.TasaIVA is not None else None,
          'imagen_url': row.ImagenUrl or ''}
         for row in cursor.fetchall()
     ]
@@ -63,6 +64,12 @@ def index():
     cursor.execute("SELECT Clave, Valor FROM ConfiguracionSistema")
     configuracion = {row.Clave: row.Valor for row in cursor.fetchall()}
 
+    cursor.execute(
+        "SELECT TOP 1 ID, FechaApertura FROM TurnosCaja WHERE UsuarioID = ? AND Cerrado = 0 ORDER BY ID DESC",
+        current_user.id
+    )
+    turno = cursor.fetchone()
+
     conn.close()
 
     es_cliente = getattr(current_user, 'rol_nombre', '') in ['Cliente', 'Invitado']
@@ -74,10 +81,42 @@ def index():
                            categorias=categorias,
                            configuracion=configuracion,
                            user=current_user,
+                           turno_activo=turno,
                            mes_actual=datetime.now().month)
 
+
+@pos_bp.route('/api/turno/abrir', methods=['POST'])
+@login_required
+@roles_required('Estandar', 'Admin', 'SuperAdmin')
+def abrir_turno():
+    """Abre explícitamente el turno del cajero antes de permitir ventas."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT TOP 1 ID FROM TurnosCaja WITH (UPDLOCK, HOLDLOCK) "
+            "WHERE UsuarioID = ? AND Cerrado = 0 ORDER BY ID DESC",
+            current_user.id
+        )
+        activo = cursor.fetchone()
+        if activo:
+            return jsonify(status='success', turno_id=activo.ID, existente=True)
+
+        cursor.execute(
+            "INSERT INTO TurnosCaja (UsuarioID) OUTPUT INSERTED.ID VALUES (?)",
+            current_user.id
+        )
+        turno_id = cursor.fetchone()[0]
+        conn.commit()
+        return jsonify(status='success', turno_id=turno_id, existente=False), 201
+    except Exception:
+        conn.rollback()
+        current_app.logger.exception('Error al abrir turno')
+        return jsonify(error='No se pudo abrir el turno.'), 500
+    finally:
+        conn.close()
+
 @pos_bp.route('/api/upload_referencia', methods=['POST'])
-@csrf.exempt
 @login_required
 def upload_referencia():
     if 'foto' not in request.files:
@@ -85,22 +124,34 @@ def upload_referencia():
     file = request.files['foto']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
+
+    extension = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if extension not in {'jpg', 'jpeg', 'png', 'webp'}:
+        return jsonify({'error': 'Formato de imagen no permitido.'}), 400
+
+    file.seek(0, os.SEEK_END)
+    if file.tell() > 5 * 1024 * 1024:
+        return jsonify({'error': 'La imagen no puede superar los 5 MB.'}), 400
+    file.seek(0)
     
     if file:
         import requests
         import base64
-        import os
-        
-        # Lee la imagen y la codifica en base64
-        img_data = file.read()
-        b64_image = base64.b64encode(img_data).decode('utf-8')
         
         # API Key de ImgBB (debe configurarse en .env, si no usa una por defecto o falla)
         # Nota: Por favor define IMGBB_API_KEY en tu archivo .env
         api_key = os.environ.get('IMGBB_API_KEY', '')
         
         if not api_key:
-            return jsonify({'error': 'La clave de API de ImgBB no está configurada (IMGBB_API_KEY).'}), 500
+            upload_folder = os.path.join(current_app.static_folder, 'uploads', 'referencias')
+            os.makedirs(upload_folder, exist_ok=True)
+            filename = f"{uuid.uuid4().hex}.{extension}"
+            file.save(os.path.join(upload_folder, filename))
+            return jsonify({'ruta': f'uploads/referencias/{filename}'}), 200
+
+        # Leer el archivo solo en la rama remota; la carga local debe conservar
+        # el stream completo para FileStorage.save().
+        b64_image = base64.b64encode(file.read()).decode('utf-8')
 
         try:
             # Petición a la API de ImgBB
@@ -109,7 +160,7 @@ def upload_referencia():
                 data={
                     'key': api_key,
                     'image': b64_image
-                }
+                }, timeout=15
             )
             
             result = response.json()
@@ -125,269 +176,133 @@ def upload_referencia():
 
 
 @pos_bp.route('/api/factura', methods=['POST'])
-@csrf.exempt
 @login_required
+@roles_required('Estandar', 'Admin', 'SuperAdmin')
 def registrar_factura():
-    """Registra una factura completa en la BD con sus detalles, pagos y encargos."""
-    datos = request.json
-    carrito = datos.get('carrito', [])
-    total = datos.get('total', 0)
-    subtotal = datos.get('subtotal', 0)
-    iva = datos.get('iva', 0)
-    es_encargo = datos.get('es_encargo', False)
-    datos_encargo = datos.get('encargo_detalles', None)
-    pagos_multiples = datos.get('pagos_multiples', [])
-    ruc_datos = datos.get('ruc', None)
-    
-    # Fallbacks por si viene el formato anterior
-    metodo_pago_legacy = datos.get('metodo_pago', 'Efectivo')
-    nombre_transferente_legacy = datos.get('nombre_transferente', None)
-
-    if not carrito or total <= 0:
-        return jsonify({'error': 'El carrito está vacío o el total es inválido'}), 400
-
+    """Factura atómica: precio de catálogo, pagos conciliados y copia inmutable."""
+    import json
+    import hashlib
+    from app.services.fiscal_service import configuration, calculate_sale, normalize_payments, next_invoice, audit
+    from app.services.validation import amount, required_text
+    from app.services.contabilidad_service import ContabilidadService, ContabilidadError
+    datos = request.get_json()
+    key = required_text(datos.get('clave_solicitud'), 'Identificador de operación', 64)
+    fingerprint = hashlib.sha256(json.dumps(datos, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     conn = get_db_connection()
     cursor = conn.cursor()
-
     try:
-        # 1. Obtener o crear turno activo (solo para empleados)
-        es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente'
-        es_invitado = getattr(current_user, 'rol_nombre', '') == 'Invitado'
-        
-        turno_id = None
-        usuario_vendedor_id = current_user.id if not (es_cliente_registrado or es_invitado) else 1
-        if not (es_cliente_registrado or es_invitado):
-            turno_id = obtener_o_crear_turno(current_user.id)
-        # 2. Generar número de factura correlativo desde la BD
-        cursor.execute("SELECT ISNULL(MAX(ID), 0) + 1 FROM Facturas")
-        siguiente_num = cursor.fetchone()[0]
-        numero_factura = f"FAC-{siguiente_num:04d}"
-        codigo_seguimiento = uuid.uuid4().hex[:8].upper()
-
-        # 3. Determinar ClienteID y guardar datos del cliente si es encargo
-        cliente_id = 1 # Cliente General por defecto
-        telefono_contacto_encargo = None
-        es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente'
-        
-        if es_cliente_registrado:
-            cliente_id = current_user.id
-        elif es_encargo and datos_encargo:
-            nombre_cli = datos_encargo.get('nombre_cliente', '').strip()
-            telefono_cli = datos_encargo.get('telefono', '').strip()
-            telefono_contacto_encargo = telefono_cli if telefono_cli else None
-            
-            if nombre_cli:
-                # Intentar buscar el cliente por telefono
-                if telefono_cli:
-                    cursor.execute("SELECT ID FROM Clientes WHERE Telefono = ?", telefono_cli)
-                    row_cli = cursor.fetchone()
-                    if row_cli:
-                        cliente_id = row_cli.ID
-                    else:
-                        cursor.execute("INSERT INTO Clientes (Nombre, Telefono, NivelConfianzaID) OUTPUT INSERTED.ID VALUES (?, ?, 1)", nombre_cli, telefono_cli)
-                        cliente_id = cursor.fetchone()[0]
-                else:
-                    # Crear nuevo cliente si no hay telefono para buscar
-                    cursor.execute("INSERT INTO Clientes (Nombre, Telefono, NivelConfianzaID) OUTPUT INSERTED.ID VALUES (?, NULL, 1)", nombre_cli)
-                    cliente_id = cursor.fetchone()[0]
-
-        # 4. Insertar la factura
-        incluye_ruc = 1 if ruc_datos else 0
-        cursor.execute(
-            "SET NOCOUNT ON; INSERT INTO Facturas (NumeroFactura, CodigoSeguimiento, UsuarioID, ClienteID, TurnoID, Subtotal, IVA, Total, EsEncargo, IncluyeRUC) "
-            "OUTPUT INSERTED.ID "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            numero_factura, codigo_seguimiento, usuario_vendedor_id, cliente_id, turno_id,
-            subtotal, iva, total, 1 if es_encargo else 0, incluye_ruc
-        )
-        factura_id = cursor.fetchone()[0]
-
-        # 4.1 Insertar datos de RUC si aplica
-        if incluye_ruc and ruc_datos:
-            cursor.execute(
-                "INSERT INTO FacturasRUC (FacturaID, RazonSocial, NumeroRUC) VALUES (?, ?, ?)",
-                factura_id, ruc_datos.get('razon_social', ''), ruc_datos.get('numero', '')
-            )
-
-        # 4. Insertar detalle de cada producto
+        # Serializar reintentos antes de asignar número o registrar cobros.
+        cursor.execute("DECLARE @r INT; EXEC @r=sp_getapplock @Resource=?,@LockMode='Exclusive',@LockOwner='Transaction',@LockTimeout=10000; SELECT @r", 'factura:'+key)
+        if cursor.fetchone()[0] < 0:
+            raise ValueError('La operación está en proceso. Reintente con el mismo carrito.')
+        cursor.execute('SELECT UsuarioID,DocumentoJSON FROM Facturas WHERE ClaveSolicitud=?',key)
+        previous=cursor.fetchone()
+        if previous:
+            if previous[0] != current_user.id:
+                return jsonify(error='Identificador de operación no disponible.'),409
+            saved = json.loads(previous[1])
+            if saved.get('solicitud_hash') != fingerprint:
+                return jsonify(error='La clave ya corresponde a otra venta. Recargue el carrito.'),409
+            return jsonify(status='success',factura=saved)
+        config=configuration(cursor)
+        carrito,subtotal,iva,total=calculate_sale(cursor,datos.get('carrito'),config)
+        if total <= 0:
+            raise ValueError('El total debe ser positivo.')
+        es_encargo=datos.get('es_encargo') is True
+        encargo=datos.get('encargo_detalles') if es_encargo else None
+        if es_encargo and not isinstance(encargo,dict):
+            raise ValueError('Complete los datos del encargo.')
+        if es_encargo:
+            required_text(encargo.get('nombre_cliente'),'Cliente',100)
+            required_text(encargo.get('telefono'),'Teléfono',20)
+            delivery=datetime.fromisoformat(encargo.get('fecha_entrega',''))
+            if delivery.date() < datetime.now().date():
+                raise ValueError('La entrega no puede ser anterior a hoy.')
+            advance=amount(encargo.get('adelanto',0))
+            payments=[{'metodo':encargo.get('metodo_adelanto','Efectivo'),'monto':advance,
+                       'referencia':datos.get('nombre_transferente') or encargo.get('referencia','')}]
+            encargo={**encargo,'adelanto':float(advance),'saldo':float(total-advance)}
+        else:
+            advance=None
+            payments=datos.get('pagos_multiples') or [{'metodo':datos.get('metodo_pago','Efectivo'),
+                          'monto':total,'referencia':datos.get('nombre_transferente','')}]
+        if not isinstance(payments, list) or any(not isinstance(p, dict) for p in payments):
+            raise ValueError('Pagos inválidos.')
+        from decimal import Decimal
+        exchange=Decimal(str(config.get('tipo_cambio_usd','0')))
+        if not exchange.is_finite() or exchange <= 0:
+            raise ValueError('Configure un tipo de cambio positivo en ajustes.')
+        if not es_encargo:
+            payments=[{**p,'monto':amount(p.get('monto'), 'Pago USD')*exchange} if p.get('metodo')=='Efectivo USD' else p for p in payments]
+        payments,change=normalize_payments(payments,total,advance)
+        ruc=datos.get('ruc')
+        if ruc:
+            if not isinstance(ruc,dict):
+                raise ValueError('Datos de RUC inválidos.')
+            ruc={'numero':required_text(ruc.get('numero'),'RUC del cliente',50),
+                 'razon_social':required_text(ruc.get('razon_social'),'Razón social del cliente',255)}
+        # Turno y venta comparten la misma transacción.
+        cursor.execute('SELECT ID FROM TurnosCaja WITH (UPDLOCK,HOLDLOCK) WHERE UsuarioID=? AND Cerrado=0',current_user.id)
+        shift=cursor.fetchone()
+        if shift:
+            turno_id=shift[0]
+            cursor.execute("SELECT ID FROM ArqueoCaja WHERE TurnoID=? AND EstadoArqueo IN ('Pendiente','Verificado')",turno_id)
+            if cursor.fetchone():
+                raise ValueError('La caja tiene un arqueo pendiente. Finalice la verificación antes de vender.')
+        else:
+            raise ValueError('Debe abrir un turno antes de registrar ventas.')
+        cliente_id=1
+        if es_encargo:
+            cursor.execute('SELECT ID FROM Clientes WHERE Telefono=?',encargo['telefono'])
+            client=cursor.fetchone()
+            if client:
+                cliente_id=client[0]
+            else:
+                cursor.execute('INSERT INTO Clientes(Nombre,Telefono,NivelConfianzaID) OUTPUT INSERTED.ID VALUES(?,?,1)',encargo['nombre_cliente'],encargo['telefono'])
+                cliente_id=cursor.fetchone()[0]
+        number=next_invoice(cursor,config.get('fiscal_serie','FAC'))
+        code=uuid.uuid4().hex[:10].upper()
+        cursor.execute("INSERT INTO Facturas(NumeroFactura,CodigoSeguimiento,UsuarioID,ClienteID,TurnoID,Subtotal,IVA,Total,EsEncargo,IncluyeRUC,ClaveSolicitud) OUTPUT INSERTED.ID VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            number,code,current_user.id,cliente_id,turno_id,subtotal,iva,total,es_encargo,bool(ruc),key)
+        factura_id=cursor.fetchone()[0]
+        if ruc:
+            cursor.execute('INSERT INTO FacturasRUC(FacturaID,RazonSocial,NumeroRUC) VALUES(?,?,?)',factura_id,ruc['razon_social'],ruc['numero'])
         for item in carrito:
-            # item['id'] puede venir como "3_16278839" si tiene ingredientes. Extraemos el ID real (el primer elemento).
-            prod_id_str = str(item.get('id', '1'))
-            prod_id = int(prod_id_str.split('_')[0])
-
-            cursor.execute(
-                "SET NOCOUNT ON; INSERT INTO DetalleFacturas (FacturaID, ProductoID, Cantidad, PrecioUnitario, Subtotal) "
-                "OUTPUT INSERTED.ID "
-                "VALUES (?, ?, ?, ?, ?)",
-                factura_id, prod_id, item.get('cantidad', 1),
-                item.get('precio', 0), item.get('subtotal', 0)
-            )
-            detalle_id = cursor.fetchone()[0]
-
-            # 4b. Insertar ingredientes extra si los tiene
-            extras = item.get('detalle_ingredientes')
-            if extras and isinstance(extras, dict) and 'ingredientes' in extras:
-                for extra in extras['ingredientes']:
-                    nombre_extra = extra.get('nombre', '').strip()
-                    precio_extra = float(extra.get('precio', 0))
-                    
-                    cursor.execute("SELECT ID FROM Ingredientes WHERE Nombre = ?", nombre_extra)
-                    ing_row = cursor.fetchone()
-                    
-                    if ing_row:
-                        ing_id = ing_row.ID
-                    else:
-                        cursor.execute(
-                            "SET NOCOUNT ON; INSERT INTO Ingredientes (Nombre, PrecioAdicional, Activo) OUTPUT INSERTED.ID VALUES (?, ?, 1)",
-                            nombre_extra, precio_extra
-                        )
-                        ing_id = cursor.fetchone()[0]
-                    
-                    cursor.execute(
-                        "INSERT INTO DetalleIngredientes (DetalleFacturaID, IngredienteID, PrecioAplicado) "
-                        "VALUES (?, ?, ?)",
-                        detalle_id, ing_id, precio_extra
-                    )
-
-        # 5. Registrar el pago
-        cambio_restante = float(datos.get('cambio', 0))
-        
-        if es_encargo and datos_encargo:
-            adelanto = float(datos_encargo.get('adelanto', 0))
-            metodo_adelanto = datos_encargo.get('metodo_adelanto', 'Efectivo')
-
-            if adelanto > 0:
-                cursor.execute(
-                    "INSERT INTO Pagos (FacturaID, MetodoPago, Monto, NombreTransferente) VALUES (?, ?, ?, ?)",
-                    factura_id, metodo_adelanto, adelanto,
-                    nombre_transferente_legacy if metodo_adelanto == 'Transferencia' else None
-                )
-
-            # Registrar encargo
-            fecha_entrega = datos_encargo.get('fecha_entrega', datetime.now().strftime('%Y-%m-%d'))
-            especificaciones = datos_encargo.get('especificaciones', None)
-            ruta_imagen = datos_encargo.get('ruta_imagen_referencia', None)
-            
-            cursor.execute(
-                "INSERT INTO Encargos (FacturaID, FechaEntrega, Estado, NotasCliente, Especificaciones, RutaImagenReferencia, TelefonoContacto) VALUES (?, ?, 'Pendiente', ?, ?, ?, ?)",
-                factura_id, fecha_entrega, datos_encargo.get('notas', ''), especificaciones, ruta_imagen, telefono_contacto_encargo
-            )
-        else:
-            if pagos_multiples:
-                for p in pagos_multiples:
-                    monto = float(p.get('monto', 0))
-                    metodo = p.get('metodo')
-                    
-                    # Deducir el cambio del efectivo recibido
-                    if cambio_restante > 0 and metodo in ('Efectivo', 'Efectivo USD'):
-                        if monto >= cambio_restante:
-                            monto -= cambio_restante
-                            cambio_restante = 0
-                        else:
-                            cambio_restante -= monto
-                            monto = 0
-                            
-                    if monto > 0:
-                        cursor.execute(
-                            "INSERT INTO Pagos (FacturaID, MetodoPago, Monto, NombreTransferente) VALUES (?, ?, ?, ?)",
-                            factura_id, metodo, monto,
-                            p.get('referencia') if metodo == 'Transferencia' else None
-                        )
-            else:
-                monto = float(total)
-                cursor.execute(
-                    "INSERT INTO Pagos (FacturaID, MetodoPago, Monto, NombreTransferente) VALUES (?, ?, ?, ?)",
-                    factura_id, metodo_pago_legacy, monto,
-                    nombre_transferente_legacy if metodo_pago_legacy == 'Transferencia' else None
-                )
-
-        # 5b. Fidelización: Sumar compra al cliente y subirlo de nivel si corresponde
-        if cliente_id > 1:  # Ignoramos al Cliente General (ID 1)
-            cursor.execute("UPDATE Clientes SET TotalCompras = ISNULL(TotalCompras, 0) + 1 WHERE ID = ?", cliente_id)
-            cursor.execute("SELECT TotalCompras FROM Clientes WHERE ID = ?", cliente_id)
-            compras_actuales = cursor.fetchone()[0]
-            
-            # 1: Nuevo, 2: Frecuente (>=3), 3: VIP (>=10)
-            nuevo_nivel = 1
-            if compras_actuales >= 10:
-                nuevo_nivel = 3
-            elif compras_actuales >= 3:
-                nuevo_nivel = 2
-                
-            cursor.execute("UPDATE Clientes SET NivelConfianzaID = ? WHERE ID = ?", nuevo_nivel, cliente_id)
-
-        # ============================================================
-        # 5c. INTEGRACIÓN CONTABLE (Servicio Centralizado NIIF)
-        # ============================================================
-        from app.services.contabilidad_service import ContabilidadService
-        
-        # Construir lista de pagos para el servicio contable
-        pagos_contables = []
-        if es_encargo and datos_encargo:
-            adelanto_monto = float(datos_encargo.get('adelanto', 0))
-            metodo_adelanto = datos_encargo.get('metodo_adelanto', 'Efectivo')
-            if adelanto_monto > 0:
-                pagos_contables.append({'metodo': metodo_adelanto, 'monto': adelanto_monto})
-        else:
-            cambio_temp = float(datos.get('cambio', 0))
-            if pagos_multiples:
-                for p in pagos_multiples:
-                    monto_p = float(p.get('monto', 0))
-                    metodo_p = p.get('metodo')
-                    if cambio_temp > 0 and metodo_p in ('Efectivo', 'Efectivo USD'):
-                        monto_p = max(0, monto_p - cambio_temp)
-                        cambio_temp = max(0, cambio_temp - float(p.get('monto', 0)))
-                    if monto_p > 0:
-                        pagos_contables.append({'metodo': metodo_p, 'monto': monto_p})
-            else:
-                pagos_contables.append({'metodo': metodo_pago_legacy, 'monto': float(total)})
-        
-        ContabilidadService.contabilizar_venta(
-            cursor=cursor,
-            usuario_id=usuario_vendedor_id,
-            numero_factura=numero_factura,
-            subtotal=subtotal,
-            iva=iva,
-            total=total,
-            pagos=pagos_contables,
-            es_encargo=bool(es_encargo and datos_encargo),
-            adelanto=float(datos_encargo.get('adelanto', 0)) if (es_encargo and datos_encargo) else 0,
-            ip=request.remote_addr
-        )
-        # ============================================================
-
+            cursor.execute('INSERT INTO DetalleFacturas(FacturaID,ProductoID,Cantidad,PrecioUnitario,Subtotal) OUTPUT INSERTED.ID VALUES(?,?,?,?,?)',factura_id,item['id'],item['cantidad'],amount(item['precio']),amount(item['subtotal']))
+            detail_id=cursor.fetchone()[0]
+            for extra in item['detalle_ingredientes']['ingredientes']:
+                cursor.execute('INSERT INTO DetalleIngredientes(DetalleFacturaID,IngredienteID,PrecioAplicado) VALUES(?,?,?)',detail_id,extra['id'],amount(extra['precio']))
+        for payment in payments:
+            cursor.execute("INSERT INTO Pagos(FacturaID,MetodoPago,Monto,NombreTransferente,MonedaRegistro,TipoCambioAplicado) VALUES(?,?,?,?,'NIO',?)",factura_id,payment['metodo'],payment['monto'],payment['referencia'] or None,exchange if payment['metodo']=='Efectivo USD' else None)
+        if es_encargo:
+            cursor.execute("INSERT INTO Encargos(FacturaID,FechaEntrega,Estado,NotasCliente,Especificaciones,RutaImagenReferencia,TelefonoContacto) VALUES(?,?,'Pendiente',?,?,?,?)",factura_id,delivery,encargo.get('notas',''),encargo.get('especificaciones'),encargo.get('ruta_imagen_referencia'),encargo['telefono'])
+        if cliente_id > 1:
+            cursor.execute('UPDATE Clientes SET TotalCompras=ISNULL(TotalCompras,0)+1 WHERE ID=?',cliente_id)
+            cursor.execute('UPDATE Clientes SET NivelConfianzaID=CASE WHEN TotalCompras>=10 THEN 3 WHEN TotalCompras>=3 THEN 2 ELSE 1 END WHERE ID=?',cliente_id)
+        entry=ContabilidadService.contabilizar_venta(cursor,current_user.id,number,subtotal,iva,total,payments,es_encargo,advance or 0,request.remote_addr)
+        now=datetime.now()
+        link=request.host_url.rstrip('/')+'/seguimiento/'+code
+        document={'id':factura_id,'numero_factura':number,'codigo_seguimiento':code,'solicitud_hash':fingerprint,
+            'fecha':now.strftime('%d/%m/%Y'),'hora':now.strftime('%H:%M:%S'),
+            'productos':carrito,'subtotal':float(subtotal),'iva':float(iva),'total':float(total),
+            'cambio':float(change),'es_encargo':es_encargo,'encargo_detalles':encargo,
+            'tipo_cambio':str(exchange),'pagos':[dict(p,monto=float(p['monto'])) for p in payments],
+            'qr_image':generar_qr_base64(link),'url_seguimiento':link,'asiento_id':entry['asiento_id'],
+            'emisor':{k:v for k,v in config.items() if k.startswith('fiscal_')},'ruc':ruc,
+            'condicion':'Crédito' if es_encargo and advance<total else 'Contado',
+            'aviso':'COMPROBANTE DE PRUEBA SIN VALIDEZ FISCAL' if config.get('fiscal_regimen','Pendiente')=='Pendiente' else '',
+            'url_impresion':f'/admin/fiscal/facturas/{factura_id}/imprimir'}
+        cursor.execute('UPDATE Facturas SET DocumentoJSON=? WHERE ID=?',json.dumps(document,ensure_ascii=False),factura_id)
+        audit(cursor,current_user.id,'EMISION','Factura',factura_id,{'numero':number,'total':total},request.remote_addr)
         conn.commit()
-
-        # 6. Generar QR de seguimiento
-        base_url = request.host_url.rstrip('/')
-        url_seguimiento = f"{base_url}/seguimiento/{codigo_seguimiento}"
-        qr_base64 = generar_qr_base64(url_seguimiento)
-
-        fecha_actual = datetime.now()
-        factura_data = {
-            'numero_factura': numero_factura,
-            'codigo_seguimiento': codigo_seguimiento,
-            'fecha': fecha_actual.strftime('%d/%m/%Y'),
-            'hora': fecha_actual.strftime('%H:%M:%S'),
-            'productos': carrito,
-            'subtotal': subtotal,
-            'iva': iva,
-            'total': total,
-            'es_encargo': es_encargo,
-            'encargo_detalles': datos_encargo,
-            'qr_image': qr_base64,
-            'url_seguimiento': url_seguimiento
-        }
-
-        return jsonify({
-            'status': 'success',
-            'mensaje': 'Factura registrada con éxito',
-            'factura': factura_data
-        }), 200
-
-    except Exception as e:
+        return jsonify(status='success',mensaje='Factura registrada',factura=document)
+    except (ValueError,ContabilidadError) as error:
         conn.rollback()
-        return jsonify({'error': f'Error al registrar factura: {str(e)}'}), 500
+        return jsonify(error=str(error)),400
+    except Exception:
+        conn.rollback()
+        current_app.logger.exception('Error registrando factura')
+        return jsonify(error='No se registró la venta. Intente de nuevo con el mismo carrito.'),500
     finally:
         conn.close()
 
@@ -398,7 +313,6 @@ def registrar_factura():
 from flask import session
 
 @pos_bp.route('/api/cotizaciones', methods=['POST'])
-@csrf.exempt
 @login_required
 def crear_cotizacion():
     datos = request.json
@@ -459,6 +373,7 @@ def obtener_cotizaciones_cliente():
     elif session_id:
         cursor.execute("SELECT * FROM Cotizaciones WHERE SessionID = ? ORDER BY FechaSolicitud DESC", session_id)
     else:
+        conn.close()
         return jsonify([])
         
     cotizaciones = []
@@ -506,12 +421,12 @@ def obtener_cotizaciones_pendientes():
     return jsonify(cotizaciones)
 
 @pos_bp.route('/api/cotizaciones/<int:id>/cotizar', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Estandar', 'Admin', 'SuperAdmin')
 def cotizar_pedido(id):
     datos = request.json
-    precio = datos.get('precio')
+    from app.services.validation import amount
+    precio = amount(datos.get('precio'), 'Precio cotizado', minimum=0.01)
     
     if not precio:
         return jsonify({'error': 'Precio es requerido'}), 400
@@ -521,9 +436,11 @@ def cotizar_pedido(id):
     
     try:
         cursor.execute(
-            "UPDATE Cotizaciones SET PrecioCotizado = ?, Estado = 'Cotizada' WHERE ID = ?",
+            "UPDATE Cotizaciones SET PrecioCotizado = ?, Estado = 'Cotizada' WHERE ID = ? AND Estado IN ('Pendiente','Cotizada')",
             precio, id
         )
+        if cursor.rowcount != 1:
+            return jsonify(error='Cotización inexistente o ya procesada.'),409
         conn.commit()
         return jsonify({'mensaje': 'Cotización enviada'}), 200
     except Exception as e:
@@ -533,14 +450,21 @@ def cotizar_pedido(id):
         conn.close()
 
 @pos_bp.route('/api/cotizaciones/<int:id>/rechazar', methods=['POST'])
-@csrf.exempt
 @login_required
 def rechazar_cotizacion(id):
     conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
-        cursor.execute("UPDATE Cotizaciones SET Estado = 'Rechazada' WHERE ID = ?", id)
+        cursor.execute('SELECT ClienteID,SessionID,Estado FROM Cotizaciones WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',id)
+        row=cursor.fetchone()
+        staff=current_user.rol_nombre in ('Estandar','Admin','SuperAdmin')
+        owner=row and ((current_user.rol_nombre=='Cliente' and row[0]==current_user.id) or (row[1] and row[1]==session.get('cotizacion_session_id')))
+        if not row or (not staff and not owner):
+            return jsonify(error='Cotización no disponible.'),404
+        if row[2] not in ('Pendiente','Cotizada'):
+            return jsonify(error='La cotización ya no se puede rechazar.'),409
+        cursor.execute("UPDATE Cotizaciones SET Estado='Rechazada' WHERE ID=?",id)
         conn.commit()
         return jsonify({'mensaje': 'Cotización rechazada'}), 200
     except Exception as e:

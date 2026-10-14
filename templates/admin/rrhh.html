@@ -80,7 +80,7 @@
                     <span><strong>Salario:</strong> <span class="text-success fw-600">C${{ "%.2f"|format(e.salario_base) }}</span></span>
                     <span><strong>Horario:</strong> {% if e.hora_entrada %}{{ e.hora_entrada }} - {{ e.hora_salida }}{% else %}General{% endif %} 
                         <button class="btn btn-outline btn-sm" onclick="abrirModalHorario('{{ e.id }}', '{{ e.hora_entrada }}', '{{ e.hora_salida }}')" style="padding: 2px 5px; font-size: 0.7rem;">✏️</button>
-                        <button class="btn btn-outline btn-sm" onclick="eliminarEmpleado('{{ e.id }}', '{{ e.nombre|escape }}')" style="padding: 2px 5px; font-size: 0.7rem; color: #e74c3c; border-color: #e74c3c; margin-left: 5px;">🗑️ Eliminar</button>
+                        <button class="btn btn-outline btn-sm" onclick="eliminarEmpleado('{{ e.id }}', '{{ e.nombre|escape }}')" style="padding: 2px 5px; font-size: 0.7rem; color: #e74c3c; border-color: #e74c3c; margin-left: 5px;">Suspender</button>
                     </span>
                     {% if e.numero_inss %}<span><strong>INSS:</strong> {{ e.numero_inss }}</span>{% endif %}
                 </div>
@@ -184,7 +184,7 @@
                         <td class="cell-money text-danger" style="text-align: right;">-C${{ "%.2f"|format(n.deducciones) }}</td>
                         <td class="cell-money text-success fw-700" style="text-align: right;">C${{ "%.2f"|format(n.neto) }}</td>
                         <td style="text-align: center;">
-                            <span class="badge {% if n.es_aguinaldo %}badge-primary{% elif n.estado == 'Pagada' %}badge-success{% elif n.estado == 'Borrador' %}badge-warning{% else %}badge-danger{% endif %}">{% if n.es_aguinaldo %}Aguinaldo{% else %}{{ n.estado }}{% endif %}</span>
+                            <span class="badge {% if n.es_aguinaldo %}badge-primary{% elif n.estado in ['Pagada','Contabilizada'] %}badge-success{% elif n.estado == 'Borrador' %}badge-warning{% else %}badge-danger{% endif %}">{% if n.es_aguinaldo %}Aguinaldo{% else %}{{ n.estado }}{% endif %}</span>
                         </td>
                         <td style="text-align: center;">
                             <a href="{{ url_for('admin.colilla_pago', nomina_id=n.id) }}" target="_blank" class="btn btn-outline btn-sm" title="Ver Colilla PDF">
@@ -303,7 +303,7 @@
 <div id="modal-generar-planilla" class="modal-overlay hidden">
     <div class="modal-content" style="max-width: 500px;">
         <h2>Generar Planilla Batch</h2>
-        <p class="subtitle">Este proceso calculará la nómina para todos los <strong>{{ total_activos }}</strong> empleados activos simultáneamente, sin horas extras. Luego podrás editar individualmente si es necesario.</p>
+        <p class="subtitle">Este proceso calculará la nómina para todos los <strong>{{ total_activos }}</strong> empleados activos y contabilizará sus obligaciones, sin horas extras. Use un mes completo y revise los datos antes de confirmar. Para ajustes posteriores se requiere revisión contable.</p>
         <form id="form-generar-planilla">
             <div class="form-row">
                 <div class="form-group">
@@ -317,7 +317,7 @@
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-outline" onclick="cerrarModalPlanilla()">Cancelar</button>
-                <button type="submit" class="btn btn-primary" id="btn-submit-planilla">Calcular Batch</button>
+                <button type="submit" class="btn btn-primary" id="btn-submit-planilla">Generar y contabilizar</button>
             </div>
         </form>
     </div>
@@ -510,7 +510,7 @@
     function cerrarModalHorario() { document.getElementById('modal-horario-empleado').classList.add('hidden'); }
 
     async function eliminarEmpleado(id, nombre) {
-        if (!confirm(`¿Estás seguro de que deseas ELIMINAR permanentemente al empleado ${nombre}? Esta acción no se puede deshacer.`)) {
+        if (!confirm(`¿Estás seguro de que deseas SUSPENDER al empleado ${nombre}? Se conservará el historial laboral y contable.`)) {
             return;
         }
         showLoading();
@@ -522,10 +522,10 @@
             hideLoading();
             const result = await res.json();
             if (res.ok) {
-                showToast(result.mensaje || 'Empleado eliminado exitosamente');
+                showToast(result.mensaje || 'Empleado suspendido');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast(result.error || 'Error al eliminar empleado', true);
+                showToast(result.error || 'Error al suspender empleado', true);
             }
         } catch(err) {
             hideLoading();

@@ -832,7 +832,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnImprimirTicket) {
         btnImprimirTicket.addEventListener('click', () => {
-            window.print();
+            // La impresión utiliza la copia guardada por el servidor.
+
         });
     }
 });
@@ -928,18 +929,13 @@ function calcularSubtotal() {
 }
 
 function calcularTotales() {
-    let subtotal = 0;
-    carrito.forEach(item => subtotal += item.subtotal);
-    
-    let ivaPorcentaje = 0.15;
-    if (window.configuracionGlobal && window.configuracionGlobal.iva_porcentaje !== undefined) {
-        ivaPorcentaje = parseFloat(window.configuracionGlobal.iva_porcentaje) / 100;
-    }
-    
-    const iva = subtotal * ivaPorcentaje;
-    return { subtotal, iva, total: subtotal + iva };
+    const round = value => Math.round((value + Number.EPSILON) * 100) / 100;
+    const subtotal = round(carrito.reduce((sum,item)=>sum+round(item.subtotal),0));
+    const config=window.configuracionGlobal || {};
+    const rates=window.tasasProductos || {};
+    const iva=config.fiscal_regimen === 'General' ? round(carrito.reduce((sum,item)=>sum+round(round(item.subtotal)*(Number(rates[String(item.id).split('_')[0]]) || 0)/100),0)) : 0;
+    return {subtotal,iva,total:round(subtotal+iva)};
 }
-
 function calcularTotal() {
     const { total } = calcularTotales();
     return total;
@@ -1023,6 +1019,11 @@ function calcularDesgloseCambio(montoCambio) {
     return "<strong>Entregar:</strong><br>" + resultado.join('<br>');
 }
 function mostrarTicket(factura) {
+    const printButton=document.getElementById('btn-imprimir-ticket');
+    if(printButton) printButton.onclick=()=>window.open(factura.url_impresion, '_blank', 'noopener');
+    let notice=document.getElementById('ticket-aviso-fiscal');
+    if(!notice){notice=document.createElement('p'); notice.id='ticket-aviso-fiscal'; document.getElementById('ticket-printable').prepend(notice);}
+    notice.textContent=factura.aviso || '';
     // Llenar datos del ticket
     document.getElementById('ticket-numero').textContent = factura.numero_factura;
     document.getElementById('ticket-fecha').textContent = factura.fecha;

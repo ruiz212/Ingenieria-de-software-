@@ -104,6 +104,9 @@
             text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold;
         }
     </style>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/accessibility.css', v=1) }}">
 </head>
 <body>
     <a href="/admin/rrhh" class="back-btn">← Volver a RRHH</a>

@@ -584,8 +584,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnConfirmarEncargo.addEventListener('click', () => {
         if (btnConfirmarEncargo.disabled) return;
-        btnConfirmarEncargo.disabled = true;
-        btnConfirmarEncargo.textContent = 'Procesando...';
         const adelanto = parseFloat(inputAdelanto.value);
         const fecha = document.getElementById('modal-fecha').value;
         const nombreCliente = document.getElementById('modal-nombre-cliente').value.trim();
@@ -632,11 +630,14 @@ document.addEventListener('DOMContentLoaded', () => {
             fechaCustom = customItem.encargo_detalles.fecha_entrega;
         }
         
+        btnConfirmarEncargo.disabled = true;
+        btnConfirmarEncargo.textContent = 'Procesando...';
         cerrarModal();
         procesarFactura(true, {
             adelanto: adelantoReal,
             saldo: total - adelantoReal,
             metodo_adelanto: metodoPago,
+            referencia: document.getElementById('modal-referencia-encargo')?.value.trim() || '',
             fecha_entrega: fechaCustom ? fechaCustom : fecha,
             nombre_cliente: nombreCliente,
             telefono: telefonoCustom ? telefonoCustom : telefonoCliente,
@@ -725,8 +726,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConfirmarPago = document.getElementById('btn-confirmar-pago');
     btnConfirmarPago.addEventListener('click', () => {
         if (btnConfirmarPago.disabled) return;
-        btnConfirmarPago.disabled = true;
-        btnConfirmarPago.textContent = 'Procesando...';
         const metodo = selectPagoMetodo.value;
         const { total } = calcularTotales();
         
@@ -772,6 +771,8 @@ document.addEventListener('DOMContentLoaded', () => {
             datosFactura.ruc = { razon_social: rz, numero: num };
         }
 
+        btnConfirmarPago.disabled = true;
+        btnConfirmarPago.textContent = 'Procesando...';
         pagoModal.classList.add('hidden');
         procesarFactura(false, datosFactura).finally(() => {
             btnConfirmarPago.disabled = false;
@@ -844,7 +845,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnImprimirTicket) {
         btnImprimirTicket.addEventListener('click', () => {
-            window.print();
+            // La copia para imprimir se obtiene del servidor.
         });
     }
 });
@@ -940,18 +941,13 @@ function calcularSubtotal() {
 }
 
 function calcularTotales() {
-    let subtotal = 0;
-    carrito.forEach(item => subtotal += item.subtotal);
-    
-    let ivaPorcentaje = 0.15;
-    if (window.configuracionGlobal && window.configuracionGlobal.iva_porcentaje !== undefined) {
-        ivaPorcentaje = parseFloat(window.configuracionGlobal.iva_porcentaje) / 100;
-    }
-    
-    const iva = subtotal * ivaPorcentaje;
-    return { subtotal, iva, total: subtotal + iva };
+    const round = value => Math.round((value + Number.EPSILON) * 100) / 100;
+    const subtotal = round(carrito.reduce((sum,item)=>sum+round(item.subtotal),0));
+    const config=window.configuracionGlobal || {};
+    const rates=window.tasasProductos || {};
+    const iva=config.fiscal_regimen === 'General' ? round(carrito.reduce((sum,item)=>sum+round(round(item.subtotal)*(Number(rates[String(item.id).split('_')[0]]) || 0)/100),0)) : 0;
+    return {subtotal,iva,total:round(subtotal+iva)};
 }
-
 function calcularTotal() {
     const { total } = calcularTotales();
     return total;
@@ -980,6 +976,19 @@ async function procesarFactura(esEncargo = false, datosExtra = null) {
             }
         }
 
+        if (window.esClienteOnline) {
+            const details=payload.encargo_detalles || {};
+            await API.solicitarCotizacion({
+                nombre:details.nombre_cliente, telefono:details.telefono,
+                fecha_entrega:details.fecha_entrega,
+                especificaciones:'Solicitud de pedido: '+carrito.map(i=>`${i.cantidad} × ${i.nombre}`).join('; ')+' '+(details.especificaciones || ''),
+                ruta_imagen_referencia:details.ruta_imagen_referencia
+            });
+            carrito=[];renderizarCarrito();
+            document.getElementById('encargo-modal').classList.add('hidden');
+            showToast('Solicitud enviada. La panadería confirmará disponibilidad, precio y pago.');
+            return;
+        }
         const data = await API.procesarFactura(payload);
         
         // Mostrar el ticket de factura
@@ -990,7 +999,7 @@ async function procesarFactura(esEncargo = false, datosExtra = null) {
         renderizarCarrito();
     } catch (error) {
         console.error(error);
-        showToast('❌ Error de conexión con el servidor', true);
+        showToast(error.message || 'No se pudo registrar la operación. Revise la conexión.', true);
     } finally {
         showLoading(false);
     }
@@ -1035,6 +1044,10 @@ function calcularDesgloseCambio(montoCambio) {
     return "<strong>Entregar:</strong><br>" + resultado.join('<br>');
 }
 function mostrarTicket(factura) {
+    document.getElementById('btn-imprimir-ticket').onclick=()=>window.open(factura.url_impresion, '_blank', 'noopener');
+    let notice=document.getElementById('ticket-aviso-fiscal');
+    if(!notice){notice=document.createElement('p');notice.id='ticket-aviso-fiscal';document.getElementById('ticket-printable').prepend(notice);}
+    notice.textContent=factura.aviso || '';
     // Llenar datos del ticket
     document.getElementById('ticket-numero').textContent = factura.numero_factura;
     document.getElementById('ticket-fecha').textContent = factura.fecha;
@@ -1050,7 +1063,7 @@ function mostrarTicket(factura) {
         // Nombre sin los ingredientes en paréntesis
         const nombreBase = item.nombre.split(' (')[0];
         row.innerHTML = `
-            <span class="ticket-product-name">${nombreBase}</span>
+            <span class="ticket-product-name">${escapeHTML(nombreBase)}</span>
             <span class="ticket-product-qty">x${item.cantidad}</span>
             <span class="ticket-product-price">C$${item.subtotal.toFixed(2)}</span>
         `;
@@ -1061,13 +1074,13 @@ function mostrarTicket(factura) {
             // Precio base
             const baseRow = document.createElement('div');
             baseRow.style.cssText = 'font-size: 0.75rem; color: #6b7280; padding-left: 0.75rem; padding-top: 0.1rem;';
-            baseRow.textContent = `  Base: C$${item.detalle_ingredientes.precio_base.toFixed(2)}`;
+            baseRow.textContent = `  Base: C$${(item.detalle_ingredientes.precio_base ?? item.precio).toFixed(2)}`;
             productosContainer.appendChild(baseRow);
 
             item.detalle_ingredientes.ingredientes.forEach(ing => {
                 const ingRow = document.createElement('div');
                 ingRow.style.cssText = 'display: flex; justify-content: space-between; font-size: 0.75rem; color: #10b981; padding-left: 0.75rem;';
-                ingRow.innerHTML = `<span>  + ${ing.nombre}</span><span>+C$${ing.precio.toFixed(2)}</span>`;
+                ingRow.innerHTML = `<span>  + ${escapeHTML(ing.nombre)}</span><span>+C$${ing.precio.toFixed(2)}</span>`;
                 productosContainer.appendChild(ingRow);
             });
         }
@@ -1166,7 +1179,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <strong style="font-size: 1.2rem; color: var(--success);">C$${cot.precio_cotizado.toFixed(2)}</strong>
                             </div>
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                                <button class="btn btn-primary btn-aceptar-cot" data-id="${cot.id}" data-precio="${cot.precio_cotizado}" data-specs="${escapeHTML(cot.especificaciones)}" data-img="${escapeHTML(cot.ruta_imagen || '')}" data-fecha="${escapeHTML(cot.fecha_entrega)}" style="flex: 1;">Aceptar y Pagar Adelanto</button>
+                                <button class="btn btn-primary btn-aceptar-cot" data-id="${cot.id}" data-precio="${cot.precio_cotizado}" data-specs="${escapeHTML(cot.especificaciones)}" data-img="${escapeHTML(cot.ruta_imagen || '')}" data-fecha="${escapeHTML(cot.fecha_entrega)}" style="flex: 1;">Solicitar confirmación</button>
                                 <button class="btn btn-outline btn-rechazar-cot" data-id="${cot.id}" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">Rechazar</button>
                                 <a href="https://wa.me/50588888888?text=Hola, tengo una duda sobre la cotización de mi pastel para el ${escapeHTML(cot.fecha_entrega)}" target="_blank" class="btn btn-outline" style="border-color: #25D366; color: #25D366;">WhatsApp</a>
                             </div>
@@ -1204,7 +1217,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     carrito.push(itemPersonalizado);
                     renderizarCarrito();
                     modalMisCotizaciones.classList.add('hidden');
-                    showToast('Pastel agregado al carrito. Procede a facturar el pago del 50% mínimo.');
+                    showToast('Pastel agregado al carrito. Envía la solicitud para confirmar el pedido con la panadería.');
                 });
             });
 

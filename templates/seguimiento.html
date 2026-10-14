@@ -278,6 +278,9 @@
         }
         .not-found h2 { color: var(--danger); margin-bottom: 0.75rem; font-size: 1.5rem; }
     </style>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/accessibility.css', v=1) }}">
 </head>
 <body>
     <div class="tracking-header">
