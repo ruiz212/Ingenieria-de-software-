@@ -9,6 +9,7 @@ from flask_login import login_required, current_user
 from app.admin import admin_bp
 from app.auth.decorators import roles_required
 from app.db import get_db_connection
+from app.services.business_time import business_now
 from app.services.fiscal_service import configuration, audit
 from app.services.contabilidad_service import ContabilidadService, ContabilidadError
 from app.services.validation import amount, required_text
@@ -122,7 +123,13 @@ def print_invoice(invoice_id):
             return 'Factura no encontrada',404
         if not row[0]:
             return 'Documento histórico sin copia fiscal guardada. Consulte el soporte original; no se reconstruyen datos fiscales retroactivamente.',409
-        return render_template('admin/factura_imprimir.html',invoice=json.loads(row[0]),state=row[1],reason=row[2])
+        try:
+            document = json.loads(row[0])
+        except (ValueError, TypeError):
+            return 'La copia fiscal guardada no se puede interpretar. Consulte el respaldo original.',409
+        if not isinstance(document, dict):
+            return 'La copia fiscal guardada tiene una estructura inválida. Consulte el respaldo original.',409
+        return render_template('admin/factura_imprimir.html',invoice=document,state=row[1],reason=row[2])
     finally:
         conn.close()
 
@@ -149,13 +156,18 @@ def void_invoice(invoice_id):
         if cursor.fetchone():
             raise ValueError('No se puede anular durante un arqueo pendiente.')
         doc=json.loads(row[1])
-        ContabilidadService.revertir_asiento(cursor,doc['asiento_id'],current_user.id,motivo,request.remote_addr)
+        voided_at=business_now()
+        ContabilidadService.revertir_asiento(cursor,doc['asiento_id'],current_user.id,motivo,request.remote_addr,fecha=voided_at)
+        if doc.get('numero_factura'):
+            cursor.execute("SELECT ID FROM AsientosDiario WHERE ReferenciaExterna=? AND Estado='Contabilizado'", f"SALDO-{doc['numero_factura']}")
+            for saldo_asiento in cursor.fetchall():
+                ContabilidadService.revertir_asiento(cursor,saldo_asiento[0],current_user.id,motivo,request.remote_addr,fecha=voided_at)
         # Devolución en la misma caja: original y contrapartida permanecen visibles.
         cursor.execute('SELECT MetodoPago,SUM(Monto) FROM Pagos WHERE FacturaID=? GROUP BY MetodoPago',invoice_id)
         for method,total in cursor.fetchall():
             if total>0:
                 cursor.execute("INSERT INTO Pagos(FacturaID,MetodoPago,Monto,NombreTransferente,MonedaRegistro) VALUES(?,?,?,?,'NIO')",invoice_id,method,-total,'Devolución por anulación')
-        cursor.execute("UPDATE Facturas SET EstadoFiscal='Anulada',AnuladaPor=?,FechaAnulacion=GETDATE(),MotivoAnulacion=? WHERE ID=?",current_user.id,motivo,invoice_id)
+        cursor.execute("UPDATE Facturas SET EstadoFiscal='Anulada',AnuladaPor=?,FechaAnulacion=?,MotivoAnulacion=? WHERE ID=?",current_user.id,voided_at,motivo,invoice_id)
         if row[3] and row[3]>1:
             cursor.execute('UPDATE Clientes SET TotalCompras=CASE WHEN TotalCompras>0 THEN TotalCompras-1 ELSE 0 END WHERE ID=?',row[3])
             cursor.execute('UPDATE Clientes SET NivelConfianzaID=CASE WHEN TotalCompras>=10 THEN 3 WHEN TotalCompras>=3 THEN 2 ELSE 1 END WHERE ID=?',row[3])
@@ -175,8 +187,9 @@ def void_invoice(invoice_id):
 @login_required
 @roles_required('Admin','SuperAdmin')
 def export_fiscal():
-    start=date.fromisoformat(request.args.get('desde',date.today().replace(day=1).isoformat()))
-    end=date.fromisoformat(request.args.get('hasta',date.today().isoformat()))
+    today_ni=business_now().date()
+    start=date.fromisoformat(request.args.get('desde',today_ni.replace(day=1).isoformat()))
+    end=date.fromisoformat(request.args.get('hasta',today_ni.isoformat()))
     if end<start:
         raise ValueError('El fin debe ser igual o posterior al inicio.')
     conn=get_db_connection()

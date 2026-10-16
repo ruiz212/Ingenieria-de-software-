@@ -339,51 +339,6 @@
                 cartObserver.observe(cartItemsContainer, { childList: true });
             }
 
-            // Mis Cotizaciones Logic
-            const btnMisCotizaciones = document.getElementById('btn-mis-cotizaciones');
-            const misCotizacionesModal = document.getElementById('mis-cotizaciones-modal');
-            const btnCerrarMisCotizaciones = document.getElementById('btn-cerrar-mis-cotizaciones');
-
-            if (btnMisCotizaciones) {
-                btnMisCotizaciones.addEventListener('click', async () => {
-                    misCotizacionesModal.classList.remove('hidden');
-                    const listContainer = document.getElementById('cotizaciones-cliente-list');
-                    listContainer.innerHTML = '<p style="text-align: center; color: #8b949e;">Cargando...</p>';
-                    try {
-                        const cotizaciones = await API.obtenerCotizacionesCliente();
-                        if (cotizaciones.length === 0) {
-                            listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #8b949e;">No has solicitado ningún pastel aún.</div>';
-                            return;
-                        }
-                        listContainer.innerHTML = '';
-                        cotizaciones.forEach(c => {
-                            const badgeColor = c.estado === 'Pendiente' ? '#ff7e5f' : (c.estado === 'Cotizado' ? '#1c92d2' : '#2ea043');
-                            listContainer.innerHTML += `
-                                <div style="background: rgba(107, 58, 42, 0.05); padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem; border: 1px solid rgba(107, 58, 42, 0.1);">
-                                    <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem; align-items: center;">
-                                        <strong style="color: var(--brand-cafe-dark); font-size: 1.1rem;">
-                                            Cotización #COT-${String(c.id).padStart(4, '0')} <br>
-                                            <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal;">Para entregar el ${c.fecha_entrega}</span>
-                                        </strong>
-                                        <span style="background: ${badgeColor}; color: white; padding: 0.3rem 0.6rem; border-radius: 50px; font-size: 0.75rem; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">${c.estado}</span>
-                                    </div>
-                                    <p style="font-size: 0.95rem; color: var(--text-main); margin: 0.5rem 0;">${escapeHTML(c.especificaciones)}</p>
-                                    ${c.precio_asignado ? `<p style="font-size: 1.15rem; color: var(--brand-dorado-dark); font-weight: bold; margin-top: 0.5rem;">C$${parseFloat(c.precio_asignado).toFixed(2)}</p>` : ''}
-                                </div>
-                            `;
-                        });
-                    } catch(err) {
-                        listContainer.innerHTML = '<p style="color: #ff4757; text-align:center;">Error al cargar cotizaciones.</p>';
-                    }
-                });
-            }
-
-            if (btnCerrarMisCotizaciones) {
-                btnCerrarMisCotizaciones.addEventListener('click', () => {
-                    misCotizacionesModal.classList.add('hidden');
-                });
-            }
-
             // Realizar Pedido Logic
             const btnRealizarPedido = document.getElementById('btn-realizar-pedido');
             const encargoModal = document.getElementById('encargo-modal');
@@ -408,8 +363,8 @@
             }
         });
     </script>
-    <script src="{{ url_for('static', filename='js/api_services.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/pos.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/api_services.js', v=6) }}"></script>
+    <script src="{{ url_for('static', filename='js/pos.js', v=6) }}"></script>
 
     <!-- Inyectar visuales por categoría (non-blocking) -->
     <script>

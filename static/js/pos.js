@@ -8,6 +8,7 @@ function escapeHTML(str) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
+window.escapeHTML = escapeHTML;
 
 let carrito = [];
 
@@ -37,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const descuento = parseFloat(card.dataset.descuento) || 0;
 
             if (descuento > 0) {
-                precio = precio - (precio * descuento / 100);
+                precio = Math.round((precio * (1 - descuento / 100) + Number.EPSILON) * 100) / 100;
             }
 
             if (categoria === 'Reposteria') {
@@ -91,13 +92,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Lógica del Botón "Solicitudes Web" (Cotizaciones pendientes)
+    // Lógica del Botón "Solicitudes Web" (Cotizaciones pendientes y cotizadas)
     const btnVerPedidosClientes = document.getElementById('btn-ver-pedidos-clientes');
     const pedidosClientesModal = document.getElementById('pedidos-clientes-modal');
     const btnCerrarPedidosClientes = document.getElementById('btn-cerrar-pedidos-clientes');
     const badgePedidos = document.getElementById('badge-pedidos');
 
-    if (btnVerPedidosClientes) {
+    if (btnVerPedidosClientes && !window.esClienteOnline) {
         btnVerPedidosClientes.addEventListener('click', async () => {
             const listContainer = document.getElementById('cotizaciones-pendientes-list');
             listContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Cargando...</p>';
@@ -105,9 +106,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 const cotizaciones = await API.obtenerCotizacionesPendientes();
+                    const pendientesCount = cotizaciones.filter(c => (c.estado || 'Pendiente') === 'Pendiente').length;
                     if (badgePedidos) {
-                        badgePedidos.textContent = cotizaciones.length;
-                        badgePedidos.style.display = cotizaciones.length > 0 ? 'flex' : 'none';
+                        badgePedidos.textContent = pendientesCount;
+                        badgePedidos.style.display = pendientesCount > 0 ? 'flex' : 'none';
                     }
 
                     if (cotizaciones.length === 0) {
@@ -119,31 +121,72 @@ document.addEventListener('DOMContentLoaded', () => {
                     cotizaciones.forEach(c => {
                         const div = document.createElement('div');
                         div.className = 'modal-section';
+                        const estadoCot = c.estado || 'Pendiente';
+                        const precioVal = c.precio_cotizado !== null && c.precio_cotizado !== undefined ? parseFloat(c.precio_cotizado).toFixed(2) : '';
                         
                         div.innerHTML = `
                             <div class="modal-section-header">
                                 <div>
                                     <h4>Solicitud #${c.id}</h4>
                                     <div class="modal-section-meta">
-                                        <strong>Cliente:</strong> ${c.cliente} <br>
-                                        <strong>Teléfono:</strong> ${c.telefono || 'No proporcionado'} <br>
-                                        <strong>Para:</strong> ${c.fecha_entrega}
+                                        <strong>Cliente:</strong> ${escapeHTML(c.cliente)} <br>
+                                        <strong>Teléfono:</strong> ${escapeHTML(c.telefono || 'No proporcionado')} <br>
+                                        <strong>Para:</strong> ${escapeHTML(c.fecha_entrega)}
+                                        ${precioVal ? `<br><strong>Precio cotizado:</strong> C$${precioVal}` : ''}
                                     </div>
                                 </div>
-                                <span class="modal-badge modal-badge--pending">Pendiente</span>
+                                <span class="modal-badge modal-badge--pending">${escapeHTML(estadoCot)}</span>
                             </div>
                             <div class="modal-specs-box">
                                 <strong>Especificaciones:</strong>
-                                ${c.especificaciones}
+                                ${escapeHTML(c.especificaciones)}
                             </div>
                             ${c.ruta_imagen ? `<a href="${c.ruta_imagen.startsWith('http') ? c.ruta_imagen : '/static/' + c.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary-color); text-decoration: underline;">Ver Foto de Referencia</a>` : ''}
                             
                             <div class="modal-action-row">
-                                <input type="number" id="precio-cotizacion-${c.id}" class="form-control" placeholder="Precio (C$)" min="0" step="0.01">
-                                <button type="button" class="modal-btn modal-btn--primary" onclick="cotizarPedido(${c.id})">Cotizar</button>
+                                <input type="number" id="precio-cotizacion-${c.id}" class="form-control" placeholder="Precio (C$)" min="0" step="0.01" value="${precioVal}">
+                                <button type="button" class="modal-btn modal-btn--primary" onclick="cotizarPedido(${c.id})">${precioVal ? 'Actualizar Precio' : 'Cotizar'}</button>
+                                ${precioVal ? `<button type="button" class="modal-btn modal-btn--info btn-facturar-cotizacion" data-cot='${escapeHTML(JSON.stringify(c))}'>Pasar a Caja</button>` : ''}
                                 <button type="button" class="modal-btn modal-btn--danger-outline" onclick="rechazarPedido(${c.id})">Rechazar</button>
                             </div>
                         `;
+                        const btnPasarCaja = div.querySelector('.btn-facturar-cotizacion');
+                        if (btnPasarCaja) {
+                            btnPasarCaja.addEventListener('click', () => {
+                                const precioNum = parseFloat(c.precio_cotizado);
+                                const itemPersonalizado = {
+                                    id: 'custom_' + c.id,
+                                    nombre: 'Pastel Personalizado (#COT-' + String(c.id).padStart(4, '0') + ')',
+                                    precio: precioNum,
+                                    categoria: 'Reposteria',
+                                    cantidad: 1,
+                                    subtotal: precioNum,
+                                    detalle_ingredientes: { ingredientes: [], notas_especiales: c.especificaciones || '' },
+                                    encargo_detalles: {
+                                        fecha_entrega: c.fecha_entrega || '',
+                                        especificaciones: c.especificaciones || '',
+                                        ruta_imagen_referencia: c.ruta_imagen || null,
+                                        telefono: c.telefono || '',
+                                        nombre_cliente: c.cliente !== 'Invitado' ? c.cliente : ''
+                                    },
+                                    es_custom: true
+                                };
+                                const existingIdx = carrito.findIndex(i => i.id === itemPersonalizado.id);
+                                if (existingIdx === -1) {
+                                    carrito.push(itemPersonalizado);
+                                } else {
+                                    carrito[existingIdx].cantidad += 1;
+                                    carrito[existingIdx].subtotal = Math.round((carrito[existingIdx].cantidad * precioNum + Number.EPSILON) * 100) / 100;
+                                }
+                                renderizarCarrito();
+                                pedidosClientesModal.classList.add('hidden');
+                                const inputNombre = document.getElementById('modal-nombre-cliente');
+                                const inputTel = document.getElementById('modal-telefono-cliente');
+                                if (inputNombre && c.cliente && c.cliente !== 'Invitado') inputNombre.value = c.cliente;
+                                if (inputTel && c.telefono) inputTel.value = c.telefono;
+                                showToast('Cotización cargada en el carrito para facturar.');
+                            });
+                        }
                         listContainer.appendChild(div);
                     });
             } catch (error) {
@@ -188,6 +231,28 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function confirmarAccionPOS({title, message, confirmText = 'Confirmar', danger = false}) {
+        return new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.className = 'pos-confirm-overlay';
+            overlay.innerHTML = `
+                <div class="pos-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-confirm-title">
+                    <div class="pos-confirm-icon ${danger ? 'danger' : ''}">${danger ? '!' : '?'}</div>
+                    <h3 id="pos-confirm-title">${title}</h3>
+                    <p>${message}</p>
+                    <div class="pos-confirm-actions">
+                        <button type="button" class="btn btn-outline" data-action="cancel">Cancelar</button>
+                        <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-action="confirm">${confirmText}</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            const close = result => { overlay.remove(); resolve(result); };
+            overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => close(false));
+            overlay.querySelector('[data-action="confirm"]').addEventListener('click', () => close(true));
+            overlay.addEventListener('click', event => { if (event.target === overlay) close(false); });
+        });
+    }
+
     // Funciones globales para cotizar o rechazar
     window.cotizarPedido = async function(id) {
         const input = document.getElementById(`precio-cotizacion-${id}`);
@@ -197,7 +262,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        if (confirm(`¿Asignar precio de C$${precio.toFixed(2)} a esta solicitud?`)) {
+        if (await confirmarAccionPOS({
+            title: 'Asignar precio',
+            message: `¿Asignar precio de C$${precio.toFixed(2)} a esta solicitud?`,
+            confirmText: 'Asignar precio'
+        })) {
             try {
                 const res = await fetch(`/api/cotizaciones/${id}/cotizar`, {
                     method: 'POST',
@@ -217,7 +286,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.rechazarPedido = async function(id) {
-        if (confirm('¿Estás seguro de que deseas rechazar esta solicitud?')) {
+        if (await confirmarAccionPOS({
+            title: 'Rechazar solicitud',
+            message: '¿Estás seguro de que deseas rechazar esta solicitud?',
+            confirmText: 'Rechazar',
+            danger: true
+        })) {
             try {
                 const res = await fetch(`/api/cotizaciones/${id}/rechazar`, {
                     method: 'POST'
@@ -301,7 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 pastelPersonalizadoModal.classList.add('hidden');
                 formPastel.reset();
             } catch (error) {
-                showToast('Error de conexión.', true);
+                showToast(error.message || 'No se pudo enviar la cotización.', true);
             }
             
             btnSubmit.disabled = false;
@@ -320,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const descuento = parseFloat(option.dataset.descuento) || 0;
 
             if (descuento > 0) {
-                precio = precio - (precio * descuento / 100);
+                precio = Math.round((precio * (1 - descuento / 100) + Number.EPSILON) * 100) / 100;
             }
 
             abrirModalIngredientes(id, nombre, precio, categoria);
@@ -346,8 +420,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 cb.checked = false;
             }
         });
-        document.getElementById('custom-ing-nombre').value = '';
-        document.getElementById('custom-ing-precio').value = '';
+        const customIngNombre = document.getElementById('custom-ing-nombre');
+        const customIngPrecio = document.getElementById('custom-ing-precio');
+        if (customIngNombre) customIngNombre.value = '';
+        if (customIngPrecio) customIngPrecio.value = '';
 
         actualizarTotalIngredientes();
         
@@ -595,11 +671,36 @@ document.addEventListener('DOMContentLoaded', () => {
         const adelantoContainer = document.getElementById('modal-adelanto').closest('.form-group');
         const esClienteOnline = adelantoContainer && adelantoContainer.style.display === 'none';
         
+        let especificaciones = null;
+        let ruta_imagen = null;
+        let telefonoCustom = null;
+        let fechaCustom = null;
+        let nombreCustom = null;
+        
+        const customItem = carrito.find(item => item.es_custom);
+        if (customItem && customItem.encargo_detalles) {
+            especificaciones = customItem.encargo_detalles.especificaciones;
+            ruta_imagen = customItem.encargo_detalles.ruta_imagen_referencia;
+            telefonoCustom = customItem.encargo_detalles.telefono;
+            fechaCustom = customItem.encargo_detalles.fecha_entrega;
+            nombreCustom = customItem.encargo_detalles.nombre_cliente;
+        }
+
+        const nombreFinal = nombreCliente || nombreCustom || '';
+        const telefonoFinal = telefonoCliente || telefonoCustom || '';
+        const fechaFinal = fecha || fechaCustom || '';
+
+        if (!nombreFinal || !telefonoFinal) {
+            showToast('Por favor, ingrese el nombre y teléfono del cliente', true);
+            return;
+        }
+
         let adelantoReal = adelanto;
+        let efectivoRecibido = null;
         if (esClienteOnline) {
             adelantoReal = 0; // Clientes online no pagan adelanto físico en el POS
         } else {
-            if (isNaN(adelantoReal) || !fecha) {
+            if (isNaN(adelantoReal) || !fechaFinal) {
                 showToast('Por favor, revisa el adelanto y la fecha de entrega', true);
                 return;
             }
@@ -609,41 +710,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     showToast('El efectivo recibido es menor al adelanto', true);
                     return;
                 }
+                efectivoRecibido = efectivo;
             }
         }
         
-        if (!fecha) {
+        if (!fechaFinal) {
             showToast('Por favor, selecciona una fecha de entrega', true);
             return;
         }
         
-        let especificaciones = null;
-        let ruta_imagen = null;
-        let telefonoCustom = null;
-        let fechaCustom = null;
-        
-        const customItem = carrito.find(item => item.es_custom);
-        if (customItem) {
-            especificaciones = customItem.encargo_detalles.especificaciones;
-            ruta_imagen = customItem.encargo_detalles.ruta_imagen_referencia;
-            telefonoCustom = customItem.encargo_detalles.telefono;
-            fechaCustom = customItem.encargo_detalles.fecha_entrega;
-        }
-        
+        const encargoDetalles = {
+            adelanto: adelantoReal,
+            saldo: Math.round((total - adelantoReal + Number.EPSILON) * 100) / 100,
+            metodo_adelanto: metodoPago,
+            monto_recibido: efectivoRecibido,
+            referencia: document.getElementById('modal-referencia-encargo')?.value.trim() || '',
+            fecha_entrega: fechaFinal,
+            nombre_cliente: nombreFinal,
+            telefono: telefonoFinal,
+            especificaciones: especificaciones,
+            ruta_imagen_referencia: ruta_imagen
+        };
+
         btnConfirmarEncargo.disabled = true;
         btnConfirmarEncargo.textContent = 'Procesando...';
         cerrarModal();
-        procesarFactura(true, {
-            adelanto: adelantoReal,
-            saldo: total - adelantoReal,
-            metodo_adelanto: metodoPago,
-            referencia: document.getElementById('modal-referencia-encargo')?.value.trim() || '',
-            fecha_entrega: fechaCustom ? fechaCustom : fecha,
-            nombre_cliente: nombreCliente,
-            telefono: telefonoCustom ? telefonoCustom : telefonoCliente,
-            especificaciones: especificaciones,
-            ruta_imagen_referencia: ruta_imagen
-        }).finally(() => {
+        procesarFactura(true, { encargo_detalles: encargoDetalles }).finally(() => {
             btnConfirmarEncargo.disabled = false;
             btnConfirmarEncargo.textContent = 'Confirmar Encargo';
         });
@@ -858,25 +950,26 @@ window.modificarCantidad = function(id, delta) {
         if (item.cantidad <= 0) {
             carrito = carrito.filter(i => i.id !== id);
         } else {
-            item.subtotal = item.cantidad * item.precio;
+            item.subtotal = Math.round((item.cantidad * item.precio + Number.EPSILON) * 100) / 100;
         }
         renderizarCarrito();
     }
 };
 
 function agregarAlCarrito(id, nombre, precio, categoria, detalleIngredientes = null) {
+    const precioRedondeado = Math.round((precio + Number.EPSILON) * 100) / 100;
     const itemExistente = carrito.find(item => item.id === id);
     if (itemExistente) {
         itemExistente.cantidad++;
-        itemExistente.subtotal = itemExistente.cantidad * itemExistente.precio;
+        itemExistente.subtotal = Math.round((itemExistente.cantidad * itemExistente.precio + Number.EPSILON) * 100) / 100;
     } else {
         carrito.push({
             id: id,
             nombre: nombre,
-            precio: precio,
+            precio: precioRedondeado,
             categoria: categoria,
             cantidad: 1,
-            subtotal: precio,
+            subtotal: precioRedondeado,
             detalle_ingredientes: detalleIngredientes
         });
     }
@@ -945,7 +1038,12 @@ function calcularTotales() {
     const subtotal = round(carrito.reduce((sum,item)=>sum+round(item.subtotal),0));
     const config=window.configuracionGlobal || {};
     const rates=window.tasasProductos || {};
-    const iva=config.fiscal_regimen === 'General' ? round(carrito.reduce((sum,item)=>sum+round(round(item.subtotal)*(Number(rates[String(item.id).split('_')[0]]) || 0)/100),0)) : 0;
+    const defaultRate = Object.values(rates).find(r => r !== null && r !== undefined) ?? 0;
+    const iva=config.fiscal_regimen === 'General' ? round(carrito.reduce((sum,item)=>{
+        const baseKey = String(item.id).split('_')[0];
+        const rate = baseKey === 'custom' ? Number(defaultRate) : (Number(rates[baseKey]) || 0);
+        return sum + round(round(item.subtotal) * rate / 100);
+    },0)) : 0;
     return {subtotal,iva,total:round(subtotal+iva)};
 }
 function calcularTotal() {
@@ -968,7 +1066,11 @@ async function procesarFactura(esEncargo = false, datosExtra = null) {
         };
 
         if (datosExtra) {
-            Object.assign(payload, datosExtra);
+            if (esEncargo && !datosExtra.encargo_detalles) {
+                payload.encargo_detalles = datosExtra;
+            } else {
+                Object.assign(payload, datosExtra);
+            }
         } else {
             if (!esEncargo) {
                 const metodo = document.getElementById('pago-metodo') ? document.getElementById('pago-metodo').value : 'Efectivo';
@@ -1140,102 +1242,238 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCerrarMisCot = document.getElementById('btn-cerrar-mis-cotizaciones');
     const listaMisCot = document.getElementById('cotizaciones-cliente-list');
 
-    if (btnMisCotizaciones) {
-        btnMisCotizaciones.addEventListener('click', async () => {
+    if (btnMisCotizaciones && modalMisCotizaciones) {
+        btnMisCotizaciones.addEventListener('click', async (e) => {
+            e.preventDefault();
             modalMisCotizaciones.classList.remove('hidden');
             await cargarMisCotizaciones();
         });
 
-        btnCerrarMisCot.addEventListener('click', () => {
-            modalMisCotizaciones.classList.add('hidden');
+        if (btnCerrarMisCot) {
+            btnCerrarMisCot.addEventListener('click', () => {
+                modalMisCotizaciones.classList.add('hidden');
+            });
+        }
+
+        modalMisCotizaciones.addEventListener('click', (e) => {
+            if (e.target === modalMisCotizaciones) {
+                modalMisCotizaciones.classList.add('hidden');
+            }
         });
     }
 
     async function cargarMisCotizaciones() {
-        listaMisCot.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Cargando...</p>';
+        if (!listaMisCot) return;
+        listaMisCot.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Cargando tus cotizaciones...</p>';
         try {
             const data = await API.obtenerCotizacionesCliente();
             
-            if (data.length === 0) {
-                listaMisCot.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No tienes cotizaciones activas.</p>';
+            if (!Array.isArray(data) || data.length === 0) {
+                listaMisCot.innerHTML = `
+                    <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
+                        <span style="font-size: 2.5rem; display: block; margin-bottom: 0.5rem;">🎂</span>
+                        <p style="font-weight: 600; color: var(--text-main); margin-bottom: 0.25rem;">No tienes cotizaciones activas</p>
+                        <p style="font-size: 0.9rem;">Cuando solicites un pastel personalizado, podrás ver aquí el estado y el precio asignado.</p>
+                    </div>`;
                 return;
             }
 
-            listaMisCot.innerHTML = data.map(cot => `
-                <div style="background: var(--background); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 1rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <strong>Para: ${escapeHTML(cot.fecha_entrega)}</strong>
-                        <span class="badge" style="background: ${cot.estado === 'Cotizada' ? 'var(--success)' : (cot.estado === 'Rechazada' ? 'var(--danger)' : 'var(--warning)')}; color: white; padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.8rem;">
-                            ${escapeHTML(cot.estado)}
+            listaMisCot.innerHTML = data.map(cot => {
+                const precioNum = (cot.precio_cotizado !== null && cot.precio_cotizado !== undefined) ? parseFloat(cot.precio_cotizado) : null;
+                const tienePrecio = precioNum !== null && !isNaN(precioNum);
+                const precioFormatted = tienePrecio ? precioNum.toFixed(2) : '';
+
+                let badgeColor = '#d97706';
+                let badgeText = 'Pendiente';
+                if (cot.estado === 'Cotizada') {
+                    badgeColor = '#2563eb';
+                    badgeText = 'Cotizada';
+                } else if (cot.estado === 'Aceptada') {
+                    badgeColor = '#16a34a';
+                    badgeText = 'Aceptada';
+                } else if (cot.estado === 'Rechazada') {
+                    badgeColor = '#dc2626';
+                    badgeText = 'Rechazada';
+                }
+
+                const specsEscaped = escapeHTML(cot.especificaciones || 'Sin detalles adicionales');
+                const fechaEntrega = escapeHTML(cot.fecha_entrega || 'Por coordinar');
+                const fotoUrl = cot.ruta_imagen ? (cot.ruta_imagen.startsWith('http') ? cot.ruta_imagen : ('/static/' + cot.ruta_imagen.replace(/^\/?(static\/)?/, ''))) : '';
+
+                return `
+                <div style="background: var(--background, #fff); padding: 1.25rem; border-radius: var(--radius-sm, 12px); border: 1px solid var(--border, #e5e7eb); margin-bottom: 1rem; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; gap: 0.5rem;">
+                        <div>
+                            <strong style="color: var(--brand-dark, #2d2424); font-size: 1.05rem; display: block;">
+                                Cotización #COT-${String(cot.id).padStart(4, '0')}
+                            </strong>
+                            <span style="font-size: 0.85rem; color: var(--text-muted, #6b7280);">
+                                📅 Entrega estimada: <strong>${fechaEntrega}</strong>
+                            </span>
+                        </div>
+                        <span style="background: ${badgeColor}; color: white; padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+                            ${badgeText}
                         </span>
                     </div>
-                    <p style="font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--text-main);">${escapeHTML(cot.especificaciones).replace(/\n/g, '<br>')}</p>
-                    ${cot.ruta_imagen ? `<a href="${escapeHTML(cot.ruta_imagen.startsWith('http') ? cot.ruta_imagen : '/static/' + cot.ruta_imagen)}" target="_blank" style="font-size: 0.85rem; color: var(--primary);">Ver foto de referencia</a>` : ''}
-                    
-                    ${cot.estado === 'Cotizada' ? `
-                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                                <span>Precio Asignado:</span>
-                                <strong style="font-size: 1.2rem; color: var(--success);">C$${cot.precio_cotizado.toFixed(2)}</strong>
+
+                    <p style="font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--text-main, #374151); line-height: 1.45; white-space: pre-line;">
+                        ${specsEscaped}
+                    </p>
+
+                    ${fotoUrl ? `
+                        <div style="margin-bottom: 0.75rem;">
+                            <a href="${escapeHTML(fotoUrl)}" target="_blank" rel="noopener noreferrer" style="font-size: 0.85rem; color: var(--primary, #d97706); text-decoration: underline; font-weight: 500;">
+                                📷 Ver imagen de referencia adjunta
+                            </a>
+                        </div>
+                    ` : ''}
+
+                    ${cot.estado === 'Cotizada' && tienePrecio ? `
+                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border, #e5e7eb);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
+                                <span style="font-weight: 600; color: var(--text-main, #374151);">Precio asignado por panadería:</span>
+                                <strong style="font-size: 1.3rem; color: var(--brand-dorado-dark, #b45309);">C$ ${precioFormatted}</strong>
                             </div>
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                                <button class="btn btn-primary btn-aceptar-cot" data-id="${cot.id}" data-precio="${cot.precio_cotizado}" data-specs="${escapeHTML(cot.especificaciones)}" data-img="${escapeHTML(cot.ruta_imagen || '')}" data-fecha="${escapeHTML(cot.fecha_entrega)}" style="flex: 1;">Solicitar confirmación</button>
-                                <button class="btn btn-outline btn-rechazar-cot" data-id="${cot.id}" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">Rechazar</button>
-                                <a href="https://wa.me/50588888888?text=Hola, tengo una duda sobre la cotización de mi pastel para el ${escapeHTML(cot.fecha_entrega)}" target="_blank" class="btn btn-outline" style="border-color: #25D366; color: #25D366;">WhatsApp</a>
+                                <button type="button" class="btn btn-primary btn-aceptar-cot" 
+                                    data-id="${cot.id}" 
+                                    data-precio="${precioFormatted}" 
+                                    data-specs="${escapeHTML(cot.especificaciones || '')}" 
+                                    data-img="${escapeHTML(cot.ruta_imagen || '')}" 
+                                    data-fecha="${fechaEntrega}" 
+                                    style="flex: 2; min-width: 170px;">
+                                    ✓ Aceptar y agregar al carrito
+                                </button>
+                                <button type="button" class="btn btn-outline btn-rechazar-cot" 
+                                    data-id="${cot.id}" 
+                                    style="color: var(--danger, #dc2626); border-color: rgba(220, 38, 38, 0.3); flex: 1;">
+                                    Rechazar
+                                </button>
+                                <a href="https://wa.me/50588888888?text=${encodeURIComponent('Hola, tengo una consulta sobre mi cotización #COT-' + String(cot.id).padStart(4, '0') + ' para el ' + (cot.fecha_entrega || ''))}" 
+                                   target="_blank" rel="noopener noreferrer" class="btn btn-outline" style="border-color: #25D366; color: #25D366;">
+                                    WhatsApp
+                                </a>
                             </div>
                         </div>
                     ` : ''}
-                </div>
-            `).join('');
 
-            // Event listeners para los botones de aceptar/rechazar
-            document.querySelectorAll('.btn-aceptar-cot').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const id = e.target.dataset.id;
-                    const precio = parseFloat(e.target.dataset.precio);
-                    const specs = e.target.dataset.specs;
-                    const img = e.target.dataset.img;
-                    const fecha = e.target.dataset.fecha;
-                    
-                    // Agregar al carrito
-                    const itemPersonalizado = {
-                        id: 'custom_' + id,
-                        nombre: 'Pastel Personalizado',
-                        precio: precio,
-                        categoria: 'Reposteria',
-                        cantidad: 1,
-                        subtotal: precio,
-                        detalle_ingredientes: { ingredientes: [], notas_especiales: '' },
-                        encargo_detalles: {
-                            fecha_entrega: fecha,
-                            especificaciones: specs,
-                            ruta_imagen_referencia: img || null,
-                            telefono: null
-                        },
-                        es_custom: true
-                    };
-                    carrito.push(itemPersonalizado);
-                    renderizarCarrito();
-                    modalMisCotizaciones.classList.add('hidden');
-                    showToast('Pastel agregado al carrito. Envía la solicitud para confirmar el pedido con la panadería.');
+                    ${cot.estado === 'Aceptada' && tienePrecio ? `
+                        <div style="margin-top: 0.75rem; padding: 0.6rem 0.85rem; background: rgba(22, 163, 74, 0.08); border-radius: 8px; font-size: 0.85rem; color: #15803d; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                            <span>✓ Cotización aceptada (C$ ${precioFormatted})</span>
+                            <button type="button" class="btn btn-outline btn-aceptar-cot" 
+                                data-id="${cot.id}" 
+                                data-precio="${precioFormatted}" 
+                                data-specs="${escapeHTML(cot.especificaciones || '')}" 
+                                data-img="${escapeHTML(cot.ruta_imagen || '')}" 
+                                data-fecha="${fechaEntrega}" 
+                                style="font-size: 0.8rem; padding: 0.3rem 0.6rem;">
+                                Agregar de nuevo al carrito
+                            </button>
+                        </div>
+                    ` : ''}
+
+                    ${cot.estado === 'Pendiente' ? `
+                        <div style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(217, 119, 6, 0.08); border-radius: 6px; font-size: 0.85rem; color: #b45309; display: flex; justify-content: space-between; align-items: center;">
+                            <span>Estamos valorando tu diseño. En breve recibirás el precio.</span>
+                            <button type="button" class="btn btn-outline btn-rechazar-cot" data-id="${cot.id}" style="color: var(--danger, #dc2626); font-size: 0.75rem; padding: 0.25rem 0.5rem;">Cancelar</button>
+                        </div>
+                    ` : ''}
+                </div>
+                `;
+            }).join('');
+
+            // Event listeners para los botones de aceptar cotización
+            listaMisCot.querySelectorAll('.btn-aceptar-cot').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const targetBtn = e.currentTarget;
+                    const id = targetBtn.dataset.id;
+                    const precio = parseFloat(targetBtn.dataset.precio || '0');
+                    const specs = targetBtn.dataset.specs || '';
+                    const img = targetBtn.dataset.img || '';
+                    const fecha = targetBtn.dataset.fecha || '';
+
+                    const originalText = targetBtn.textContent;
+                    targetBtn.disabled = true;
+                    targetBtn.textContent = 'Procesando...';
+
+                    try {
+                        // Notificar aceptación al servidor si aún no estaba aceptada
+                        await API.aceptarCotizacion(id);
+
+                        // Agregar al carrito
+                        const itemPersonalizado = {
+                            id: 'custom_' + id,
+                            nombre: 'Pastel Personalizado (#COT-' + String(id).padStart(4, '0') + ')',
+                            precio: precio,
+                            categoria: 'Reposteria',
+                            cantidad: 1,
+                            subtotal: precio,
+                            detalle_ingredientes: { ingredientes: [], notas_especiales: specs },
+                            encargo_detalles: {
+                                fecha_entrega: fecha,
+                                especificaciones: specs,
+                                ruta_imagen_referencia: img || null,
+                                telefono: null
+                            },
+                            es_custom: true
+                        };
+
+                        const existingIdx = carrito.findIndex(i => i.id === itemPersonalizado.id);
+                        if (existingIdx === -1) {
+                            carrito.push(itemPersonalizado);
+                        } else {
+                            carrito[existingIdx].cantidad += 1;
+                            carrito[existingIdx].subtotal = carrito[existingIdx].cantidad * precio;
+                        }
+
+                        renderizarCarrito();
+                        modalMisCotizaciones.classList.add('hidden');
+
+                        // Abrir drawer de carrito para que el cliente proceda
+                        const cartDrawer = document.getElementById('cartDrawer');
+                        const cartOverlay = document.getElementById('cartOverlay');
+                        if (cartDrawer) cartDrawer.classList.add('open');
+                        if (cartOverlay) cartOverlay.classList.add('active');
+
+                        showToast('¡Cotización aceptada! Tu pastel ha sido agregado al carrito.');
+                    } catch (err) {
+                        console.error('Error al aceptar cotización:', err);
+                        showToast(err.message || 'No se pudo aceptar la cotización.', true);
+                        targetBtn.disabled = false;
+                        targetBtn.textContent = originalText;
+                    }
                 });
             });
 
-            document.querySelectorAll('.btn-rechazar-cot').forEach(btn => {
+            // Event listeners para los botones de rechazar cotización
+            listaMisCot.querySelectorAll('.btn-rechazar-cot').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
-                    if (confirm('¿Seguro que deseas rechazar y cancelar esta cotización?')) {
-                        const id = e.target.dataset.id;
-                        await fetch(`/api/cotizaciones/${id}/rechazar`, { method: 'POST' });
-                        showToast('Cotización rechazada');
-                        cargarMisCotizaciones();
+                    const id = e.currentTarget.dataset.id;
+                    if (confirm('¿Seguro que deseas rechazar o cancelar esta cotización?')) {
+                        try {
+                            await API.rechazarPedido(id);
+                            showToast('Cotización rechazada.');
+                            await cargarMisCotizaciones();
+                        } catch (err) {
+                            console.error('Error al rechazar cotización:', err);
+                            showToast(err.message || 'Error al rechazar la cotización.', true);
+                        }
                     }
                 });
             });
 
         } catch (error) {
-            listaMisCot.innerHTML = '<p style="text-align: center; color: var(--danger);">Error al cargar las cotizaciones.</p>';
+            console.error('Error en cargarMisCotizaciones:', error);
+            const msg = (error && error.message) ? error.message : 'Error al cargar cotizaciones.';
+            listaMisCot.innerHTML = `
+                <div style="text-align: center; padding: 2rem 1rem;">
+                    <p style="color: #ff4757; font-weight: 500; margin-bottom: 0.8rem;">${escapeHTML(msg)}</p>
+                    <button type="button" class="btn btn-outline" id="btn-reintentar-cot" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">↻ Reintentar</button>
+                </div>`;
+            document.getElementById('btn-reintentar-cot')?.addEventListener('click', cargarMisCotizaciones);
         }
     }
+    window.cargarMisCotizaciones = cargarMisCotizaciones;
 
     // Modal Recepción: Pedidos Clientes
     const btnPedidosClientes = document.getElementById('btn-pedidos-clientes');

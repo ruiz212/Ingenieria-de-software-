@@ -2,6 +2,7 @@
 {% block title %}Control fiscal | Brajher's Cake{% endblock %}
 {% block page_title %}Control fiscal{% endblock %}
 {% block content %}
+<p><a class="btn btn-outline" href="{{ url_for('admin.dgi_dashboard') }}">DGI / Diagnóstico y simulación por período</a></p>
 <div class="fiscal-header"><div><p class="fiscal-muted">Facturación, impuestos y trazabilidad · Córdobas (C$)</p></div><a href="{{ url_for('admin.export_fiscal') }}" class="btn btn-primary">Exportar registro del mes</a></div>
 {% if config.get('fiscal_regimen','Pendiente') == 'Pendiente' %}<div class="fiscal-notice" role="status"><strong>Configuración tributaria pendiente</strong><br>Las nuevas ventas se identifican como comprobantes de prueba sin validez fiscal. Confirme el régimen, los datos del emisor y la autorización antes de operar fiscalmente.</div>{% endif %}
 <div class="fiscal-card"><h2>Datos del emisor</h2><p class="fiscal-muted">Registrar una referencia no equivale a obtener autorización. La DGI debe revisar y autorizar el uso del sistema. Esta instalación utiliza una sola serie FAC; no admite sucursales independientes.</p>

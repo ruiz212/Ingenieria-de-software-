@@ -1,0 +1,19 @@
+{% extends 'admin/dgi/layout.html' %}
+{% block dgi_content %}
+{% set labels={'NumeroFactura':'Número de factura','FechaHora':'Fecha original en la base','FechaComercial':'Fecha comercial del comprobante','CriterioFecha':'Evidencia de fecha','FechaAnulacion':'Anulación','Subtotal':'Base registrada','IVA':'IVA registrado','Total':'Total registrado','EstadoFiscal':'Estado del documento','MotivoAnulacion':'Motivo de anulación','FacturaProveedor':'Comprobante del proveedor','MateriaPrimaID':'Materia prima ID','CostoTotal':'Costo registrado','IVADocumentado':'IVA documentado','NumeroComprobante':'Número de comprobante','Descripcion':'Descripción','ReferenciaExterna':'Referencia de origen'} %}
+<section class="dgi-card">
+  <h2>{{ kind|capitalize }} #{{ source_id }}</h2>
+  <p>Datos actuales del registro de origen. Cada diagnóstico conserva su propia instantánea; consultar esta pantalla no modifica los documentos.</p>
+  <dl class="dgi-source">
+    {% for key,value in source.items() %}<dt>{{ labels.get(key,key) }}</dt><dd>{% if key in ['Fecha','FechaHora','FechaAnulacion','FechaComercial'] and value %}{{ value|dgi_date }}{% elif key in ['Subtotal','IVA','Total','CostoTotal','IVADocumentado'] and value is not none %}{{ value|dgi_money }}{% else %}{{ value if value is not none else 'Sin información' }}{% endif %}</dd>{% endfor %}
+  </dl>
+  {% if details %}
+  <h3>Detalle del registro</h3>
+  <div class="dgi-table"><table><thead><tr>{% for key in details[0] %}<th>{{ labels.get(key,key) }}</th>{% endfor %}</tr></thead><tbody>
+    {% for line in details %}<tr>{% for key,value in line.items() %}<td>{% if key in ['PrecioUnitario','Subtotal','Debe','Haber'] %}{{ value|dgi_money }}{% else %}{{ value if value is not none else 'Sin información' }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+  <div class="dgi-actions"><a class="btn btn-primary" href="{{ url_for(owner) }}">Ir al módulo de origen</a>{% if kind=='factura' %}<a class="btn btn-outline" href="{{ url_for('admin.print_invoice',invoice_id=source_id) }}">Ver comprobante conservado</a>{% elif kind=='asiento' %}<a class="btn btn-outline" href="{{ url_for('admin.print_journal',entry_id=source_id) }}">Ver comprobante contable</a>{% endif %}</div>
+  <p class="dgi-muted">Las facturas emitidas se corrigen mediante el flujo autorizado, con soporte y trazabilidad. DGI no las edita ni borra automáticamente.</p>
+</section>
+{% endblock %}

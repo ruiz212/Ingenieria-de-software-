@@ -18,7 +18,8 @@ Diseñado utilizando SCRUM.
 
 La entrega revisada conserva ocho módulos y desarrolla los contenidos RUP
 4.1 a 4.10 con correspondencia a los cortes anteriores.
-Consulte [el documento corregido](Documentacion/Corte4/Proyecto%20Corte%204%20UNIDAD%20IV%20corregido%20-%20Brajhers%20Cake.docx)
+Consulte [el documento corregido (DOCX)](Documentacion/Corte4/Proyecto%20Corte%204%20UNIDAD%20IV%20corregido%20-%20Brajhers%20Cake.docx),
+[el documento corregido (PDF)](Documentacion/Corte4/Proyecto%20Corte%204%20UNIDAD%20IV%20corregido%20-%20Brajhers%20Cake.pdf)
 y [la revisión del alcance y sus pruebas](Documentacion/Corte4/REVISION_ALCANCE.md).
 Las versiones anteriores del Corte 4 se conservan como antecedentes.
 
@@ -33,6 +34,12 @@ Las versiones anteriores del Corte 4 se conservan como antecedentes.
 Los cambios fiscales requieren ejecutar `scripts/migrate_fiscal.py` antes de iniciar
 esta versión contra una base existente. No ejecutar `database/esquema.sql` sobre
 datos reales: ese archivo reconstruye tablas.
+
+En una base que aún no tenga la evolución contable V2, ejecute primero
+`python scripts/migrate_contabilidad_v2.py` y después
+`python scripts/migrate_fiscal.py --connection-env DB_CONNECTION_STRING`.
+Ambas migraciones son aditivas y deben ejecutarse contra la misma conexión que usa
+la aplicación (incluido `.env`).
 
 Consulte [la revisión y el estado de activación](Documentacion/Revision_DGI/REVISION.md)
 y [el manual de operación y despliegue](Documentacion/Revision_DGI/MANUAL.md).
@@ -49,6 +56,27 @@ Las pruebas SQL requieren `TEST_DB_CONNECTION_STRING` apuntando a una base
 aislada cuyo nombre empiece por `PanaderiaQA_`; insertan datos ficticios y rechazan
 otros nombres de base. Requieren el esquema existente y sus migraciones previas.
 Instale `pytest` además de las dependencias de la aplicación.
+
+## Gestión tributaria DGI — preparación académica
+
+**Versión 1.1:** análisis interno con perfil pendiente, diagnósticos descargables,
+validación por Admin y fechas comerciales consistentes entre ventas y asientos.
+Consulte [la revisión funcional y sus 131 pruebas](docs/dgi/REVISION_FUNCIONAL.md).
+En revisiones antiguas, use **Revalidar fuentes** para aplicar las nuevas reglas.
+
+El menú **DGI / Gestión tributaria** (`/admin/dgi`) integra perfil, períodos,
+consolidación de ventas/compras, conciliación contable, hallazgos, revisión,
+aprobación interna, historial y XLSX no oficial. Reutiliza el sistema Flask/SQL
+Server existente. No presenta declaraciones ni calcula obligaciones sin validar.
+
+Después de las migraciones contables/fiscales previas, ejecute
+`python scripts/migrate_dgi.py --connection-env TEST_DB_CONNECTION_STRING`
+en una base de pruebas. Esta entrega no aplica la migración a Azure.
+Consulte [el manual y la demostración](docs/dgi/MANUAL.md),
+[el mapa de integración](docs/dgi/MAPA_INTEGRACION.md),
+[la matriz normativa](docs/dgi/MATRIZ_NORMATIVA.md) y
+[el informe de validación](docs/dgi/ENTREGA.md).
+Dependencias de pruebas: `python -m pip install -r requirements-dev.txt`.
 
 ## Distribución de Ramas y Estructuración de Versiones
 

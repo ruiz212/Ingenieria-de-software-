@@ -9,6 +9,7 @@ from app.db import get_db_connection
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime, timedelta
+from app.services.business_time import business_now
 
 @admin_bp.route('/dashboard')
 @login_required
@@ -17,10 +18,12 @@ def dashboard():
     """Dashboard Financiero de la Panadería."""
     conn = get_db_connection()
     cursor = conn.cursor()
+    hoy_ni = business_now().date()
 
     # 1. Ingresos totales del día y Ticket Promedio
     cursor.execute(
-        "SELECT ISNULL(SUM(Total), 0), ISNULL(COUNT(ID), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND CONVERT(date, FechaHora) = CONVERT(date, GETDATE())"
+        "SELECT ISNULL(SUM(Total), 0), ISNULL(COUNT(ID), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND CONVERT(date, FechaHora) = ?",
+        hoy_ni
     )
     row_ventas = cursor.fetchone()
     ventas_hoy = float(row_ventas[0])
@@ -29,10 +32,11 @@ def dashboard():
 
     # 2. Tasa de Completitud de Encargos
     cursor.execute(
-        "SELECT ISNULL(SUM(CASE WHEN Estado = 'Entregado' THEN 1 ELSE 0 END), 0) AS Entregados, "
+        "SELECT ISNULL(SUM(CASE WHEN e.Estado = 'Entregado' THEN 1 ELSE 0 END), 0) AS Entregados, "
         "       ISNULL(COUNT(*), 0) AS Totales "
         "FROM Encargos e JOIN Facturas f ON e.FacturaID = f.ID "
-        "WHERE CONVERT(date, f.FechaHora) = CONVERT(date, GETDATE())"
+        "WHERE f.EstadoFiscal='Emitida' AND CONVERT(date, f.FechaHora) = ?",
+        hoy_ni
     )
     row_encargos = cursor.fetchone()
     encargos_entregados = int(row_encargos.Entregados)
@@ -46,9 +50,10 @@ def dashboard():
         "FROM DetalleFacturas df "
         "JOIN Productos p ON df.ProductoID = p.ID "
         "JOIN Facturas f ON df.FacturaID = f.ID AND f.EstadoFiscal='Emitida' "
-        "WHERE CONVERT(date, f.FechaHora) = CONVERT(date, GETDATE()) "
+        "WHERE CONVERT(date, f.FechaHora) = ? "
         "GROUP BY p.Nombre "
-        "ORDER BY Cantidad DESC"
+        "ORDER BY Cantidad DESC",
+        hoy_ni
     )
     top_productos = [{'nombre': r.Nombre, 'cantidad': r.Cantidad} for r in cursor.fetchall()]
 
@@ -59,9 +64,10 @@ def dashboard():
         "JOIN Productos p ON df.ProductoID = p.ID "
         "JOIN Categorias c ON p.CategoriaID = c.ID "
         "JOIN Facturas f ON df.FacturaID = f.ID AND f.EstadoFiscal='Emitida' "
-        "WHERE CONVERT(date, f.FechaHora) = CONVERT(date, GETDATE()) "
+        "WHERE CONVERT(date, f.FechaHora) = ? "
         "GROUP BY c.Nombre "
-        "ORDER BY TotalGenerado DESC"
+        "ORDER BY TotalGenerado DESC",
+        hoy_ni
     )
     ventas_categoria = [{'categoria': r.Nombre, 'total': float(r.TotalGenerado)} for r in cursor.fetchall()]
 

@@ -64,6 +64,49 @@
 .fw-700 { font-weight: 700; }
 .fw-800 { font-weight: 800; }
 
+/* Monetary settings */
+.exchange-rate-field {
+    padding: 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--brand-dorado) 42%, var(--border));
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--brand-dorado) 8%, var(--surface));
+}
+
+.input-with-prefix {
+    display: flex;
+    align-items: center;
+    max-width: 220px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.input-with-prefix span {
+    padding: 0 0.75rem;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.input-with-prefix .form-input {
+    min-width: 0;
+    border: 0;
+    border-left: 1px solid var(--border-light);
+    border-radius: 0;
+}
+
+.input-with-prefix:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 16%, transparent);
+}
+
+.exchange-rate-source {
+    display: block;
+    margin-top: 0.45rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
 /* Legacy tab support */
 .tab-btn {
     background: none;
@@ -106,4 +149,5 @@
 
 @media (max-width: 480px) {
     .metrics-grid { grid-template-columns: 1fr; }
+    .input-with-prefix { max-width: none; }
 }

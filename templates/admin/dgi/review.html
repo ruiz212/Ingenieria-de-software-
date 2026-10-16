@@ -1,0 +1,143 @@
+{% extends 'admin/dgi/layout.html' %}
+{% block dgi_content %}
+<div class="dgi-heading">
+  <div><p class="dgi-eyebrow">{{ data.perfil.fiscal_razon_social or "Brajher's Cake · perfil fiscal pendiente" }}</p>
+    <h2>Diagnóstico {{ data.desde|dgi_date }} al {{ data.hasta|dgi_date }}</h2>
+    <p>{{ review.Obligacion }} · revisión #{{ review.ID }}, versión {{ review.Version }} · <span class="dgi-badge">{{ review.Estado }}</span></p>
+  </div>
+  <form method="post" action="{{ url_for('admin.dgi_create_review') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="periodo_id" value="{{ review.PeriodoID }}"><input type="hidden" name="obligacion" value="{{ review.Obligacion }}">
+    <button class="btn btn-primary" type="submit" {% if period.Estado=='Cerrado' %}disabled{% endif %}>Revalidar fuentes</button>
+  </form>
+</div>
+{% if not fresh %}
+<div class="dgi-error" role="alert"><strong>{{ 'Hay una nueva versión de las reglas internas.' if old_engine else 'Las fuentes de esta revisión cambiaron.' }}</strong>
+  {{ 'Revalide para separar los pendientes fiscales de los errores de datos y aplicar la revisión de fechas.' if old_engine else 'Los datos conservados debajo son históricos. Revalide antes de aprobar o exportar.' }}
+  {% if period.Estado=='Cerrado' %}<a href="{{ url_for('admin.dgi_dashboard',periodo=period.ID) }}">Reabrir la preparación del período</a>.{% endif %}
+</div>
+{% endif %}
+<ol class="dgi-steps" aria-label="Pasos del análisis interno">
+  <li><strong>1. Analizar</strong><span>Fuentes y conciliación</span></li>
+  <li><a href="#hallazgos"><strong>2. Revisar</strong></a><span>{{ result.bloqueantes }} {{ 'error' if result.bloqueantes==1 else 'errores' }} de datos</span></li>
+  <li><a href="#revision"><strong>3. Validar internamente</strong></a><span>{{ 'Registrado' if review.AprobadoPor else 'Revisión humana' }}</span></li>
+  <li><a href="#revision"><strong>4. Exportar</strong></a><span>Diagnóstico o informe validado</span></li>
+</ol>
+{% if result.bloqueantes %}
+<div class="dgi-error" role="alert"><strong>Hay {{ result.bloqueantes }} {{ 'error' if result.bloqueantes==1 else 'errores' }} que revisar en los datos.</strong>
+  Puede descargar el diagnóstico para investigarlos. La validación y el informe aprobado permanecen bloqueados. Los registros con importes inválidos se excluyen del resumen.
+</div>
+{% elif result.advertencias %}
+<div class="dgi-notice"><strong>Los importes no tienen errores bloqueantes.</strong> Revise {{ result.advertencias }} {{ 'advertencia' if result.advertencias==1 else 'advertencias' }} antes de validar internamente.</div>
+{% else %}
+<div class="dgi-status" role="status"><strong>Sin errores en las comprobaciones de los datos.</strong>
+  {% if configuration %}El perfil fiscal tiene información pendiente; esto no equivale a una diferencia contable.{% else %}Puede registrar la revisión humana y continuar.{% endif %}
+</div>
+{% endif %}
+<div class="dgi-metrics">
+  <div class="dgi-metric"><span>Base de ventas</span><strong>{{ result.totales.ventas_base|dgi_money }}</strong><small>Sin IVA registrado</small></div>
+  <div class="dgi-metric"><span>Ingresos contables</span><strong>{{ result.totales.ingresos_contables|dgi_money }}</strong><small>Haber − Debe, clase Ingreso</small></div>
+  <div class="dgi-metric {% if result.totales.diferencia|float != 0 %}dgi-metric-alert{% endif %}"><span>Diferencia por conciliar</span><strong>{{ result.totales.diferencia|dgi_money }}</strong><small>{{ 'Revisar documentos de origen' if result.totales.diferencia|float != 0 else 'Las cifras coinciden' }}</small></div>
+  <div class="dgi-metric"><span>Comprobaciones de datos</span><strong>{{ result.bloqueantes }} {{ 'error' if result.bloqueantes==1 else 'errores' }}</strong><small>{{ result.advertencias }} {{ 'advertencia' if result.advertencias==1 else 'advertencias' }}{% if configuration %} · perfil fiscal pendiente{% endif %}</small></div>
+</div>
+<nav class="dgi-nav" aria-label="Secciones de la revisión"><a href="#hallazgos">Comprobaciones</a><a href="#consolidacion">Ventas y compras</a><a href="#contabilidad">Asientos</a><a href="#revision">Revisión y reportes</a><a href="#historial">Historial</a></nav>
+{% if configuration %}
+<section class="dgi-card dgi-config-pending"><h3>Configuración pendiente · permite continuar el análisis interno</h3>
+  {% for f in configuration %}<p>{{ f.detalle }}</p>{% endfor %}
+  <p>No ingrese datos ficticios para eliminar el aviso. Puede guardar el avance del perfil, revisar los registros y generar reportes internos.</p>
+  <a class="btn btn-outline" href="{{ url_for('admin.dgi_dashboard',periodo=period.ID,editar='1') }}#perfil">Completar o guardar avance del perfil</a>
+</section>
+{% endif %}
+<section id="hallazgos" class="dgi-card">
+  <h3>Comprobaciones de ventas, compras y contabilidad</h3>
+  <p>Las inconsistencias de datos se muestran aquí. Los pendientes de configuración y los límites del análisis se consultan por separado.</p>
+  {% if checks %}
+  <div class="dgi-form"><label>Severidad<select id="dgi-severity"><option value="">Todas</option><option>ERROR_BLOQUEANTE</option><option>ADVERTENCIA</option><option>INFORMATIVO</option></select></label><label>Buscar regla o documento<input type="search" id="dgi-search" placeholder="Número, regla o palabra"></label></div>
+  <p class="dgi-muted" id="dgi-filter-count" aria-live="polite"></p>
+  <div class="dgi-table"><table id="dgi-findings"><thead><tr><th>Regla</th><th>Qué revisar y cómo continuar</th><th>Origen</th><th>Seguimiento</th></tr></thead><tbody>
+  {% for f in checks %}
+  <tr data-severity="{{ f.severidad }}">
+    <td><span class="dgi-badge {{ 'dgi-danger' if f.severidad=='ERROR_BLOQUEANTE' else '' }}">{{ f.severidad }}</span><br><strong>{{ f.nombre }}</strong><br><small>{{ f.codigo }}</small></td>
+    <td>{{ f.detalle }}<p><strong>Acción:</strong> {{ f.accion }}</p>{% if f.diferencia is not none %}<strong>{{ f.diferencia|dgi_money }}</strong>{% endif %}</td>
+    <td><a href="{{ f.enlace }}">{{ (f.tipo|capitalize ~ ' #' ~ f.origen_id) if f.tipo else 'Revisar documentos' }}</a></td>
+    <td>{% for c in comments if c.Hallazgo==f.id %}<p class="dgi-comment">{{ c.Comentario }}<br><small>Usuario #{{ c.UsuarioID }} · {{ c.Fecha|dgi_time }}</small></p>{% endfor %}
+      {% if fresh and review.Estado in ['BORRADOR','EN_REVISION'] %}
+      <form action="{{ url_for('admin.dgi_comment',review_id=review.ID) }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="hallazgo" value="{{ f.id }}">
+        <label>Observación para {{ f.codigo }}<textarea name="comentario" maxlength="1000" rows="2" required></textarea></label><button class="btn btn-outline" type="submit">Registrar seguimiento</button>
+      </form>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}<tr id="dgi-no-matches" hidden><td colspan="4">No hay coincidencias para este filtro.</td></tr>
+  </tbody></table></div>
+  {% else %}<p class="dgi-empty">No se detectaron inconsistencias de datos en esta revisión.</p>{% endif %}
+</section>
+<section id="consolidacion" class="dgi-card">
+  <div class="dgi-heading"><h3>Ventas del período</h3><a href="{{ url_for('admin.fiscal') }}">Abrir facturación</a></div>
+  <p class="dgi-muted">Los importes se toman de los documentos. Las anulaciones y ajustes se conservan en su fuente.</p>
+  {% if result.get('fechas_normalizadas',0) %}<p class="dgi-notice">Se interpretaron {{ result.fechas_normalizadas }} fechas históricas usando el comprobante y la evidencia contable. La fecha original de la base permanece disponible en cada fila; no se editaron documentos.</p>{% endif %}
+  <div class="dgi-table"><table><thead><tr><th>Documento</th><th>Fecha comercial</th><th>Base C$</th><th>IVA registrado C$</th><th>Total C$</th><th>Estado</th><th>Incluida</th></tr></thead><tbody>
+  {% for r in result.ventas %}<tr><td><a href="{{ url_for('admin.dgi_source',kind='factura',source_id=r.id) }}">{{ r.numero or 'Sin número' }} (#{{ r.id }})</a></td><td>{{ r.fecha|dgi_date }}{% if r.get('fecha_normalizada') %}<br><small>Original BD: {{ r.fecha_bd|dgi_date }}</small>{% endif %}</td><td>{{ r.base|dgi_money }}</td><td>{{ r.iva|dgi_money }}</td><td>{{ r.total|dgi_money }}</td><td>{{ r.estado }}{% if r.anulada_en %}<br>{{ r.anulada_en|dgi_date }}{% endif %}</td><td>{{ 'Sí' if r.incluida else 'No' }}</td></tr>
+  {% else %}<tr><td colspan="7">No hay ventas ni anulaciones en este período.</td></tr>{% endfor %}
+  </tbody></table></div><p><strong>Total registrado: {{ result.totales.ventas_total|dgi_money }}</strong> · IVA registrado: {{ result.totales.ventas_iva|dgi_money }}</p>
+</section>
+<section class="dgi-card">
+  <div class="dgi-heading"><h3>Compras y soportes</h3><a href="{{ url_for('admin.inventario') }}">Consultar o registrar compras</a></div>
+  <p class="dgi-muted">Son líneas de materia prima. El IVA documentado se muestra como registro; no se determina crédito fiscal deducible.</p>
+  <div class="dgi-table"><table><thead><tr><th>Comprobante</th><th>Fecha</th><th>Proveedor</th><th>Total C$</th><th>IVA documentado C$</th><th>Incluida</th></tr></thead><tbody>
+  {% for r in result.compras %}<tr><td><a href="{{ url_for('admin.dgi_source',kind='compra',source_id=r.id) }}">{{ r.numero or 'Sin comprobante' }} (#{{ r.id }})</a></td><td>{{ r.fecha|dgi_date }}</td><td>{{ r.proveedor or 'Sin proveedor' }}</td><td>{{ r.total|dgi_money }}</td><td>{{ r.iva|dgi_money }}</td><td>{{ 'Sí' if r.incluida else 'No' }}</td></tr>
+  {% else %}<tr><td colspan="6">Sin compras registradas en el mes. Es un estado informativo; confirme los soportes si corresponde.</td></tr>{% endfor %}
+  </tbody></table></div><p>Total registrado: {{ result.totales.compras_total|dgi_money }} · IVA documentado: {{ result.totales.compras_iva|dgi_money }}</p>
+</section>
+<section id="contabilidad" class="dgi-card">
+  <div class="dgi-heading"><h3>Trazabilidad contable</h3><a href="{{ url_for('admin.contabilidad') }}">Abrir contabilidad</a></div>
+  <p class="dgi-muted">Haber − Debe de cuentas de ingreso. Se incluyen originales y contrapartidas; se excluyen borradores.</p>
+  <div class="dgi-table"><table><thead><tr><th>Comprobante / referencia</th><th>Fecha / estado</th><th>Cuenta</th><th>Clase</th><th>Debe C$</th><th>Haber C$</th></tr></thead><tbody>
+  {% for r in result.asientos %}{% for d in r.detalles %}<tr><td><a href="{{ url_for('admin.dgi_source',kind='asiento',source_id=r.id) }}">{{ r.numero or r.id }}</a><br>{{ r.referencia or '' }}</td><td>{{ r.fecha|dgi_date }}<br>{{ r.estado }}</td><td>{{ d.cuenta }} · {{ d.nombre }}</td><td>{{ d.clase }}</td><td>{{ d.debe|dgi_money }}</td><td>{{ d.haber|dgi_money }}</td></tr>{% endfor %}{% else %}<tr><td colspan="6">No hay asientos registrados en este período.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+<section id="revision" class="dgi-card">
+  <h3>Revisión y reportes internos</h3>
+  <div class="dgi-columns">
+    <div>
+      <h4>Diagnóstico para investigar o compartir</h4>
+      <p>Disponible aunque existan errores en los datos o el perfil esté pendiente. El archivo indica <strong>DIAGNÓSTICO SIN APROBACIÓN</strong> y conserva los hallazgos.</p>
+      <form action="{{ url_for('admin.dgi_diagnosis_report',review_id=review.ID) }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-outline" {% if not fresh %}disabled{% endif %}>Descargar diagnóstico Excel</button>
+      </form>
+    </div>
+    <div>
+      <h4>Validación de la revisión interna</h4>
+      {% if fresh and review.Estado in ['BORRADOR','EN_REVISION'] %}
+      <form action="{{ url_for('admin.dgi_human_review',review_id=review.ID) }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Qué revisó y qué queda pendiente<textarea name="nota" minlength="10" maxlength="1000" rows="3" required>{{ review.NotaRevision or '' }}</textarea></label>
+        <button type="submit" class="btn btn-primary">Guardar revisión humana</button>
+      </form>
+      {% else %}<p>{{ review.NotaRevision or 'Aún no se ha registrado una revisión humana.' }}</p>{% endif %}
+      <p class="dgi-muted">Revisó #{{ review.RevisadoPor or '—' }} · {{ review.RevisadoEn|dgi_time }}<br>Validó #{{ review.AprobadoPor or '—' }} · {{ review.AprobadoEn|dgi_time }}</p>
+      <div class="dgi-actions">
+        <form action="{{ url_for('admin.dgi_approve',review_id=review.ID) }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-primary" {% if not fresh or result.bloqueantes or review.Estado!='EN_REVISION' %}disabled{% endif %}>Validar revisión interna</button>
+        </form>
+        <form action="{{ url_for('admin.dgi_export',review_id=review.ID) }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline" type="submit" {% if not fresh or result.bloqueantes or review.Estado not in ['APROBADO','EXPORTADO'] %}disabled{% endif %}>Descargar informe validado</button>
+        </form>
+      </div>
+      <p class="dgi-muted">Admin y SuperAdmin pueden validar los datos internos. Se exige nota de revisión, fuentes vigentes y ausencia de errores bloqueantes. El perfil pendiente se mantiene visible y no acredita cumplimiento tributario.</p>
+    </div>
+  </div>
+  <details><summary>Exportación oficial DGI</summary><p>No hay una plantilla oficial ni reglas vigentes verificadas. La opción permanece bloqueada en el servidor.</p><button type="button" class="btn btn-outline" disabled>Excel oficial: pendiente de validación</button></details>
+</section>
+<section class="dgi-card">
+  <h3>Información del período y límites del análisis</h3>
+  {% for f in context %}<p><strong>{{ f.nombre }}.</strong> {{ f.detalle }} {% if f.codigo in ['SIN_COMPRAS','PROVEEDOR_RUC'] %}<a href="{{ f.enlace }}">Abrir compras y proveedores</a>{% endif %}</p>{% endfor %}
+  <p><strong>Diferencia = base de ventas − (Haber − Debe de cuentas de ingreso).</strong> La diferencia no equivale a impuesto ni multa.</p>
+  <details><summary>Fórmulas, supuestos y evidencia</summary><ul>{% for assumption in result.supuestos %}<li>{{ assumption }}</li>{% endfor %}</ul><p>Motor {{ result.motor }}<br>SHA-256 de las fuentes: <code class="dgi-hash">{{ review.Huella }}</code></p></details>
+</section>
+<details id="historial" class="dgi-card"><summary>Archivos e historial de esta revisión</summary>
+  {% for e in exports %}<p>{% if fresh %}<a href="{{ url_for('admin.dgi_download',export_id=e.ID) }}">{{ e.Nombre }}</a>{% else %}{{ e.Nombre }} · archivo histórico sin descarga vigente{% endif %}<br><small>{{ e.Fecha|dgi_time }} · usuario #{{ e.UsuarioID }}</small><br><code class="dgi-hash">{{ e.SHA256 }}</code></p>{% else %}<p>Aún no hay un informe validado conservado. Los diagnósticos se registran en auditoría y no cambian el estado de la revisión.</p>{% endfor %}
+  <div class="dgi-table"><table><thead><tr><th>Fecha (Nicaragua)</th><th>Evento</th><th>Usuario</th></tr></thead><tbody>{% for e in events %}<tr><td>{{ e.Fecha|dgi_time }}</td><td>{{ e.Accion }}</td><td>#{{ e.UsuarioID }}</td></tr>{% endfor %}</tbody></table></div>
+  <a href="{{ url_for('admin.dgi_dashboard',periodo=period.ID,historial=1) }}">Consultar versiones anteriores del período</a>
+</details>
+{% endblock %}
+{% block extra_scripts %}<script src="{{ url_for('static',filename='js/dgi.js',v='1.1') }}" defer></script>{% endblock %}

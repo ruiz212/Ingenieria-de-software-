@@ -14,5 +14,7 @@ from app.admin import (
     routes_pos,
     routes_hr,
     routes_fidelizacion,
-    routes_fiscal
+    routes_fiscal,
+    routes_dgi,
+    manual_admi
 )  # noqa: E402, F401

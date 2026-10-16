@@ -1,5 +1,8 @@
 import os
 import secrets
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Config:
     SQL_SERVER_CONNECTION_STRING = os.environ.get('DB_CONNECTION_STRING') or r'DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost\SQLDEV;DATABASE=PanaderiaDB;Trusted_Connection=yes;Encrypt=yes;TrustServerCertificate=yes;'

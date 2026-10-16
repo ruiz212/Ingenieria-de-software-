@@ -11,6 +11,7 @@ import decimal
 from datetime import datetime
 from app.db import get_db_connection
 from app.services.validation import amount
+from app.services.business_time import business_now
 
 
 class ContabilidadError(Exception):
@@ -166,9 +167,9 @@ class ContabilidadService:
     def _obtener_o_crear_periodo(cursor, mes=None, anio=None):
         """Obtiene o crea automáticamente un periodo contable para el mes/año dado."""
         if mes is None:
-            mes = datetime.now().month
+            mes = business_now().month
         if anio is None:
-            anio = datetime.now().year
+            anio = business_now().year
 
         cursor.execute(
             "SELECT ID, Estado FROM PeriodosContables WITH (UPDLOCK, HOLDLOCK) WHERE Mes = ? AND Anio = ?",
@@ -242,7 +243,7 @@ class ContabilidadService:
         """
         if not descripcion or not descripcion.strip():
             raise ContabilidadError('La descripción del asiento es obligatoria.')
-        fecha = fecha or datetime.now()
+        fecha = fecha or business_now()
         if (mes is not None and int(mes) != fecha.month) or (anio is not None and int(anio) != fecha.year):
             raise ContabilidadError('La fecha del asiento debe pertenecer al período seleccionado.')
         mes, anio = fecha.month, fecha.year
@@ -320,7 +321,7 @@ class ContabilidadService:
     # ============================================================
 
     @classmethod
-    def revertir_asiento(cls, cursor, asiento_id_original, usuario_id, motivo, ip=None):
+    def revertir_asiento(cls, cursor, asiento_id_original, usuario_id, motivo, ip=None, fecha=None):
         """
         Crea un asiento de reversión (contrapartida) que anula el efecto
         de un asiento anterior. El asiento original se marca como 'Anulado'.
@@ -374,6 +375,7 @@ class ContabilidadService:
             tipo_comprobante='AJ',
             referencia_externa=f"REV-{asiento_id_original}",
             tipo_documento='Reversión',
+            fecha=fecha,
             ip=ip
         )
 
@@ -396,7 +398,7 @@ class ContabilidadService:
     @classmethod
     def contabilizar_venta(cls, cursor, usuario_id, numero_factura,
                            subtotal, iva, total, pagos,
-                           es_encargo=False, adelanto=0, ip=None):
+                           es_encargo=False, adelanto=0, ip=None, fecha=None):
         """
         Genera el asiento contable automático para una venta POS.
 
@@ -439,8 +441,16 @@ class ContabilidadService:
 
         # Crédito: Ingresos por Ventas (subtotal sin IVA)
         if float(subtotal) > 0:
+            cuenta_ingreso = cls.VENTAS_PAN
+            if es_encargo:
+                cursor.execute(
+                    "SELECT 1 FROM CatalogoCuentas WHERE Codigo = ? AND Activa = 1 AND EsTransaccional = 1",
+                    (cls.VENTAS_PASTELES,)
+                )
+                if cursor.fetchone():
+                    cuenta_ingreso = cls.VENTAS_PASTELES
             detalles.append((
-                cls.VENTAS_PAN, 0, amount(subtotal),
+                cuenta_ingreso, 0, amount(subtotal),
                 f"Ingreso por venta {numero_factura}"
             ))
 
@@ -459,13 +469,41 @@ class ContabilidadService:
             tipo_comprobante='FV',
             referencia_externa=numero_factura,
             tipo_documento='FacturaVenta',
+            fecha=fecha,
+            ip=ip
+        )
+
+    @classmethod
+    def contabilizar_cobro_encargo(cls, cursor, usuario_id, numero_factura,
+                                   monto_saldo, metodo_pago='Efectivo', ip=None, fecha=None):
+        """
+        Registra el asiento contable por el cobro del saldo pendiente de un encargo al entregarse.
+        Debita Caja/Bancos según método de pago y acredita Encargos por Cobrar (1.1.02.002).
+        """
+        saldo = amount(monto_saldo)
+        if saldo <= 0:
+            return None
+        cuenta_debito = cls.METODO_PAGO_CUENTA.get(metodo_pago, cls.CAJA_GENERAL_CS)
+        detalles = [
+            (cuenta_debito, saldo, 0, f"Cobro saldo encargo {numero_factura} ({metodo_pago})"),
+            (cls.ENCARGOS_POR_COBRAR, 0, saldo, f"Liquidación CxC encargo {numero_factura}"),
+        ]
+        return cls.crear_asiento(
+            cursor=cursor,
+            descripcion=f"Cobro saldo encargo {numero_factura}",
+            detalles=detalles,
+            usuario_id=usuario_id,
+            tipo_comprobante='IN',
+            referencia_externa=f"SALDO-{numero_factura}",
+            tipo_documento='CobroEncargo',
+            fecha=fecha,
             ip=ip
         )
 
     @classmethod
     def contabilizar_compra(cls, cursor, usuario_id, compra_id,
                             monto_sin_iva, iva, monto_total,
-                            metodo_pago='Contado', referencia=None, ip=None):
+                            metodo_pago='Contado', referencia=None, ip=None, fecha=None):
         """
         Genera el asiento contable automático para una compra de materia prima.
 
@@ -509,6 +547,7 @@ class ContabilidadService:
             tipo_comprobante='FC',
             referencia_externa=ref,
             tipo_documento='CompraMP',
+            fecha=fecha,
             ip=ip
         )
 
@@ -653,7 +692,7 @@ class ContabilidadService:
         Traslada el costo del inventario de productos terminados al gasto por merma.
         """
         monto = float(cantidad) * float(costo_unitario_estimado)
-        ref = referencia or f"MERMA-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        ref = referencia or f"MERMA-{business_now().strftime('%Y%m%d%H%M%S')}"
 
         detalles = [
             (cls.MERMAS_DESPERDICIOS, monto, 0, f"Merma: {cantidad} x {producto_nombre} ({motivo})"),
@@ -681,7 +720,7 @@ class ContabilidadService:
         period=cursor.fetchone()
         if not period or period.Estado != 'Abierto':
             raise ContabilidadError('El período no existe o ya está cerrado.')
-        now=datetime.now()
+        now=business_now()
         if (period.Anio,period.Mes)>=(now.year,now.month):
             raise ContabilidadError('Solo se pueden cerrar meses concluidos.')
         cursor.execute("SELECT COUNT(*) FROM AsientosDiario WHERE PeriodoID=? AND Estado='Borrador'",periodo_id)
@@ -692,7 +731,7 @@ class ContabilidadService:
             HAVING COUNT(D.ID)<2 OR SUM(D.Debe)<>SUM(D.Haber) OR SUM(D.Debe)<=0""",periodo_id)
         if cursor.fetchone():
             raise ContabilidadError('Hay asientos vacíos o descuadrados. No se cerró el período.')
-        cursor.execute("UPDATE PeriodosContables SET Estado='Cerrado',CerradoPor=?,CerradoEn=GETDATE() WHERE ID=?",usuario_id,periodo_id)
+        cursor.execute("UPDATE PeriodosContables SET Estado='Cerrado',CerradoPor=?,CerradoEn=? WHERE ID=?",usuario_id,now,periodo_id)
 
     @staticmethod
     def balanza_mensual(cursor, mes, anio):

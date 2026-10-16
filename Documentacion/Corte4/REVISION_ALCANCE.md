@@ -3,8 +3,10 @@
 Fecha: 13 de octubre de 2026.
 
 Documento vigente de esta revisión:
-[Proyecto Corte 4 corregido](Proyecto%20Corte%204%20UNIDAD%20IV%20corregido%20-%20Brajhers%20Cake.docx).
-Los tres documentos anteriores se conservan como antecedentes y no fueron sobrescritos.
+- [Proyecto Corte 4 corregido (DOCX)](Proyecto%20Corte%204%20UNIDAD%20IV%20corregido%20-%20Brajhers%20Cake.docx)
+- [Proyecto Corte 4 corregido (PDF)](Proyecto%20Corte%204%20UNIDAD%20IV%20corregido%20-%20Brajhers%20Cake.pdf) (83 páginas)
+
+Los documentos anteriores se conservan como antecedentes y no fueron sobrescritos.
 
 ## Resultado documental
 
@@ -84,10 +86,10 @@ python -m pytest tests/test_fiscal.py tests/test_uploads.py -q
 - Se usan archivos temporales, usuario QA y conexiones simuladas para perfil.
   No se envió SMS ni se contactó ImgBB.
 - `git diff --check` no reportó errores de espacios.
-- Word final de 34 páginas con índice actualizado. Se renderizó con la
+- Word final de 83 páginas con índice actualizado. Se renderizó con la
   rasterización de `render_docx.py` usando un PDF exportado desde Microsoft Word,
   porque este runtime de Windows no incluye LibreOffice. Se inspeccionaron
-  visualmente las 34 páginas: sin páginas vacías, tablas cortadas ni solapamientos.
+  visualmente las 83 páginas: sin páginas vacías, tablas cortadas ni solapamientos.
 - Verificación estructural del DOCX: ocho módulos y ochenta apartados RUP
   (4.1 a 4.10 en cada módulo), sin bordes decorativos bajo el título.
 

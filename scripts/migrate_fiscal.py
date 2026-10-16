@@ -7,6 +7,9 @@ import argparse
 import os
 from pathlib import Path
 import pyodbc
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def migrate(connection):
@@ -61,6 +64,7 @@ def migrate(connection):
         'fiscal_autorizacion': ('', 'Referencia de autorización real DGI; no constituye validación automática'),
         'fiscal_sucursal': ('Casa matriz', 'Establecimiento emisor; esta instalación usa una sola serie'),
         'fiscal_serie': ('FAC', 'Serie fija para esta instalación; no editar con ventas existentes'),
+        'tipo_cambio_usd': ('36.6243', 'Córdobas por dólar según el tipo de cambio oficial BCN; actualizar cuando corresponda'),
     }
     for key, (value, description) in defaults.items():
         cursor.execute("IF NOT EXISTS(SELECT 1 FROM ConfiguracionSistema WHERE Clave=?) INSERT INTO ConfiguracionSistema(Clave,Valor,Descripcion) VALUES(?,?,?)", key,key,value,description)

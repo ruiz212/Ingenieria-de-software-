@@ -145,16 +145,21 @@ def arqueo_etapa1_conteo():
         efectivo_usd_sistema = float(row.EfectivoUSDSistema)
         transferencias_sistema = float(row.TransferenciasSistema)
 
+        if tipo_cambio <= 0:
+            cursor.execute("SELECT Valor FROM ConfiguracionSistema WHERE Clave = 'tipo_cambio_usd'")
+            tc_row = cursor.fetchone()
+            tipo_cambio = float(tc_row.Valor) if tc_row and tc_row.Valor else 36.6243
+
         # Convertir USD del sistema a córdobas
-        efectivo_sistema = efectivo_cordobas + (efectivo_usd_sistema * tipo_cambio if tipo_cambio > 0 else 0)
+        efectivo_sistema = round(efectivo_cordobas + (efectivo_usd_sistema * tipo_cambio if tipo_cambio > 0 else 0), 2)
 
         # Total contado incluyendo dólares convertidos
-        dolares_en_cordobas = dolares_contados * tipo_cambio if tipo_cambio > 0 else 0
-        efectivo_total_contado = efectivo_contado + dolares_en_cordobas
+        dolares_en_cordobas = round(dolares_contados * tipo_cambio if tipo_cambio > 0 else 0, 2)
+        efectivo_total_contado = round(efectivo_contado + dolares_en_cordobas, 2)
 
         # Diferencias
-        dif_efectivo = efectivo_total_contado - efectivo_sistema
-        dif_transferencias = transferencias_contadas - transferencias_sistema
+        dif_efectivo = round(efectivo_total_contado - efectivo_sistema, 2)
+        dif_transferencias = round(transferencias_contadas - transferencias_sistema, 2)
 
         # Determinar si requiere justificación
         cursor.execute("SELECT Valor FROM ConfiguracionSistema WHERE Clave = 'umbral_discrepancia_cordobas'")
@@ -174,7 +179,7 @@ def arqueo_etapa1_conteo():
                 EstadoArqueo, RequiereJustificacion)
             OUTPUT INSERTED.ID
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?)
-        """, turno_id, current_user.id, efectivo_contado, transferencias_contadas,
+        """, turno_id, current_user.id, efectivo_total_contado, transferencias_contadas,
             dolares_contados, tipo_cambio if tipo_cambio > 0 else None,
             efectivo_sistema, transferencias_sistema,
             dif_efectivo, dif_transferencias, observaciones,

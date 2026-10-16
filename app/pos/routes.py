@@ -11,6 +11,7 @@ from flask_login import login_required, current_user
 
 from app.pos import pos_bp
 from app.db import get_db_connection
+from app.services.business_time import business_now
 from app.extensions import csrf
 from app.utils.qr import generar_qr_base64
 from app.auth.decorators import roles_required
@@ -82,7 +83,7 @@ def index():
                            configuracion=configuracion,
                            user=current_user,
                            turno_activo=turno,
-                           mes_actual=datetime.now().month)
+                           mes_actual=business_now().month)
 
 
 @pos_bp.route('/api/turno/abrir', methods=['POST'])
@@ -210,16 +211,36 @@ def registrar_factura():
             raise ValueError('El total debe ser positivo.')
         es_encargo=datos.get('es_encargo') is True
         encargo=datos.get('encargo_detalles') if es_encargo else None
+        if es_encargo and not isinstance(encargo,dict) and any(k in datos for k in ('adelanto','fecha_entrega','nombre_cliente','telefono')):
+            encargo={
+                'adelanto':datos.get('adelanto',0),
+                'saldo':datos.get('saldo',0),
+                'metodo_adelanto':datos.get('metodo_adelanto','Efectivo'),
+                'referencia':datos.get('referencia',''),
+                'fecha_entrega':datos.get('fecha_entrega',''),
+                'nombre_cliente':datos.get('nombre_cliente',''),
+                'telefono':datos.get('telefono',''),
+                'especificaciones':datos.get('especificaciones'),
+                'ruta_imagen_referencia':datos.get('ruta_imagen_referencia'),
+                'notas':datos.get('notas',''),
+                'monto_recibido':datos.get('monto_recibido'),
+            }
         if es_encargo and not isinstance(encargo,dict):
             raise ValueError('Complete los datos del encargo.')
         if es_encargo:
             required_text(encargo.get('nombre_cliente'),'Cliente',100)
             required_text(encargo.get('telefono'),'Teléfono',20)
             delivery=datetime.fromisoformat(encargo.get('fecha_entrega',''))
-            if delivery.date() < datetime.now().date():
+            if delivery.date() < business_now().date():
                 raise ValueError('La entrega no puede ser anterior a hoy.')
             advance=amount(encargo.get('adelanto',0))
-            payments=[{'metodo':encargo.get('metodo_adelanto','Efectivo'),'monto':advance,
+            metodo_adelanto=encargo.get('metodo_adelanto','Efectivo')
+            monto_pago=advance
+            if metodo_adelanto == 'Efectivo' and encargo.get('monto_recibido') not in (None, ''):
+                recibido=amount(encargo.get('monto_recibido'))
+                if recibido >= advance:
+                    monto_pago=recibido
+            payments=[{'metodo':metodo_adelanto,'monto':monto_pago,
                        'referencia':datos.get('nombre_transferente') or encargo.get('referencia','')}]
             encargo={**encargo,'adelanto':float(advance),'saldo':float(total-advance)}
         else:
@@ -262,8 +283,9 @@ def registrar_factura():
                 cliente_id=cursor.fetchone()[0]
         number=next_invoice(cursor,config.get('fiscal_serie','FAC'))
         code=uuid.uuid4().hex[:10].upper()
-        cursor.execute("INSERT INTO Facturas(NumeroFactura,CodigoSeguimiento,UsuarioID,ClienteID,TurnoID,Subtotal,IVA,Total,EsEncargo,IncluyeRUC,ClaveSolicitud) OUTPUT INSERTED.ID VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            number,code,current_user.id,cliente_id,turno_id,subtotal,iva,total,es_encargo,bool(ruc),key)
+        issued_at=business_now()
+        cursor.execute("INSERT INTO Facturas(NumeroFactura,CodigoSeguimiento,UsuarioID,ClienteID,TurnoID,Subtotal,IVA,Total,EsEncargo,IncluyeRUC,ClaveSolicitud,FechaHora) OUTPUT INSERTED.ID VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            number,code,current_user.id,cliente_id,turno_id,subtotal,iva,total,es_encargo,bool(ruc),key,issued_at)
         factura_id=cursor.fetchone()[0]
         if ruc:
             cursor.execute('INSERT INTO FacturasRUC(FacturaID,RazonSocial,NumeroRUC) VALUES(?,?,?)',factura_id,ruc['razon_social'],ruc['numero'])
@@ -272,6 +294,8 @@ def registrar_factura():
             detail_id=cursor.fetchone()[0]
             for extra in item['detalle_ingredientes']['ingredientes']:
                 cursor.execute('INSERT INTO DetalleIngredientes(DetalleFacturaID,IngredienteID,PrecioAplicado) VALUES(?,?,?)',detail_id,extra['id'],amount(extra['precio']))
+            if item.get('cotizacion_id'):
+                cursor.execute("UPDATE Cotizaciones SET Estado='Aceptada' WHERE ID=? AND Estado IN ('Cotizada','Aceptada')", item['cotizacion_id'])
         for payment in payments:
             cursor.execute("INSERT INTO Pagos(FacturaID,MetodoPago,Monto,NombreTransferente,MonedaRegistro,TipoCambioAplicado) VALUES(?,?,?,?,'NIO',?)",factura_id,payment['metodo'],payment['monto'],payment['referencia'] or None,exchange if payment['metodo']=='Efectivo USD' else None)
         if es_encargo:
@@ -279,11 +303,11 @@ def registrar_factura():
         if cliente_id > 1:
             cursor.execute('UPDATE Clientes SET TotalCompras=ISNULL(TotalCompras,0)+1 WHERE ID=?',cliente_id)
             cursor.execute('UPDATE Clientes SET NivelConfianzaID=CASE WHEN TotalCompras>=10 THEN 3 WHEN TotalCompras>=3 THEN 2 ELSE 1 END WHERE ID=?',cliente_id)
-        entry=ContabilidadService.contabilizar_venta(cursor,current_user.id,number,subtotal,iva,total,payments,es_encargo,advance or 0,request.remote_addr)
-        now=datetime.now()
+        entry=ContabilidadService.contabilizar_venta(cursor,current_user.id,number,subtotal,iva,total,payments,es_encargo,advance or 0,request.remote_addr,fecha=issued_at)
+        now=issued_at
         link=request.host_url.rstrip('/')+'/seguimiento/'+code
         document={'id':factura_id,'numero_factura':number,'codigo_seguimiento':code,'solicitud_hash':fingerprint,
-            'fecha':now.strftime('%d/%m/%Y'),'hora':now.strftime('%H:%M:%S'),
+            'fecha':now.strftime('%d/%m/%Y'),'hora':now.strftime('%H:%M:%S'),'zona_horaria':'America/Managua',
             'productos':carrito,'subtotal':float(subtotal),'iva':float(iva),'total':float(total),
             'cambio':float(change),'es_encargo':es_encargo,'encargo_detalles':encargo,
             'tipo_cambio':str(exchange),'pagos':[dict(p,monto=float(p['monto'])) for p in payments],
@@ -315,7 +339,7 @@ from flask import session
 @pos_bp.route('/api/cotizaciones', methods=['POST'])
 @login_required
 def crear_cotizacion():
-    datos = request.json
+    datos = request.json or {}
     especificaciones = datos.get('especificaciones')
     fecha_entrega = datos.get('fecha_entrega')
     ruta_imagen = datos.get('ruta_imagen_referencia')
@@ -325,19 +349,23 @@ def crear_cotizacion():
     if not especificaciones or not fecha_entrega:
         return jsonify({'error': 'Faltan datos requeridos'}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente' and not getattr(current_user, 'es_invitado', False)
+    cliente_id = current_user.id if es_cliente_registrado else None
     
-    cliente_id = current_user.id if current_user.rol_nombre in ['Cliente', 'Invitado'] and not current_user.es_invitado else None
+    telefono = telefono or getattr(current_user, 'telefono', None)
+    nombre_contacto = nombre_contacto or getattr(current_user, 'nombre', None)
     
     # Para invitados, usamos un Session ID
     session_id = None
     if not cliente_id:
         if 'cotizacion_session_id' not in session:
-            import uuid
             session['cotizacion_session_id'] = str(uuid.uuid4())
         session_id = session['cotizacion_session_id']
+        if telefono:
+            session['cotizacion_telefono'] = telefono
         
+    conn = get_db_connection()
+    cursor = conn.cursor()
     try:
         cursor.execute(
             "SET NOCOUNT ON; INSERT INTO Cotizaciones (ClienteID, SessionID, Especificaciones, FechaEntrega, RutaImagenReferencia, TelefonoContacto, Estado, NombreContacto) "
@@ -355,6 +383,7 @@ def crear_cotizacion():
         }), 200
     except Exception as e:
         conn.rollback()
+        current_app.logger.exception("Error al crear cotización")
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
@@ -364,31 +393,64 @@ def crear_cotizacion():
 def obtener_cotizaciones_cliente():
     conn = get_db_connection()
     cursor = conn.cursor()
-    
-    cliente_id = current_user.id if current_user.rol_nombre in ['Cliente', 'Invitado'] and not current_user.es_invitado else None
-    session_id = session.get('cotizacion_session_id')
-    
-    if cliente_id:
-        cursor.execute("SELECT * FROM Cotizaciones WHERE ClienteID = ? ORDER BY FechaSolicitud DESC", cliente_id)
-    elif session_id:
-        cursor.execute("SELECT * FROM Cotizaciones WHERE SessionID = ? ORDER BY FechaSolicitud DESC", session_id)
-    else:
-        conn.close()
-        return jsonify([])
+    try:
+        es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente' and not getattr(current_user, 'es_invitado', False)
+        cliente_id = current_user.id if es_cliente_registrado else None
+        telefono = getattr(current_user, 'telefono', None)
+        session_id = session.get('cotizacion_session_id')
+        session_telefono = session.get('cotizacion_telefono')
         
-    cotizaciones = []
-    for row in cursor.fetchall():
-        cotizaciones.append({
-            'id': row.ID,
-            'especificaciones': row.Especificaciones,
-            'fecha_entrega': row.FechaEntrega.strftime('%Y-%m-%d') if row.FechaEntrega else '',
-            'ruta_imagen': row.RutaImagenReferencia,
-            'estado': row.Estado,
-            'precio_cotizado': float(row.PrecioCotizado) if row.PrecioCotizado else None
-        })
-    
-    conn.close()
-    return jsonify(cotizaciones)
+        # Si es un cliente registrado, vincular cualquier cotización huérfana previa que coincida con su teléfono o sesión
+        if cliente_id:
+            if telefono:
+                cursor.execute(
+                    "UPDATE Cotizaciones SET ClienteID = ? WHERE ClienteID IS NULL AND TelefonoContacto = ?",
+                    cliente_id, telefono
+                )
+            if session_id:
+                cursor.execute(
+                    "UPDATE Cotizaciones SET ClienteID = ? WHERE ClienteID IS NULL AND SessionID = ?",
+                    cliente_id, session_id
+                )
+            conn.commit()
+            
+            cursor.execute(
+                "SELECT ID, Especificaciones, FechaEntrega, RutaImagenReferencia, Estado, PrecioCotizado, TelefonoContacto "
+                "FROM Cotizaciones "
+                "WHERE ClienteID = ? "
+                "ORDER BY FechaSolicitud DESC",
+                cliente_id
+            )
+        elif session_id or session_telefono:
+            cursor.execute(
+                "SELECT ID, Especificaciones, FechaEntrega, RutaImagenReferencia, Estado, PrecioCotizado, TelefonoContacto "
+                "FROM Cotizaciones "
+                "WHERE (SessionID IS NOT NULL AND SessionID = ?) "
+                "   OR (TelefonoContacto IS NOT NULL AND TelefonoContacto = ?) "
+                "ORDER BY FechaSolicitud DESC",
+                session_id or '', session_telefono or ''
+            )
+        else:
+            return jsonify([])
+            
+        cotizaciones = []
+        for row in cursor.fetchall():
+            cotizaciones.append({
+                'id': row.ID,
+                'especificaciones': row.Especificaciones or '',
+                'fecha_entrega': row.FechaEntrega.strftime('%Y-%m-%d') if row.FechaEntrega else '',
+                'ruta_imagen': row.RutaImagenReferencia or '',
+                'estado': row.Estado,
+                'precio_cotizado': float(row.PrecioCotizado) if row.PrecioCotizado is not None else None,
+                'telefono': row.TelefonoContacto or ''
+            })
+        
+        return jsonify(cotizaciones)
+    except Exception as e:
+        current_app.logger.exception("Error al obtener cotizaciones del cliente")
+        return jsonify({'error': 'Error al obtener cotizaciones: ' + str(e)}), 500
+    finally:
+        conn.close()
 
 @pos_bp.route('/api/cotizaciones/pendientes', methods=['GET'])
 @login_required
@@ -401,19 +463,21 @@ def obtener_cotizaciones_pendientes():
         SELECT c.*, cl.Nombre AS ClienteNombre 
         FROM Cotizaciones c
         LEFT JOIN Clientes cl ON c.ClienteID = cl.ID
-        WHERE c.Estado = 'Pendiente'
-        ORDER BY c.FechaSolicitud ASC
+        WHERE c.Estado IN ('Pendiente', 'Cotizada', 'Aceptada')
+        ORDER BY CASE WHEN c.Estado = 'Pendiente' THEN 0 ELSE 1 END, c.FechaSolicitud ASC
     """)
     
     cotizaciones = []
     for row in cursor.fetchall():
         cotizaciones.append({
             'id': row.ID,
-            'cliente': row.ClienteNombre or 'Invitado',
+            'cliente': row.ClienteNombre or getattr(row, 'NombreContacto', None) or 'Invitado',
             'telefono': row.TelefonoContacto,
             'especificaciones': row.Especificaciones,
             'fecha_entrega': row.FechaEntrega.strftime('%Y-%m-%d') if row.FechaEntrega else '',
             'ruta_imagen': row.RutaImagenReferencia,
+            'estado': row.Estado,
+            'precio_cotizado': float(row.PrecioCotizado) if getattr(row, 'PrecioCotizado', None) is not None else None,
             'fecha_solicitud': row.FechaSolicitud.strftime('%Y-%m-%d %H:%M')
         })
         
@@ -456,19 +520,94 @@ def rechazar_cotizacion(id):
     cursor = conn.cursor()
     
     try:
-        cursor.execute('SELECT ClienteID,SessionID,Estado FROM Cotizaciones WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',id)
-        row=cursor.fetchone()
-        staff=current_user.rol_nombre in ('Estandar','Admin','SuperAdmin')
-        owner=row and ((current_user.rol_nombre=='Cliente' and row[0]==current_user.id) or (row[1] and row[1]==session.get('cotizacion_session_id')))
-        if not row or (not staff and not owner):
-            return jsonify(error='Cotización no disponible.'),404
-        if row[2] not in ('Pendiente','Cotizada'):
-            return jsonify(error='La cotización ya no se puede rechazar.'),409
-        cursor.execute("UPDATE Cotizaciones SET Estado='Rechazada' WHERE ID=?",id)
+        cursor.execute('SELECT ClienteID, SessionID, Estado, TelefonoContacto FROM Cotizaciones WITH(UPDLOCK,HOLDLOCK) WHERE ID=?', id)
+        row = cursor.fetchone()
+        if not row:
+            return jsonify(error='Cotización no encontrada.'), 404
+
+        es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente' and not getattr(current_user, 'es_invitado', False)
+        cliente_id = current_user.id if es_cliente_registrado else None
+        telefono = getattr(current_user, 'telefono', None)
+        session_id = session.get('cotizacion_session_id')
+        session_telefono = session.get('cotizacion_telefono')
+        is_staff = getattr(current_user, 'rol_nombre', '') in ('Estandar', 'Admin', 'SuperAdmin')
+
+        owner = (
+            is_staff or
+            (cliente_id and row.ClienteID == cliente_id) or
+            (cliente_id and telefono and row.TelefonoContacto == telefono) or
+            (session_id and row.SessionID and row.SessionID == session_id) or
+            (session_telefono and row.TelefonoContacto and row.TelefonoContacto == session_telefono)
+        )
+
+        if not owner:
+            return jsonify(error='Cotización no disponible para este usuario.'), 403
+
+        if row.Estado not in ('Pendiente', 'Cotizada'):
+            return jsonify(error='La cotización ya no se puede rechazar.'), 409
+
+        cursor.execute("UPDATE Cotizaciones SET Estado='Rechazada' WHERE ID=?", id)
         conn.commit()
         return jsonify({'mensaje': 'Cotización rechazada'}), 200
     except Exception as e:
         conn.rollback()
+        current_app.logger.exception("Error al rechazar cotización")
         return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@pos_bp.route('/api/cotizaciones/<int:id>/aceptar', methods=['POST'])
+@login_required
+def aceptar_cotizacion(id):
+    """Permite al cliente aceptar una cotización propia ya valorada."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            'SELECT ClienteID, SessionID, Estado, PrecioCotizado, TelefonoContacto FROM Cotizaciones WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',
+            id
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify(error='Cotización no encontrada.'), 404
+
+        es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente' and not getattr(current_user, 'es_invitado', False)
+        cliente_id = current_user.id if es_cliente_registrado else None
+        telefono = getattr(current_user, 'telefono', None)
+        session_id = session.get('cotizacion_session_id')
+        session_telefono = session.get('cotizacion_telefono')
+        is_staff = getattr(current_user, 'rol_nombre', '') in ('Estandar', 'Admin', 'SuperAdmin')
+
+        owner = (
+            is_staff or
+            (cliente_id and row.ClienteID == cliente_id) or
+            (cliente_id and telefono and row.TelefonoContacto == telefono) or
+            (session_id and row.SessionID and row.SessionID == session_id) or
+            (session_telefono and row.TelefonoContacto and row.TelefonoContacto == session_telefono)
+        )
+
+        if not owner:
+            return jsonify(error='Cotización no disponible para este usuario.'), 403
+
+        if row.Estado != 'Cotizada' or row.PrecioCotizado is None:
+            if row.Estado == 'Aceptada':
+                return jsonify(mensaje='Cotización ya aceptada', id=id, precio_cotizado=float(row.PrecioCotizado or 0)), 200
+            return jsonify(error='La cotización todavía no está lista para aceptar.'), 409
+
+        # Vincular ClienteID si faltaba
+        if row.ClienteID is None and cliente_id:
+            cursor.execute("UPDATE Cotizaciones SET ClienteID = ? WHERE ID = ?", cliente_id, id)
+
+        cursor.execute("UPDATE Cotizaciones SET Estado='Aceptada' WHERE ID=? AND Estado='Cotizada'", id)
+        if cursor.rowcount != 1:
+            return jsonify(error='La cotización cambió. Actualice la pantalla.'), 409
+
+        conn.commit()
+        return jsonify(mensaje='Cotización aceptada', id=id, precio_cotizado=float(row.PrecioCotizado)), 200
+    except Exception as error:
+        conn.rollback()
+        current_app.logger.exception("Error al aceptar cotización")
+        return jsonify(error=str(error)), 500
     finally:
         conn.close()

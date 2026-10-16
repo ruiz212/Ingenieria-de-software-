@@ -109,6 +109,53 @@
     flex-wrap: wrap;
 }
 
+/* CRM client editor */
+.cliente-modal-content {
+    max-width: 560px;
+}
+
+.cliente-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1rem;
+}
+
+.cliente-form .form-group:nth-of-type(3),
+.cliente-form .form-group:nth-of-type(4),
+.cliente-form .cliente-history,
+.cliente-form .modal-actions {
+    grid-column: 1 / -1;
+}
+
+.cliente-history {
+    margin-top: 0.25rem;
+    padding: 1rem;
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    background: var(--surface-sunken);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.75;
+}
+
+.cliente-history strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--text-main);
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+}
+
+@media (max-width: 560px) {
+    .cliente-modal-content { padding: 1.25rem; }
+    .cliente-form { grid-template-columns: 1fr; }
+    .cliente-form .form-group,
+    .cliente-form .cliente-history,
+    .cliente-form .modal-actions { grid-column: 1; }
+}
+
 /* ── Animations ── */
 @keyframes modalFadeIn {
     from { opacity: 0; }

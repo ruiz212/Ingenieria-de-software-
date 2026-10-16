@@ -6,6 +6,7 @@ import traceback
 
 from app.admin import admin_bp
 from app.db import get_db_connection
+from app.services.business_time import business_now
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime
@@ -49,27 +50,30 @@ def contabilidad():
     cursor.execute("SELECT ID, NombreCompleto FROM Usuarios WHERE Activo = 1 ORDER BY NombreCompleto")
     empleados = [{'id': row.ID, 'nombre': row.NombreCompleto} for row in cursor.fetchall()]
 
+    now_ni = business_now()
+    hoy_ni = now_ni.date()
+
     # Totales del MES actual
     # 1. Ingresos (Ventas)
-    cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND MONTH(FechaHora) = MONTH(GETDATE()) AND YEAR(FechaHora) = YEAR(GETDATE())")
+    cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND MONTH(FechaHora) = ? AND YEAR(FechaHora) = ?", now_ni.month, now_ni.year)
     ingresos_mes = float(cursor.fetchone()[0])
 
     # 2. Compras de Materia Prima
-    cursor.execute("SELECT ISNULL(SUM(CostoTotal), 0) FROM ComprasMateriaPrima WHERE MONTH(Fecha) = MONTH(GETDATE()) AND YEAR(Fecha) = YEAR(GETDATE())")
+    cursor.execute("SELECT ISNULL(SUM(CostoTotal), 0) FROM ComprasMateriaPrima WHERE MONTH(Fecha) = ? AND YEAR(Fecha) = ?", now_ni.month, now_ni.year)
     compras_mes = float(cursor.fetchone()[0])
 
     # 3. Egresos Privados
-    cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE MONTH(Fecha) = MONTH(GETDATE()) AND YEAR(Fecha) = YEAR(GETDATE())")
+    cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE MONTH(Fecha) = ? AND YEAR(Fecha) = ?", now_ni.month, now_ni.year)
     egresos_mes = float(cursor.fetchone()[0])
 
     # Totales del DIA actual
-    cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND CONVERT(date, FechaHora) = CONVERT(date, GETDATE())")
+    cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND CONVERT(date, FechaHora) = ?", hoy_ni)
     ingresos_hoy = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT ISNULL(SUM(CostoTotal), 0) FROM ComprasMateriaPrima WHERE CONVERT(date, Fecha) = CONVERT(date, GETDATE())")
+    cursor.execute("SELECT ISNULL(SUM(CostoTotal), 0) FROM ComprasMateriaPrima WHERE CONVERT(date, Fecha) = ?", hoy_ni)
     compras_hoy = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE CONVERT(date, Fecha) = CONVERT(date, GETDATE())")
+    cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE CONVERT(date, Fecha) = ?", hoy_ni)
     egresos_hoy = float(cursor.fetchone()[0])
 
     # Vales Pendientes
@@ -153,8 +157,8 @@ def crear_vale():
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO ValesEmpleados (EmpleadoID, Monto, Fecha) OUTPUT INSERTED.ID VALUES (?, ?, GETDATE())",
-            int(empleado_id), float(monto)
+            "INSERT INTO ValesEmpleados (EmpleadoID, Monto, Fecha) OUTPUT INSERTED.ID VALUES (?, ?, ?)",
+            int(empleado_id), float(monto), business_now()
         )
         new_id = cursor.fetchone()[0]
 
@@ -207,7 +211,7 @@ def balance_general():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    fecha_corte = request.args.get('fecha_corte', datetime.now().strftime('%Y-%m-%d'))
+    fecha_corte = request.args.get('fecha_corte', business_now().strftime('%Y-%m-%d'))
 
     # 1. Consulta con CTE para obtener Saldos Finales de TODAS las cuentas
     sql_balance = """
@@ -312,7 +316,7 @@ def crear_asiento():
     conn=get_db_connection()
     try:
         cursor=conn.cursor()
-        fecha=datetime.fromisoformat(data.get('fecha',datetime.now().isoformat()))
+        fecha=datetime.fromisoformat(data.get('fecha',business_now().isoformat()))
         cursor.execute('SELECT Mes,Anio FROM PeriodosContables WHERE ID=?',data.get('periodo_id'))
         period=cursor.fetchone()
         if not period:
@@ -374,8 +378,9 @@ def estado_resultados():
     cursor = conn.cursor()
 
     # Por defecto, filtramos por el mes y año actual
-    mes = request.args.get('mes', datetime.now().month)
-    anio = request.args.get('anio', datetime.now().year)
+    now_ni = business_now()
+    mes = request.args.get('mes', now_ni.month)
+    anio = request.args.get('anio', now_ni.year)
 
     # 1. Obtener el PeriodoID correspondiente
     cursor.execute("SELECT ID FROM PeriodosContables WHERE Mes = ? AND Anio = ?", (mes, anio))
@@ -507,8 +512,9 @@ def balance_comprobacion():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        mes = request.args.get('mes', datetime.now().month)
-        anio = request.args.get('anio', datetime.now().year)
+        now_ni = business_now()
+        mes = request.args.get('mes', now_ni.month)
+        anio = request.args.get('anio', now_ni.year)
 
         balance=ContabilidadService.balanza_mensual(cursor,int(mes),int(anio))
         total_debe=sum(item['TotalDebe'] for item in balance)
@@ -531,9 +537,10 @@ def libro_mayor():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        now_ni = business_now()
         cuenta_codigo = request.args.get('cuenta_codigo')
-        mes = request.args.get('mes', datetime.now().month)
-        anio = request.args.get('anio', datetime.now().year)
+        mes = request.args.get('mes', now_ni.month)
+        anio = request.args.get('anio', now_ni.year)
 
         cuentas = ContabilidadService.obtener_catalogo_cuentas(cursor, solo_transaccionales=True)
 

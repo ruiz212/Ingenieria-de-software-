@@ -110,6 +110,9 @@ def test_invoice_retry_void_and_print(client,conn):
     assert result.status_code==200,result.json
     document=result.json['factura']
     assert document['total']==float(row[1])*2
+    recorded=cursor.execute('SELECT FechaHora FROM Facturas WHERE ID=?',document['id']).fetchone()[0]
+    posted=cursor.execute('SELECT Fecha FROM AsientosDiario WHERE ID=?',document['asiento_id']).fetchone()[0]
+    assert recorded==posted and document['zona_horaria']=='America/Managua'
     again=client.post('/api/factura',json=body,headers={'X-CSRFToken':csrf})
     assert again.json['factura']['id']==document['id']
     changed={**body,'total':999}
@@ -119,6 +122,9 @@ def test_invoice_retry_void_and_print(client,conn):
     void=client.post(f"/admin/fiscal/facturas/{document['id']}/anular",data={'motivo':'Prueba de anulación QA','csrf_token':csrf})
     assert void.status_code==302
     assert 'ANULADO' in client.get(document['url_impresion']).text
+    voided=cursor.execute('SELECT FechaAnulacion FROM Facturas WHERE ID=?',document['id']).fetchone()[0]
+    reversed_at=cursor.execute('SELECT Fecha FROM AsientosDiario WHERE ReferenciaExterna=?',f"REV-{document['asiento_id']}").fetchone()[0]
+    assert voided==reversed_at
     assert cursor.execute('SELECT SUM(Monto) FROM Pagos WHERE FacturaID=?',document['id']).fetchone()[0]==0
 
 
@@ -246,6 +252,9 @@ def test_purchase_stock_and_journal_commit_together(client,conn,inventory):
     response=client.post('/admin/api/inventario/compra',json={'materia_id':materia.ID,'proveedor_id':inventory[1],'cantidad':2,'costo':100,'iva_documentado':0,'factura_proveedor':reference},headers={'X-CSRFToken':csrf})
     assert response.status_code==200,response.json
     assert cursor.execute('SELECT StockActual FROM MateriaPrima WHERE ID=?',materia.ID).fetchone()[0]==materia.StockActual+2
+    purchased=cursor.execute('SELECT Fecha FROM ComprasMateriaPrima WHERE ID=?',response.json['id']).fetchone()[0]
+    posted=cursor.execute('SELECT Fecha FROM AsientosDiario WHERE ReferenciaExterna=?',reference).fetchone()[0]
+    assert purchased==posted
     sums=cursor.execute('SELECT SUM(d.Debe),SUM(d.Haber) FROM DetalleAsientos d JOIN AsientosDiario a ON a.ID=d.AsientoID WHERE a.ReferenciaExterna=?',reference).fetchone()
     assert sums[0]==100 and sums[1]==100
 

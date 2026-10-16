@@ -59,6 +59,13 @@
                 <div class="text-muted mb-1" style="font-size: 0.85rem;">Se muestra junto a los precios (ej: C$, $, L).</div>
                 <input type="text" class="form-input" id="cfg-moneda_simbolo" value="{{ config.get('moneda_simbolo', {}).get('valor', 'C$') }}" style="width: 80px; text-align: center;">
             </div>
+
+            <div class="form-group mb-3 exchange-rate-field">
+                <label class="form-label" for="cfg-tipo_cambio_usd" style="font-weight: 600;">Tipo de cambio USD</label>
+                <div class="text-muted mb-1" style="font-size: 0.85rem;">Córdobas por USD. Actualice este valor según el BCN antes de cobrar dólares.</div>
+                <div class="input-with-prefix"><span>C$</span><input type="number" class="form-input" id="cfg-tipo_cambio_usd" value="{{ config.get('tipo_cambio_usd', {}).get('valor', '36.6243') }}" min="0.01" max="999999" step="0.0001" required></div>
+                <small class="exchange-rate-source">Referencia BCN: 36.6243 NIO/USD (13/10/2026)</small>
+            </div>
             
             <div class="form-group">
                 <label class="form-label" style="font-weight: 600;">Máx. líneas por factura</label>

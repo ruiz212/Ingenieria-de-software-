@@ -175,6 +175,7 @@ CREATE TABLE Facturas (
     Total DECIMAL(10, 2) NOT NULL,
     EsEncargo BIT NOT NULL DEFAULT 0,
     IncluyeRUC BIT NOT NULL DEFAULT 0,
+    EstadoFiscal VARCHAR(12) NOT NULL DEFAULT 'Emitida',
     CONSTRAINT FK_Facturas_Usuarios FOREIGN KEY (UsuarioID) REFERENCES Usuarios(ID),
     CONSTRAINT FK_Facturas_Clientes FOREIGN KEY (ClienteID) REFERENCES Clientes(ID),
     CONSTRAINT FK_Facturas_TurnosCaja FOREIGN KEY (TurnoID) REFERENCES TurnosCaja(ID)
@@ -410,6 +411,7 @@ CREATE TABLE Cotizaciones (
     TelefonoContacto VARCHAR(20) NULL,
     Estado VARCHAR(20) NOT NULL DEFAULT 'Pendiente',
     PrecioCotizado DECIMAL(10, 2) NULL,
+    NombreContacto VARCHAR(150) NULL,
     FechaSolicitud DATETIME NOT NULL DEFAULT GETDATE(),
     CONSTRAINT FK_Cotizaciones_Clientes FOREIGN KEY (ClienteID) REFERENCES Clientes(ID),
     CONSTRAINT CK_Cotizaciones_Estado CHECK (Estado IN ('Pendiente', 'Cotizada', 'Aceptada', 'Rechazada'))
@@ -588,6 +590,19 @@ CREATE TABLE AuditLog (
     IP VARCHAR(45) NULL,
     FechaHora DATETIME NOT NULL DEFAULT GETDATE(),
     CONSTRAINT FK_AuditLog_Usuarios FOREIGN KEY (UsuarioID) REFERENCES Usuarios(ID)
+);
+GO
+
+CREATE TABLE BitacoraFiscal (
+    ID BIGINT IDENTITY PRIMARY KEY,
+    Fecha DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    UsuarioID INT NULL,
+    Accion NVARCHAR(50) NOT NULL,
+    Entidad NVARCHAR(50) NOT NULL,
+    EntidadID INT NULL,
+    Detalle NVARCHAR(MAX) NOT NULL,
+    IP VARCHAR(45) NULL,
+    CONSTRAINT FK_BitacoraFiscal_Usuarios FOREIGN KEY (UsuarioID) REFERENCES Usuarios(ID)
 );
 GO
 

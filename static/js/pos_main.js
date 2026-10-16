@@ -362,8 +362,10 @@ function initModule1() {
                 cb.checked = false;
             }
         });
-        document.getElementById('custom-ing-nombre').value = '';
-        document.getElementById('custom-ing-precio').value = '';
+        const customNombreEl = document.getElementById('custom-ing-nombre');
+        const customPrecioEl = document.getElementById('custom-ing-precio');
+        if (customNombreEl) customNombreEl.value = '';
+        if (customPrecioEl) customPrecioEl.value = '';
 
         actualizarTotalIngredientes();
         
@@ -612,6 +614,7 @@ function initModule1() {
         const esClienteOnline = adelantoContainer && adelantoContainer.style.display === 'none';
         
         let adelantoReal = adelanto;
+        let efectivoEncargo = 0;
         if (esClienteOnline) {
             adelantoReal = 0; // Clientes online no pagan adelanto físico en el POS
         } else {
@@ -620,8 +623,8 @@ function initModule1() {
                 return;
             }
             if (metodoPago === 'Efectivo') {
-                const efectivo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
-                if (efectivo < adelantoReal && adelantoReal > 0) {
+                efectivoEncargo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
+                if (efectivoEncargo < adelantoReal && adelantoReal > 0) {
                     showToast('El efectivo recibido es menor al adelanto', true);
                     return;
                 }
@@ -637,25 +640,34 @@ function initModule1() {
         let ruta_imagen = null;
         let telefonoCustom = null;
         let fechaCustom = null;
+        let cotizacionId = null;
         
         const customItem = carrito.find(item => item.es_custom);
-        if (customItem) {
+        if (customItem && customItem.encargo_detalles) {
             especificaciones = customItem.encargo_detalles.especificaciones;
             ruta_imagen = customItem.encargo_detalles.ruta_imagen_referencia;
             telefonoCustom = customItem.encargo_detalles.telefono;
             fechaCustom = customItem.encargo_detalles.fecha_entrega;
+            cotizacionId = customItem.encargo_detalles.cotizacion_id;
         }
         
-        cerrarModal();
-        procesarFactura(true, {
+        const encargoDetalles = {
             adelanto: adelantoReal,
             saldo: total - adelantoReal,
             metodo_adelanto: metodoPago,
+            monto_recibido: metodoPago === 'Efectivo' && efectivoEncargo > 0 ? efectivoEncargo : adelantoReal,
             fecha_entrega: fechaCustom ? fechaCustom : fecha,
             nombre_cliente: nombreCliente,
             telefono: telefonoCustom ? telefonoCustom : telefonoCliente,
             especificaciones: especificaciones,
-            ruta_imagen_referencia: ruta_imagen
+            ruta_imagen_referencia: ruta_imagen,
+            cotizacion_id: cotizacionId
+        };
+        
+        cerrarModal();
+        procesarFactura(true, {
+            ...encargoDetalles,
+            encargo_detalles: encargoDetalles
         });
     });
 
@@ -968,38 +980,6 @@ async function procesarFactura(esEncargo = false, datosExtra = null) {
     }
 }
 
-,
-        { valor: 500, tipo: 'billete' },
-        { valor: 200, tipo: 'billete' },
-        { valor: 100, tipo: 'billete' },
-        { valor: 50, tipo: 'billete' },
-        { valor: 20, tipo: 'billete' },
-        { valor: 10, tipo: 'billete' },
-        { valor: 5, tipo: 'moneda' },
-        { valor: 1, tipo: 'moneda' },
-        { valor: 0.50, tipo: 'moneda' },
-        { valor: 0.25, tipo: 'moneda' },
-        { valor: 0.10, tipo: 'moneda' }
-    ];
-    
-    let restante = Math.round(montoCambio * 100);
-    let resultado = [];
-    
-    for (let denom of denominaciones) {
-        let valorCentavos = Math.round(denom.valor * 100);
-        if (restante >= valorCentavos) {
-            let cantidad = Math.floor(restante / valorCentavos);
-            restante -= cantidad * valorCentavos;
-            
-            let denominacionStr = denom.valor < 1 ? `${denom.valor * 100} centavos` : `C$${denom.valor}`;
-            resultado.push(`<strong>${cantidad}</strong> ${denom.tipo}(s) de ${denominacionStr}`);
-        }
-    }
-    
-    if (resultado.length === 0) return "✅ Pago exacto, no hay cambio.";
-    
-    return "<strong>Entregar:</strong><br>" + resultado.join('<br>');
-}
 function mostrarTicket(factura) {
     const printButton=document.getElementById('btn-imprimir-ticket');
     if(printButton) printButton.onclick=()=>window.open(factura.url_impresion, '_blank', 'noopener');

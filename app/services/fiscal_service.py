@@ -33,16 +33,45 @@ def calculate_sale(cursor, items, config):
     for item in items:
         if not isinstance(item, dict):
             raise ValueError('Línea de carrito inválida.')
-        product_id = positive_int(str(item.get('id', '')).split('_')[0], 'Producto')
+        raw_id = str(item.get('id', ''))
         quantity = positive_int(item.get('cantidad'), 'Cantidad')
-        cursor.execute('SELECT Nombre,PrecioBase,PorcentajeDescuento,TasaIVA,MotivoExencion,EsFicticio FROM Productos WHERE ID=? AND Activo=1', product_id)
-        row = cursor.fetchone()
-        if not row:
-            raise ValueError('El producto ya no está disponible. Actualice el carrito.')
-        name, base, discount, tax_rate, reason, fictitious = row
-        # Las bases personalizables usan exclusivamente el precio del catálogo.
-        price = amount(base)
+        cotizacion_id = None
+        if raw_id.startswith('custom_'):
+            cotizacion_id = positive_int(raw_id.split('_', 1)[1], 'Cotización')
+            cursor.execute(
+                "SELECT ID, Especificaciones, PrecioCotizado FROM Cotizaciones "
+                "WHERE ID=? AND Estado IN ('Cotizada', 'Aceptada') AND PrecioCotizado IS NOT NULL",
+                cotizacion_id
+            )
+            cot_row = cursor.fetchone()
+            if not cot_row:
+                raise ValueError('La cotización personalizada no existe o aún no tiene precio autorizado.')
+            cursor.execute(
+                "SELECT TOP 1 ID, TasaIVA, MotivoExencion FROM Productos "
+                "WHERE Activo=1 ORDER BY EsFicticio DESC, ID ASC"
+            )
+            base_prod = cursor.fetchone()
+            if not base_prod:
+                raise ValueError('No hay un producto base activo para asociar la cotización.')
+            product_id = base_prod[0]
+            name = f'Pastel Personalizado (#COT-{cotizacion_id:04d})'
+            base = cot_row[2]
+            discount = Decimal('0')
+            tax_rate = base_prod[1]
+            reason = base_prod[2]
+        else:
+            product_id = positive_int(raw_id.split('_')[0], 'Producto')
+            cursor.execute('SELECT Nombre,PrecioBase,PorcentajeDescuento,TasaIVA,MotivoExencion,EsFicticio FROM Productos WHERE ID=? AND Activo=1', product_id)
+            row = cursor.fetchone()
+            if not row:
+                raise ValueError('El producto ya no está disponible. Actualice el carrito.')
+            name, base, discount, tax_rate, reason, fictitious = row
+        # Las bases personalizables usan exclusivamente el precio del catálogo o cotización autorizada.
+        base_price = amount(base)
+        discount = amount(discount, 'Descuento', maximum=Decimal('100'))
+        discounted_base = amount(base_price * (1 - discount / 100))
         extras = []
+        extras_total = Decimal('0')
         detail = item.get('detalle_ingredientes') or {}
         if not isinstance(detail, dict) or not isinstance(detail.get('ingredientes', []), list):
             raise ValueError('Ingredientes inválidos.')
@@ -53,10 +82,11 @@ def calculate_sale(cursor, items, config):
             ingredient = cursor.fetchone()
             if not ingredient:
                 raise ValueError('Ingrediente no disponible.')
-            price += amount(ingredient[2])
-            extras.append({'id':ingredient[0], 'nombre':ingredient[1], 'precio':float(ingredient[2])})
-        discount = amount(discount, 'Descuento', maximum=Decimal('100'))
-        unit_price = amount(price * (1-discount/100))
+            ing_price = amount(ingredient[2])
+            extras_total += ing_price
+            extras.append({'id':ingredient[0], 'nombre':ingredient[1], 'precio':float(ing_price)})
+        price = amount(base_price + extras_total)
+        unit_price = amount(discounted_base + extras_total)
         subtotal = amount(unit_price * quantity)
         rate = Decimal('0')
         if regime == 'General':
@@ -66,10 +96,14 @@ def calculate_sale(cursor, items, config):
             if rate == 0 and not reason:
                 raise ValueError(f'Indique el fundamento de exención o tasa cero de {name}.')
         tax = amount(subtotal * rate / 100)
-        lines.append({'id':product_id, 'nombre':name, 'cantidad':quantity, 'precio':float(unit_price),
+        line_data = {'id':product_id, 'nombre':name, 'cantidad':quantity, 'precio':float(unit_price),
             'precio_lista':float(price), 'descuento':float(amount(price*quantity-subtotal)),
             'subtotal':float(subtotal), 'iva':float(tax), 'tasa_iva':float(rate),
-            'motivo_exencion': reason if rate == 0 else '', 'detalle_ingredientes':{'ingredientes':extras}})
+            'motivo_exencion': reason if rate == 0 else '',
+            'detalle_ingredientes':{'precio_base': float(discounted_base), 'ingredientes':extras}}
+        if cotizacion_id is not None:
+            line_data['cotizacion_id'] = cotizacion_id
+        lines.append(line_data)
     subtotal = sum((amount(x['subtotal']) for x in lines), Decimal('0'))
     tax = sum((amount(x['iva']) for x in lines), Decimal('0'))
     return lines, subtotal, tax, subtotal+tax

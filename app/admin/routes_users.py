@@ -11,6 +11,7 @@ from app.extensions import csrf
 from datetime import datetime
 from app.services.fiscal_service import audit
 from app.services.audit import registrar_auditoria
+from app.services.validation import amount
 
 
 def puede_administrar_usuario(cursor, user_id):
@@ -202,6 +203,8 @@ def guardar_configuracion():
         if any(str(k).startswith('fiscal_') for k in datos):
             return jsonify(error='Use el módulo Fiscal para cambiar datos tributarios.'),400
         for clave, valor in datos.items():
+            if clave == 'tipo_cambio_usd':
+                valor = str(amount(valor, 'Tipo de cambio', minimum=0.01, maximum=999999))
             cursor.execute(
                 "UPDATE ConfiguracionSistema SET Valor = ? WHERE Clave = ?",
                 str(valor), clave

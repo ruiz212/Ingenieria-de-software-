@@ -43,7 +43,12 @@ export function calcularTotales() {
     const subtotal = round(carrito.reduce((sum,item)=>sum+round(item.subtotal),0));
     const config=window.configuracionGlobal || {};
     const rates=window.tasasProductos || {};
-    const iva=config.fiscal_regimen === 'General' ? round(carrito.reduce((sum,item)=>sum+round(round(item.subtotal)*(Number(rates[String(item.id).split('_')[0]]) || 0)/100),0)) : 0;
+    const defaultRate = Object.values(rates).find(r => r !== null && r !== undefined) ?? 0;
+    const iva=config.fiscal_regimen === 'General' ? round(carrito.reduce((sum,item)=>{
+        const baseKey = String(item.id).split('_')[0];
+        const rate = baseKey === 'custom' ? Number(defaultRate) : (Number(rates[baseKey]) || 0);
+        return sum + round(round(item.subtotal) * rate / 100);
+    },0)) : 0;
     return {subtotal,iva,total:round(subtotal+iva)};
 }
 export function vaciarCarrito() {

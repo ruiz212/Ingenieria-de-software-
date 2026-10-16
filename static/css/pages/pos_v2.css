@@ -289,8 +289,8 @@ body.pos-body {
     background: var(--surface-elevated);
     border: 1px solid var(--border-light);
     color: var(--text-main);
-    width: 26px;
-    height: 26px;
+    width: 34px;
+    height: 34px;
     border-radius: var(--radius-xs);
     cursor: pointer;
     display: flex;
@@ -371,6 +371,54 @@ body.pos-body {
     box-shadow: 0 8px 24px rgba(74, 157, 91, 0.40);
 }
 
+/* Controls for monetary configuration and cashier touch targets */
+.exchange-rate-field {
+    padding: 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--brand-dorado) 42%, var(--border));
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--brand-dorado) 8%, var(--surface));
+}
+
+.input-with-prefix {
+    display: flex;
+    align-items: center;
+    max-width: 220px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.input-with-prefix span {
+    padding: 0 0.75rem;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.input-with-prefix .form-input {
+    min-width: 0;
+    border: 0;
+    border-left: 1px solid var(--border-light);
+    border-radius: 0;
+}
+
+.input-with-prefix:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 16%, transparent);
+}
+
+.exchange-rate-source {
+    display: block;
+    margin-top: 0.45rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+@media (max-width: 720px) {
+    .input-with-prefix { max-width: none; }
+    .qty-btn { width: 40px; height: 40px; }
+}
+
 /* Modals for POS — Performance-optimized */
 .modal-overlay {
     background: rgba(30, 18, 10, 0.72) !important;
@@ -387,6 +435,67 @@ body.pos-body {
     border-top: 3px solid var(--brand-dorado) !important;
     max-width: 520px;
     width: 100%;
+}
+
+.pos-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(48, 28, 19, 0.58);
+    backdrop-filter: blur(4px);
+}
+
+.pos-confirm-dialog {
+    width: min(100%, 420px);
+    padding: 1.5rem;
+    border: 1px solid var(--border-light);
+    border-top: 4px solid var(--brand-dorado);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: 0 24px 70px rgba(48, 28, 19, 0.3);
+    text-align: center;
+    animation: modalSlideUp 0.22s var(--ease-out) both;
+}
+
+.pos-confirm-icon {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    margin: 0 auto 0.75rem;
+    border-radius: 50%;
+    background: var(--warning-bg);
+    color: var(--brand-dorado-dark);
+    font-size: 1.4rem;
+    font-weight: 800;
+}
+
+.pos-confirm-icon.danger {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.pos-confirm-dialog h3 {
+    margin: 0 0 0.45rem;
+    color: var(--text-main);
+    font-family: 'Playfair Display', serif;
+    font-size: 1.3rem;
+}
+
+.pos-confirm-dialog p {
+    margin: 0;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.pos-confirm-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
 }
 
 /* Scrollable modal body — GPU-accelerated */

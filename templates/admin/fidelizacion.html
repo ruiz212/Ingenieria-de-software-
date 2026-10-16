@@ -107,16 +107,17 @@
 </div>
 
 <div id="cliente-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cliente-modal-title">
-    <div class="modal-content">
+    <div class="modal-content cliente-modal-content">
         <h2 id="cliente-modal-title">Editar cliente</h2>
-        <form id="cliente-form">
+        <p class="subtitle">Actualiza los datos de contacto y consulta el historial de compras.</p>
+        <form id="cliente-form" class="cliente-form">
             <input type="hidden" id="cliente-id">
-            <div class="form-group"><label for="cliente-nombre">Nombre</label><input id="cliente-nombre" class="form-control" required maxlength="100"></div>
-            <div class="form-group"><label for="cliente-apellidos">Apellidos</label><input id="cliente-apellidos" class="form-control" maxlength="100"></div>
-            <div class="form-group"><label for="cliente-telefono">Teléfono</label><input id="cliente-telefono" class="form-control" required maxlength="30"></div>
-            <div class="form-group"><label for="cliente-nivel">Nivel</label><select id="cliente-nivel" class="form-control"><option value="1">Nuevo</option><option value="2">Frecuente</option><option value="3">VIP</option></select></div>
-            <div id="cliente-historial" class="modal-section"></div>
-            <div class="modal-footer"><button type="button" class="btn btn-outline" id="cliente-cerrar">Cancelar</button><button type="submit" class="btn btn-primary">Guardar</button></div>
+            <div class="form-group"><label class="form-label" for="cliente-nombre">Nombre</label><input id="cliente-nombre" class="form-input" required maxlength="100"></div>
+            <div class="form-group"><label class="form-label" for="cliente-apellidos">Apellidos</label><input id="cliente-apellidos" class="form-input" maxlength="100"></div>
+            <div class="form-group"><label class="form-label" for="cliente-telefono">Teléfono</label><input id="cliente-telefono" class="form-input" required maxlength="30"></div>
+            <div class="form-group"><label class="form-label" for="cliente-nivel">Nivel</label><select id="cliente-nivel" class="form-select"><option value="1">Nuevo</option><option value="2">Frecuente</option><option value="3">VIP</option></select></div>
+            <div id="cliente-historial" class="cliente-history"></div>
+            <div class="modal-actions"><button type="button" class="btn btn-outline" id="cliente-cerrar">Cancelar</button><button type="submit" class="btn btn-primary">Guardar cambios</button></div>
         </form>
     </div>
 </div>

@@ -354,7 +354,7 @@
                 {% for item in factura.productos %}
                 <div class="product-item">
                     <div class="product-main">
-                        <span>{{ item.nombre.split(' (')[0] }} <span style="color: var(--text-muted); font-weight: 500;">x{{ item.cantidad }}</span></span>
+                        <span>{{ (item.nombre or 'Producto').split(' (')[0] }} <span style="color: var(--text-muted); font-weight: 500;">x{{ item.cantidad }}</span></span>
                         <span>C${{ "%.2f"|format(item.subtotal) }}</span>
                     </div>
                     {% if item.detalle_ingredientes and item.detalle_ingredientes.ingredientes %}

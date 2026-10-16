@@ -7,6 +7,7 @@ import traceback
 
 from app.admin import admin_bp
 from app.db import get_db_connection
+from app.services.business_time import business_now
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime
@@ -211,10 +212,11 @@ def registrar_compra():
             return jsonify(error='El crédito de IVA requiere régimen general y soporte fiscal válido.'),400
         # Registrar compra
         monto_sin_iva = monto_total - iva
+        purchased_at = business_now()
         
         cursor.execute(
-            "INSERT INTO ComprasMateriaPrima (MateriaPrimaID, ProveedorID, Cantidad, CostoTotal, FacturaProveedor, IVADocumentado) OUTPUT INSERTED.ID VALUES (?, ?, ?, ?, ?, ?)",
-            int(datos.get('materia_id')), int(datos.get('proveedor_id')), cantidad, monto_total, factura_proveedor, iva
+            "INSERT INTO ComprasMateriaPrima (MateriaPrimaID, ProveedorID, Cantidad, CostoTotal, FacturaProveedor, IVADocumentado, Fecha) OUTPUT INSERTED.ID VALUES (?, ?, ?, ?, ?, ?, ?)",
+            int(datos.get('materia_id')), int(datos.get('proveedor_id')), cantidad, monto_total, factura_proveedor, iva, purchased_at
         )
         new_id = cursor.fetchone()[0]
         
@@ -239,6 +241,7 @@ def registrar_compra():
             iva=iva,
             monto_total=monto_total,
             metodo_pago='Credito', # Por defecto a crédito (CxP)
+            fecha=purchased_at,
             ip=request.remote_addr
         )
         # ============================================================

@@ -200,12 +200,6 @@ def cliente_registro():
             flash("El número de teléfono es obligatorio.", "error")
             return redirect(url_for('auth.cliente_registro'))
 
-        if (session.get('sms_phone') != telefono or
-                not session.get('telefono_verificado') or
-                session.get('sms_expires_at', 0) < time.time()):
-            flash("Verifique el número de teléfono antes de crear la cuenta.", "error")
-            return redirect(url_for('auth.cliente_registro'))
-        
         foto = request.files.get('foto')
         ruta_foto = None
 

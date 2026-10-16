@@ -928,3 +928,18 @@ Conjunto ampliado de restricciones técnicas de software para la operatividad co
 | **Características:** | Confiabilidad Contable |
 | **Descripción del requerimiento:** | El backend deberá bloquear a nivel lógico la confirmación de cualquier Asiento de Diario si la sumatoria global de los movimientos "Debe" y "Haber" tiene una diferencia absoluta mayor a `0.00`, garantizando así la balanza de comprobación cuadrada por diseño. |
 | **Prioridad del requerimiento:** | Alta |
+
+# Ampliación de alcance DGI — 15 de octubre de 2026
+
+Se incorpora la preparación y prevalidación tributaria académica dentro de
+Contabilidad/Finanzas y los permisos del administrador existente: perfil fiscal
+compartido, períodos, consolidación de ventas/compras, diagnóstico trazable,
+conciliación con ingresos contables, revisión humana, aprobación interna,
+exportación XLSX no oficial y auditoría. No se realizan declaraciones, pagos ni
+envíos a VET. Una plantilla oficial requiere validación normativa específica.
+
+Los requisitos RF-DGI-01 a RF-DGI-15, criterios, casos de uso y pruebas se detallan
+en [la matriz de trazabilidad](docs/dgi/TRAZABILIDAD.md). Las exclusiones y fases
+posteriores figuran en ese anexo. Consulte [arquitectura y diccionario de datos](docs/dgi/ARQUITECTURA.md),
+[manual](docs/dgi/MANUAL.md) y [actualización de la estimación](docs/dgi/COCOMO.md).
+Este anexo amplía los ocho módulos del proyecto y conserva los requisitos previos.

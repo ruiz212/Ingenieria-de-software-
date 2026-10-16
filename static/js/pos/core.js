@@ -341,8 +341,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 cb.checked = false;
             }
         });
-        document.getElementById('custom-ing-nombre').value = '';
-        document.getElementById('custom-ing-precio').value = '';
+        const customNombreEl = document.getElementById('custom-ing-nombre');
+        const customPrecioEl = document.getElementById('custom-ing-precio');
+        if (customNombreEl) customNombreEl.value = '';
+        if (customPrecioEl) customPrecioEl.value = '';
 
         actualizarTotalIngredientes();
         
@@ -590,6 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const esClienteOnline = adelantoContainer && adelantoContainer.style.display === 'none';
         
         let adelantoReal = adelanto;
+        let efectivoEncargo = 0;
         if (esClienteOnline) {
             adelantoReal = 0; // Clientes online no pagan adelanto físico en el POS
         } else {
@@ -598,8 +601,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             if (metodoPago === 'Efectivo') {
-                const efectivo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
-                if (efectivo < adelantoReal && adelantoReal > 0) {
+                efectivoEncargo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
+                if (efectivoEncargo < adelantoReal && adelantoReal > 0) {
                     showToast('El efectivo recibido es menor al adelanto', true);
                     return;
                 }
@@ -615,25 +618,34 @@ document.addEventListener('DOMContentLoaded', () => {
         let ruta_imagen = null;
         let telefonoCustom = null;
         let fechaCustom = null;
+        let cotizacionId = null;
         
         const customItem = carrito.find(item => item.es_custom);
-        if (customItem) {
+        if (customItem && customItem.encargo_detalles) {
             especificaciones = customItem.encargo_detalles.especificaciones;
             ruta_imagen = customItem.encargo_detalles.ruta_imagen_referencia;
             telefonoCustom = customItem.encargo_detalles.telefono;
             fechaCustom = customItem.encargo_detalles.fecha_entrega;
+            cotizacionId = customItem.encargo_detalles.cotizacion_id;
         }
         
-        cerrarModal();
-        procesarFactura(true, {
+        const encargoDetalles = {
             adelanto: adelantoReal,
             saldo: total - adelantoReal,
             metodo_adelanto: metodoPago,
+            monto_recibido: metodoPago === 'Efectivo' && efectivoEncargo > 0 ? efectivoEncargo : adelantoReal,
             fecha_entrega: fechaCustom ? fechaCustom : fecha,
             nombre_cliente: nombreCliente,
             telefono: telefonoCustom ? telefonoCustom : telefonoCliente,
             especificaciones: especificaciones,
-            ruta_imagen_referencia: ruta_imagen
+            ruta_imagen_referencia: ruta_imagen,
+            cotizacion_id: cotizacionId
+        };
+        
+        cerrarModal();
+        procesarFactura(true, {
+            ...encargoDetalles,
+            encargo_detalles: encargoDetalles
         });
     });
 
@@ -933,7 +945,12 @@ function calcularTotales() {
     const subtotal = round(carrito.reduce((sum,item)=>sum+round(item.subtotal),0));
     const config=window.configuracionGlobal || {};
     const rates=window.tasasProductos || {};
-    const iva=config.fiscal_regimen === 'General' ? round(carrito.reduce((sum,item)=>sum+round(round(item.subtotal)*(Number(rates[String(item.id).split('_')[0]]) || 0)/100),0)) : 0;
+    const defaultRate = Object.values(rates).find(r => r !== null && r !== undefined) ?? 0;
+    const iva=config.fiscal_regimen === 'General' ? round(carrito.reduce((sum,item)=>{
+        const baseKey = String(item.id).split('_')[0];
+        const rate = baseKey === 'custom' ? Number(defaultRate) : (Number(rates[baseKey]) || 0);
+        return sum + round(round(item.subtotal) * rate / 100);
+    },0)) : 0;
     return {subtotal,iva,total:round(subtotal+iva)};
 }
 function calcularTotal() {

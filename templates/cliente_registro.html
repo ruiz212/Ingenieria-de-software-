@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Bundled CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/cliente_registro.css', v=2) }}">
     <style>
         body {
             min-height: 100vh;
@@ -276,15 +277,15 @@
                 
                 <!-- PASO 1: Info Personal -->
                 <div class="form-step active" id="step-1">
-                    <h3 style="margin-bottom: 1rem; color: var(--text-color); font-size: 1.1rem;">Información Básica</h3>
+                    <h3 class="registration-step-title">Información Básica</h3>
                     <div class="form-grid">
                         <div class="form-group full-width">
                             <label for="nombre">Nombres</label>
-                            <input type="text" id="nombre" name="nombre" class="form-control" required placeholder="Tus nombres">
+                            <input type="text" id="nombre" name="nombre" class="form-input" required placeholder="Tus nombres" maxlength="100">
                         </div>
                         <div class="form-group full-width">
                             <label for="apellidos">Apellidos</label>
-                            <input type="text" id="apellidos" name="apellidos" class="form-control" required placeholder="Tus apellidos">
+                            <input type="text" id="apellidos" name="apellidos" class="form-input" required placeholder="Tus apellidos" maxlength="100">
                         </div>
                     </div>
                     <div class="btn-controls" style="justify-content: flex-end;">
@@ -294,11 +295,11 @@
 
                 <!-- PASO 2: Detalles -->
                 <div class="form-step" id="step-2">
-                    <h3 style="margin-bottom: 1rem; color: var(--text-color); font-size: 1.1rem;">Detalles Personales</h3>
+                    <h3 class="registration-step-title">Detalles Personales</h3>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="genero">Género</label>
-                            <select id="genero" name="genero" class="form-control" required>
+                            <select id="genero" name="genero" class="form-select" required>
                                 <option value="" disabled selected>Selecciona una opción</option>
                                 <option value="Masculino">Masculino</option>
                                 <option value="Femenino">Femenino</option>
@@ -308,11 +309,11 @@
                         </div>
                         <div class="form-group">
                             <label for="fecha_nacimiento">Fecha de Nacimiento</label>
-                            <input type="date" id="fecha_nacimiento" name="fecha_nacimiento" class="form-control" required>
+                            <input type="date" id="fecha_nacimiento" name="fecha_nacimiento" class="form-input" required>
                         </div>
                         <div class="form-group full-width">
                             <label for="foto">Foto de Perfil (Opcional)</label>
-                            <input type="file" id="foto" name="foto" class="form-control" accept="image/*">
+                            <input type="file" id="foto" name="foto" class="form-input" accept="image/*">
                         </div>
                     </div>
                     <div class="btn-controls">
@@ -323,18 +324,18 @@
 
                 <!-- PASO 3: Seguridad -->
                 <div class="form-step" id="step-3">
-                    <h3 style="margin-bottom: 1rem; color: var(--text-color); font-size: 1.1rem;">Seguridad de la Cuenta</h3>
+                    <h3 class="registration-step-title">Seguridad de la Cuenta</h3>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="telefono">Teléfono Celular</label>
-                            <input type="tel" id="telefono" name="telefono" class="form-control" required placeholder="Ej: 88888888">
+                            <input type="tel" id="telefono" name="telefono" class="form-input" required placeholder="Ej: 88888888" maxlength="20">
                         </div>
                         <div class="form-group">
                             <label for="password">Contraseña</label>
-                            <input type="password" id="password" name="password" class="form-control" required placeholder="Crea una contraseña">
+                            <input type="password" id="password" name="password" class="form-input" required minlength="12" placeholder="Mínimo 12 caracteres">
                         </div>
                     </div>
-                    
+
                     <div class="btn-controls">
                         <button type="button" class="btn btn-outline" onclick="prevStep(2)">Atrás</button>
                         <button type="submit" id="btn-submit" class="btn btn-primary">Registrar Cuenta</button>

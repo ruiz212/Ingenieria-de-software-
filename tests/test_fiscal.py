@@ -71,3 +71,106 @@ def test_server_ignores_forged_prices():
     lines,subtotal,tax,total=calculate_sale(ProductCursor(),[{'id':1,'cantidad':2,'precio':0.01,'subtotal':0.02}],cfg)
     assert subtotal==18 and tax==Decimal('2.70') and total==Decimal('20.70')
     assert lines[0]['precio']==9
+
+
+class CustomQuoteCursor:
+    def __init__(self, quote_row=(42, 'Pastel de Chocolate 2 pisos', Decimal('450.00')), base_row=(99, Decimal('15'), None)):
+        self.quote_row = quote_row
+        self.base_row = base_row
+        self.last_sql = ''
+
+    def execute(self, sql, *args):
+        self.last_sql = sql
+        return self
+
+    def fetchone(self):
+        if 'FROM Cotizaciones' in self.last_sql:
+            return self.quote_row
+        if 'FROM Productos' in self.last_sql:
+            return self.base_row
+        return None
+
+
+def test_calculate_sale_custom_quote_uses_server_price():
+    cfg = {k: 'dato verificado' for k in ['fiscal_razon_social', 'fiscal_ruc', 'fiscal_direccion', 'fiscal_telefono', 'fiscal_autorizacion']}
+    cfg['fiscal_regimen'] = 'Cuota Fija'
+    cursor = CustomQuoteCursor()
+    lines, subtotal, tax, total = calculate_sale(
+        cursor,
+        [{'id': 'custom_42', 'cantidad': 1, 'precio': 1.00, 'nombre': 'Pastel Falsificado'}],
+        cfg
+    )
+    assert len(lines) == 1
+    assert lines[0]['id'] == 99
+    assert lines[0]['cotizacion_id'] == 42
+    assert lines[0]['precio'] == 450.0
+    assert subtotal == Decimal('450.00')
+    assert tax == Decimal('0.00')
+    assert total == Decimal('450.00')
+
+
+def test_calculate_sale_rejects_unpriced_custom_quote():
+    cfg = {k: 'dato verificado' for k in ['fiscal_razon_social', 'fiscal_ruc', 'fiscal_direccion', 'fiscal_telefono', 'fiscal_autorizacion']}
+    cfg['fiscal_regimen'] = 'Cuota Fija'
+    cursor = CustomQuoteCursor(quote_row=None)
+    with pytest.raises(ValueError, match='no tiene precio autorizado'):
+        calculate_sale(cursor, [{'id': 'custom_99', 'cantidad': 1}], cfg)
+
+
+class DiscountWithExtrasCursor:
+    def __init__(self):
+        self.last_sql = ''
+
+    def execute(self, sql, *args):
+        self.last_sql = sql
+        return self
+
+    def fetchone(self):
+        if 'FROM Ingredientes' in self.last_sql:
+            return (5, 'Fresas', Decimal('25.00'))
+        return ('Pastel Base', Decimal('199.99'), Decimal('15'), Decimal('0'), None, True)
+
+
+def test_discount_rounds_base_before_adding_extras():
+    cfg = {k: 'dato verificado' for k in ['fiscal_razon_social', 'fiscal_ruc', 'fiscal_direccion', 'fiscal_telefono', 'fiscal_autorizacion']}
+    cfg['fiscal_regimen'] = 'Cuota Fija'
+    lines, subtotal, tax, total = calculate_sale(
+        DiscountWithExtrasCursor(),
+        [{
+            'id': '10_12345',
+            'cantidad': 1,
+            'detalle_ingredientes': {'ingredientes': [{'nombre': 'Fresas'}]}
+        }],
+        cfg
+    )
+    # 199.99 * 0.85 = 169.9915 -> 169.99 + 25.00 = 194.99
+    assert lines[0]['precio'] == 194.99
+    assert total == Decimal('194.99')
+
+
+def test_contabilizar_cobro_encargo_creates_balanced_entry(monkeypatch):
+    recorded = {}
+
+    def fake_crear_asiento(**kwargs):
+        ContabilidadService._validar_partida_doble([(d[0], d[1], d[2]) for d in kwargs['detalles']])
+        recorded.update(kwargs)
+        return {'asiento_id': 777, 'numero_comprobante': 'CI-0001', 'periodo_id': 1}
+
+    monkeypatch.setattr(ContabilidadService, 'crear_asiento', staticmethod(fake_crear_asiento))
+    res = ContabilidadService.contabilizar_cobro_encargo(
+        cursor=object(),
+        usuario_id=1,
+        numero_factura='FAC-000015',
+        monto_saldo=Decimal('250.00'),
+        metodo_pago='Transferencia'
+    )
+    assert res['asiento_id'] == 777
+    assert recorded['tipo_comprobante'] == 'IN'
+    assert recorded['referencia_externa'] == 'SALDO-FAC-000015'
+    cuentas = [(d[0], d[1], d[2]) for d in recorded['detalles']]
+    assert ('1.1.01.004', Decimal('250.00'), 0) in cuentas
+    assert (ContabilidadService.ENCARGOS_POR_COBRAR, 0, Decimal('250.00')) in cuentas
+
+
+
+
