@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tienda Online - Panadería Amada</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/tienda.css', v=3) }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/pos_product_visuals.css', v=3) }}">
+    <title>Tienda Online — Panadería Amada & Brajher's Cake</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/tienda.css', v=5) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/pos_product_visuals.css', v=5) }}">
     <style>
-        /* Fallbacks for JS interactions */
         .catalog-panel { display: contents; }
     </style>
 
@@ -32,7 +31,7 @@
         'galletas':'🍪','bebidas':'☕','postres frios':'🍰','postres fríos':'🍰',
     };
     function getProductEmoji(n,c){
-        const nl=n.toLowerCase();
+        const nl=(n||'').toLowerCase();
         for(const[k,e] of Object.entries(window.PRODUCT_EMOJI_MAP)){if(nl.includes(k))return e;}
         return window.CATEGORY_EMOJI_MAP[(c||'').toLowerCase()]||'🛍️';
     }
@@ -43,74 +42,204 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/accessibility.css', v=1) }}">
-<script>window.tasasProductos = Object.fromEntries({{ productos|tojson }}.map(p=>[p.id,p.tasa_iva]));</script>
+    <script>window.tasasProductos = Object.fromEntries({{ productos|tojson }}.map(p=>[p.id,p.tasa_iva]));</script>
 </head>
 <body class="tienda-body pos-body">
-    <!-- Navbar -->
+
+    <!-- Top Announcement Bar -->
+    <div class="top-announcement-bar">
+        <span>🥖 Pan recién horneado todos los días desde las 6:00 AM</span>
+        <span class="highlight-pill">✨ Pasteles personalizados bajo pedido</span>
+    </div>
+
+    {% if user.fecha_nacimiento and user.fecha_nacimiento.month == mes_actual %}
+    <div class="birthday-banner">
+        🎉 ¡Feliz mes de tu cumpleaños, {{ user.nombre.split()[0] if user.nombre else 'Cliente' }}! Celebra con nuestros pasteles recién horneados.
+    </div>
+    {% endif %}
+
+    <!-- Sticky Navbar -->
     <nav class="tienda-nav app-header">
         <a href="/" class="brand-logo">
-            <span style="font-size: 2rem;">🌾</span>
-            <h1>Panadería Amada</h1>
+            <div class="brand-logo-icon" aria-hidden="true">🌾</div>
+            <div class="brand-logo-text">
+                <h1>Panadería Amada</h1>
+                <span class="brand-subtitle">Artesanal & Repostería Fina</span>
+            </div>
         </a>
         <div class="nav-actions">
+            <button type="button" id="btn-rastrear-pedido" class="nav-btn-ghost" title="Consultar estado con código de seguimiento">
+                <span>🔍</span> <span>Rastrear Pedido</span>
+            </button>
+
             {% if user.is_authenticated %}
-                <span style="color: var(--text-muted); font-size: 0.9rem; font-weight: 500;">Hola, {{ user.nombre.split()[0] if user.nombre else 'Invitado' }}</span>
-                <button id="btn-mis-cotizaciones" class="filter-btn" style="border:none; box-shadow:none;">Mis Cotizaciones</button>
-                <a href="/logout" style="color: var(--text-muted); text-decoration: none; font-size: 0.9rem;">Salir</a>
+                <button type="button" id="btn-mis-cotizaciones" class="nav-btn-ghost">
+                    <span>📋</span> <span>Mis Cotizaciones</span>
+                </button>
+                <span class="user-greeting-pill">
+                    <span>👋</span>
+                    <span>Hola, {{ user.nombre.split()[0] if user.nombre else 'Invitado' }}</span>
+                </span>
+                <a href="/logout" class="nav-link-logout">Salir</a>
             {% else %}
-                <a href="/login" class="filter-btn">Iniciar Sesión</a>
+                <a href="/login" class="nav-btn-ghost">Iniciar Sesión</a>
             {% endif %}
-            <button class="cart-toggle" onclick="document.getElementById('cartDrawer').classList.add('open'); document.getElementById('cartOverlay').classList.add('active');">
-                🛒
-                <span class="cart-badge" id="badge-pedidos">0</span>
+
+            <button type="button" class="cart-toggle" id="btn-abrir-carrito-nav" aria-label="Abrir carrito de compras">
+                <span>🛒</span>
+                <span class="cart-badge" id="badge-carrito-tienda">0</span>
+                <span class="cart-toggle-total" id="nav-cart-total">C$0.00</span>
             </button>
         </div>
     </nav>
 
-    {% if user.fecha_nacimiento and user.fecha_nacimiento.month == mes_actual %}
-    <div style="background: var(--brand-primary); color: white; text-align: center; padding: 0.5rem; font-weight: 600; letter-spacing: 1px;">
-        🎉 ¡Feliz mes de tu cumpleaños! Disfruta de la mejor calidad.
-    </div>
-    {% endif %}
-
-    <!-- Hero Section -->
+    <!-- Editorial Hero Section -->
     <header class="hero-section">
         <div class="hero-content">
-            <h2>El sabor de la tradición, ahora en tu hogar.</h2>
-            <p>Pan artesanal recién horneado y pasteles personalizados para tus momentos más especiales.</p>
-            <button id="btn-pastel-personalizado" class="btn-hero">🎂 Pedir Pastel Personalizado</button>
+            <div class="hero-copy">
+                <div class="hero-eyebrow">✨ Tradición Nicaragüense en cada horneada</div>
+                <h2>El sabor artesanal de siempre, <em>listo para ti</em>.</h2>
+                <p>Explora nuestro catálogo de pan fresco, postres fríos y repostería personalizada. Haz tu pedido en línea o solicita la cotización de tu pastel soñado en segundos.</p>
+                <div class="hero-cta-group">
+                    <button type="button" id="btn-pastel-personalizado" class="btn-hero">
+                        <span>🎂</span> <span>Pedir Pastel Personalizado</span>
+                    </button>
+                    <a href="#catalogo-tienda" class="btn-hero-secondary">
+                        <span>🥐</span> <span>Explorar Catálogo</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="hero-showcase-card">
+                <div class="hero-showcase-header">
+                    <div class="hero-showcase-icon" aria-hidden="true">🍰</div>
+                    <div>
+                        <h3>¿Cómo comprar en línea?</h3>
+                        <span>Rápido, transparente y sin filas</span>
+                    </div>
+                </div>
+                <ul class="hero-steps-list">
+                    <li>
+                        <span class="step-number-badge">1</span>
+                        <div><strong>Elige o personaliza:</strong> Agrega panes, postres o diseña tu pastel con ingredientes extras o foto de referencia.</div>
+                    </li>
+                    <li>
+                        <span class="step-number-badge">2</span>
+                        <div><strong>Confirma fecha y pago:</strong> Selecciona la fecha de recogida y tu método de pago preferido.</div>
+                    </li>
+                    <li>
+                        <span class="step-number-badge">3</span>
+                        <div><strong>Sigue tu orden en vivo:</strong> Recibe confirmación de recepción y consulta el avance de horneado en tiempo real.</div>
+                    </li>
+                </ul>
+            </div>
         </div>
     </header>
 
-    <main class="pos-layout">
+    <!-- Value Proposition Strip -->
+    <section class="value-strip" aria-label="Beneficios de compra">
+        <div class="value-strip-inner">
+            <div class="value-item">
+                <div class="value-icon" aria-hidden="true">🔥</div>
+                <div class="value-text">
+                    <strong>Horneado Fresco Diario</strong>
+                    <span>Ingredientes locales seleccionados cada mañana</span>
+                </div>
+            </div>
+            <div class="value-item">
+                <div class="value-icon" aria-hidden="true">🎨</div>
+                <div class="value-text">
+                    <strong>Repostería a tu Medida</strong>
+                    <span>Cotiza pasteles para bodas, cumpleaños y eventos</span>
+                </div>
+            </div>
+            <div class="value-item">
+                <div class="value-icon" aria-hidden="true">📲</div>
+                <div class="value-text">
+                    <strong>Atención Directa y Seguimiento</strong>
+                    <span>Notificaciones de cotización y rastreo con código QR</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <main class="pos-layout" id="catalogo-tienda">
         <!-- Catalog wrapper for pos.js event delegation -->
         <div class="catalog-panel pos-main" style="width: 100%;">
-            
-            <!-- Category Filters -->
-            <section class="store-filters category-tabs">
-                <button class="filter-btn category-btn active" data-filter="Todos">Descubrir Todos</button>
-                {% for cat in categorias %}
-                <button class="filter-btn category-btn" data-filter="{{ cat.nombre }}">{{ cat.nombre }}</button>
-                {% endfor %}
-            </section>
+
+            <!-- Search, Sort & Category Toolbar -->
+            <div class="store-toolbar-wrapper">
+                <div class="store-search-sort-bar">
+                    <div class="search-box-tienda">
+                        <span class="search-box-icon" aria-hidden="true">🔎</span>
+                        <input type="search" id="tienda-search-input" placeholder="Buscar pan dulce, pastel, tres leches, café..." autocomplete="off">
+                        <button type="button" id="tienda-search-clear" class="search-clear-btn" aria-label="Limpiar búsqueda">×</button>
+                    </div>
+
+                    <div class="store-controls-right">
+                        <span class="results-counter" id="tienda-results-count">{{ productos|length }} productos disponibles</span>
+                        <select id="tienda-sort-select" class="sort-select-tienda" aria-label="Ordenar productos">
+                            <option value="default">Ordenar: Destacados</option>
+                            <option value="price-asc">Precio: Menor a Mayor</option>
+                            <option value="price-desc">Precio: Mayor a Menor</option>
+                            <option value="name-asc">Nombre: A - Z</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Category Filters -->
+                <section class="store-filters category-tabs" aria-label="Categorías de productos">
+                    <button type="button" class="filter-btn category-btn active" data-filter="Todos">
+                        <span>✨</span>
+                        <span>Todos</span>
+                        <span class="filter-count-pill">{{ productos|length }}</span>
+                    </button>
+                    {% set ns = namespace(ofertas=0) %}
+                    {% for p in productos if p.descuento > 0 %}
+                        {% set ns.ofertas = ns.ofertas + 1 %}
+                    {% endfor %}
+                    {% if ns.ofertas > 0 %}
+                    <button type="button" class="filter-btn" id="btn-filter-ofertas" data-special-filter="ofertas">
+                        <span>🔥</span>
+                        <span>Ofertas</span>
+                        <span class="filter-count-pill">{{ ns.ofertas }}</span>
+                    </button>
+                    {% endif %}
+                    {% for cat in categorias %}
+                    {% set cat_count = productos|selectattr('categoria', 'equalto', cat.nombre)|list|length %}
+                    {% if cat_count > 0 %}
+                    <button type="button" class="filter-btn category-btn" data-filter="{{ cat.nombre }}">
+                        <span class="cat-tab-emoji" data-cat-name="{{ cat.nombre }}">🥖</span>
+                        <span>{{ cat.nombre }}</span>
+                        <span class="filter-count-pill">{{ cat_count }}</span>
+                    </button>
+                    {% endif %}
+                    {% endfor %}
+                </section>
+            </div>
 
             <!-- Products Grid -->
             <section class="store-catalog">
-                <div class="store-grid products-grid">
-                    {% for producto in productos if producto.categoria != 'Reposteria' %}
+                <div class="store-grid products-grid" id="tienda-products-grid">
+                    {% for producto in productos %}
+                    {% set precio_final = producto.precio - (producto.precio * producto.descuento / 100) if producto.descuento > 0 else producto.precio %}
                     <article class="store-product-card filterable-product product-card"
                         data-id="{{ producto.id }}"
                         data-nombre="{{ producto.nombre }}"
                         data-precio="{{ producto.precio }}"
+                        data-precio-final="{{ '%.2f'|format(precio_final) }}"
                         data-categoria="{{ producto.categoria }}"
                         data-descuento="{{ producto.descuento }}"
                         data-imagen-url="{{ producto.imagen_url }}"
                     >
-                        {% if producto.descuento > 0 %}
-                            <div class="product-discount-badge">-{{ "%.0f"|format(producto.descuento) }}%</div>
+                        {% if producto.categoria == 'Reposteria' %}
+                            <div class="customizable-pill-badge">✨ Personalizable</div>
                         {% endif %}
 
-                        <!-- Imagen real o emoji fallback -->
+                        {% if producto.descuento > 0 %}
+                            <div class="product-discount-badge">-{{ "%.0f"|format(producto.descuento) }}% OFF</div>
+                        {% endif %}
+
                         {% if producto.imagen_url %}
                         <div class="product-visual product-visual-img">
                             <img src="{{ producto.imagen_url }}"
@@ -122,45 +251,88 @@
                         <div class="product-visual"></div>
                         {% endif %}
 
-                        <div>
+                        <div class="store-card-body">
                             <div class="card-cat category-label">{{ producto.categoria }}</div>
                             <h3 class="card-title">{{ producto.nombre }}</h3>
+                            {% if producto.categoria == 'Reposteria' %}
+                            <p class="card-subtitle-hint">Elige extras o rellenos al agregar</p>
+                            {% else %}
+                            <p class="card-subtitle-hint">Recién horneado • Calidad artesanal</p>
+                            {% endif %}
                         </div>
 
                         <div class="card-price-add">
                             {% if producto.descuento > 0 %}
-                                <div style="display: flex; flex-direction: column;">
-                                    <span style="text-decoration: line-through; color: var(--text-muted); font-size: 0.85rem;">C${{ "%.2f"|format(producto.precio) }}</span>
-                                    <span class="card-price" style="color: var(--danger);">C${{ "%.2f"|format(producto.precio - (producto.precio * producto.descuento / 100)) }}</span>
+                                <div class="price-stack">
+                                    <span class="price-old">C${{ "%.2f"|format(producto.precio) }}</span>
+                                    <span class="card-price is-discounted">C${{ "%.2f"|format(precio_final) }}</span>
                                 </div>
                             {% else %}
                                 <p class="card-price price">C${{ "%.2f"|format(producto.precio) }}</p>
                             {% endif %}
-                            <button class="btn-add">+</button>
+                            <button type="button" class="btn-add" aria-label="Agregar {{ producto.nombre }} al pedido">
+                                <span>{% if producto.categoria == 'Reposteria' %}Personalizar{% else %}Agregar{% endif %}</span>
+                                <span>+</span>
+                            </button>
                         </div>
                     </article>
                     {% endfor %}
+                </div>
 
+                <!-- Empty Search State -->
+                <div id="tienda-empty-search" class="empty-search-state hidden">
+                    <div style="font-size: 2.8rem;">🥐</div>
+                    <h3>No encontramos productos con ese criterio</h3>
+                    <p style="color: var(--text-muted); margin-bottom: 1.25rem;">Prueba con otro término o explora todas nuestras categorías recién horneadas.</p>
+                    <button type="button" id="btn-reset-filtros-tienda" class="btn-primary">Ver todo el catálogo</button>
+                </div>
+
+                <!-- Custom Cake Promo Banner Inside Catalog -->
+                <div class="custom-cake-promo-banner">
+                    <div class="custom-cake-promo-copy">
+                        <h3>🎂 ¿Tienes una celebración especial en puerta?</h3>
+                        <p>Diseñamos pasteles temáticos para cumpleaños, bodas y eventos corporativos. Sube tu foto de referencia y nuestro equipo maestro pastelero te enviará la cotización.</p>
+                    </div>
+                    <button type="button" class="btn-hero" onclick="document.getElementById('btn-pastel-personalizado').click();">
+                        ✨ Cotizar Diseño a Medida
+                    </button>
                 </div>
             </section>
         </div>
     </main>
 
-    <!-- Cart Drawer -->
-    <div id="cartOverlay" class="cart-drawer-overlay" onclick="document.getElementById('cartDrawer').classList.remove('open'); this.classList.remove('active');"></div>
-    <aside id="cartDrawer" class="cart-drawer invoice-panel">
-        <div class="cart-header invoice-header">
-            <h2>Tu Pedido</h2>
-            <button class="btn-close-cart" onclick="document.getElementById('cartDrawer').classList.remove('open'); document.getElementById('cartOverlay').classList.remove('active');">×</button>
+    <!-- Floating Bottom Cart Bar -->
+    <div id="floating-cart-bar" class="floating-cart-bar" role="region" aria-label="Resumen rápido del carrito">
+        <div class="floating-cart-info">
+            <span>🛍️</span>
+            <span><strong id="floating-cart-count">0</strong> productos</span>
+            <span>•</span>
+            <strong id="floating-cart-total" style="color: #FFE4B5; font-family: 'Outfit', sans-serif;">C$0.00</strong>
         </div>
-        
+        <button type="button" class="floating-cart-btn" id="btn-floating-ver-pedido">
+            Ver mi Pedido →
+        </button>
+    </div>
+
+    <!-- Cart Drawer -->
+    <div id="cartOverlay" class="cart-drawer-overlay"></div>
+    <aside id="cartDrawer" class="cart-drawer invoice-panel" aria-label="Tu Pedido">
+        <div class="cart-header invoice-header">
+            <div class="cart-header-title">
+                <h2>Tu Pedido</h2>
+                <button type="button" id="btn-vaciar-carrito-tienda" class="btn-clear-cart hidden">Vaciar</button>
+            </div>
+            <button type="button" class="btn-close-cart" id="btn-cerrar-drawer-carrito" aria-label="Cerrar carrito">×</button>
+        </div>
+
         <div class="cart-body cart-items" id="cart-items">
             <div class="empty-cart-msg empty-cart">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🛒</div>
-                Tu carrito está vacío.<br>Agrega algunos productos deliciosos.
+                <div style="font-size: 3rem; margin-bottom: 0.75rem;">🛒</div>
+                <strong>Tu carrito está vacío</strong><br>
+                <span style="font-size: 0.85rem;">Agrega panes recién horneados o pasteles del catálogo para comenzar.</span>
             </div>
         </div>
-        
+
         <div class="cart-footer invoice-footer">
             <div class="summary-row">
                 <span>Subtotal:</span>
@@ -171,11 +343,11 @@
                 <span id="iva-display">C$0.00</span>
             </div>
             <div class="summary-row total-row">
-                <span>Total:</span>
+                <span>Total Estimado:</span>
                 <span id="total-display">C$0.00</span>
             </div>
             <button type="button" id="btn-realizar-pedido" disabled>
-                Continuar al Pago
+                Continuar con mi Pedido →
             </button>
         </div>
     </aside>
@@ -183,32 +355,85 @@
     <!-- Modals Background -->
     <div id="modal-overlay" class="modal-overlay hidden"></div>
 
-    <!-- Modal Pastel Personalizado -->
+    <!-- Modal Personalizar Ingredientes (Repostería) -->
+    <div id="ingredientes-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="modal-ingredientes-title">Personalizar Pastel</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.92rem;">
+                Selecciona los rellenos, coberturas o extras que desees agregar a tu pastel:
+            </p>
+
+            <div id="ingredientes-list-container" class="ingredientes-grid-tienda">
+                {% for ing in ingredientes %}
+                <label class="ingrediente-option">
+                    <span style="display:flex; align-items:center; gap:0.45rem;">
+                        <input type="checkbox" class="ingrediente-cb" value="{{ ing.precio }}" data-nombre="{{ ing.nombre }}">
+                        <span>{{ ing.nombre }}</span>
+                    </span>
+                    <span class="ing-precio">+C${{ "%.2f"|format(ing.precio) }}</span>
+                </label>
+                {% else %}
+                <p style="grid-column: 1 / -1; color: var(--text-muted); font-size: 0.88rem;">
+                    Puedes agregar este producto directamente o indicar detalles en el paso final.
+                </p>
+                {% endfor %}
+            </div>
+
+            <div class="form-group" style="margin-top: 1rem; background: var(--brand-crema); padding: 0.9rem 1.1rem; border-radius: 14px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 700; color: var(--brand-cafe-dark);">Precio con extras:</span>
+                <input type="text" id="modal-ingredientes-total" readonly style="border: none; background: transparent; font-family: 'Outfit', sans-serif; font-size: 1.3rem; font-weight: 800; color: var(--brand-cafe-dark); text-align: right; width: 140px;" value="C$0.00">
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-outline" id="btn-cerrar-ingredientes">Cancelar</button>
+                <button type="button" class="btn-primary" id="btn-confirmar-ingredientes">Agregar al Pedido</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Pastel Personalizado (Cotización a Medida) -->
     <div id="pastel-personalizado-modal" class="modal-overlay hidden">
         <div class="modal-content">
-            <h2>Pastel Personalizado</h2>
-            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Cuéntanos cómo quieres tu pastel ideal y te lo cotizamos.</p>
-            
+            <h2>🎂 Diseñar Pastel Personalizado</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.25rem; font-size: 0.92rem;">
+                Cuéntanos cómo imaginas tu pastel ideal y te enviaremos la cotización a la brevedad.
+            </p>
+
             <form id="form-pastel-personalizado">
-                <label>Especificaciones (Sabores, decoración):</label>
-                <textarea id="pastel-especificaciones" class="form-control" rows="4" required placeholder="Ej: Pastel de vainilla relleno de fresa..."></textarea>
-                
-                <label>Fecha de entrega deseada:</label>
-                <input type="date" id="pastel-fecha" class="form-control" required>
-                
-                <label>Foto de Referencia (Opcional):</label>
-                <input type="file" id="pastel-foto" class="form-control" accept="image/*">
-                
-                {% if user.rol_nombre == 'Invitado' %}
-                <label>Tu Nombre Completo:</label>
-                <input type="text" id="pastel-nombre" class="form-control" required placeholder="Ej: María López">
-                <label>Teléfono de contacto (WhatsApp):</label>
-                <input type="tel" id="pastel-telefono" class="form-control" required placeholder="Ej: 8888-1234">
+                <label for="pastel-especificaciones">Especificaciones (Sabores, porciones, dedicatoria, decoración):</label>
+                <textarea id="pastel-especificaciones" class="form-control" rows="3" required placeholder="Ej: Pastel para 25 personas, sabor vainilla con relleno de dulce de leche y decoración floral dorada..."></textarea>
+
+                <div class="form-row-2">
+                    <div>
+                        <label for="pastel-fecha">Fecha de entrega deseada:</label>
+                        <input type="date" id="pastel-fecha" class="form-control" required>
+                    </div>
+                    <div>
+                        <label for="pastel-foto">Foto de referencia (Opcional):</label>
+                        <input type="file" id="pastel-foto" class="form-control" accept="image/*" style="padding: 0.58rem;">
+                    </div>
+                </div>
+
+                <div id="pastel-foto-preview-box" class="hidden" style="margin-bottom: 1rem; text-align: center; background: var(--brand-crema); padding: 0.65rem; border-radius: 12px;">
+                    <img id="pastel-foto-preview" src="" alt="Vista previa de referencia" style="max-height: 130px; border-radius: 8px; object-fit: contain;">
+                </div>
+
+                {% if user.rol_nombre == 'Invitado' or not user.telefono %}
+                <div class="form-row-2">
+                    <div>
+                        <label for="pastel-nombre">Tu Nombre Completo:</label>
+                        <input type="text" id="pastel-nombre" class="form-control" required value="{{ '' if user.rol_nombre == 'Invitado' else (user.nombre or '') }}" placeholder="Ej: María López">
+                    </div>
+                    <div>
+                        <label for="pastel-telefono">Teléfono / WhatsApp:</label>
+                        <input type="tel" id="pastel-telefono" class="form-control" required value="{{ user.telefono or '' }}" placeholder="Ej: 8888-1234">
+                    </div>
+                </div>
                 {% endif %}
-                
+
                 <div class="modal-actions">
                     <button type="button" class="btn-outline" id="btn-cerrar-pastel">Cancelar</button>
-                    <button type="submit" class="btn-primary">Solicitar Cotización</button>
+                    <button type="submit" class="btn-primary">Enviar Solicitud de Cotización</button>
                 </div>
             </form>
         </div>
@@ -216,9 +441,11 @@
 
     <!-- Modal Mis Cotizaciones -->
     <div id="mis-cotizaciones-modal" class="modal-overlay hidden">
-        <div class="modal-content" style="max-width: 600px;">
-            <h2>Mis Cotizaciones</h2>
-            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Revisa el estado de tus solicitudes de pastel.</p>
+        <div class="modal-content" style="max-width: 620px;">
+            <h2>📋 Mis Solicitudes y Cotizaciones</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.25rem; font-size: 0.92rem;">
+                Consulta el estado y precio autorizado de tus pedidos y pasteles personalizados.
+            </p>
             <div id="cotizaciones-cliente-list" style="max-height: 60vh; overflow-y: auto;">
                 <p style="text-align: center; color: var(--text-muted);">Cargando...</p>
             </div>
@@ -228,74 +455,140 @@
         </div>
     </div>
 
-    <!-- Modal Encargo / Finalizar Pago Cliente -->
+    <!-- Modal Rastrear Pedido por Código -->
+    <div id="rastrear-pedido-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 440px;">
+            <h2>🔍 Rastrear mi Encargo</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.25rem; font-size: 0.92rem;">
+                Ingresa el código de seguimiento que aparece en tu comprobante o junto al código QR.
+            </p>
+            <form id="form-rastrear-pedido">
+                <label for="input-codigo-seguimiento">Código de Seguimiento:</label>
+                <input type="text" id="input-codigo-seguimiento" class="form-control" placeholder="Ej: A1B2C3D4E5" required maxlength="30" style="text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em;">
+                <div class="modal-actions">
+                    <button type="button" class="btn-outline" id="btn-cerrar-rastrear">Cancelar</button>
+                    <button type="submit" class="btn-primary">Ver Estado en Vivo →</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Encargo / Finalizar Pedido Cliente -->
     <div id="encargo-modal" class="modal-overlay hidden">
         <div class="modal-content">
-            <h2 id="encargo-modal-title">Finalizar Pedido</h2>
-            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Por favor, completa los datos de tu compra.</p>
-            
-            <input type="hidden" id="modal-nombre-cliente" value="{{ user.nombre or 'Invitado' }}">
-            <input type="hidden" id="modal-telefono-cliente" value="{{ user.telefono or '00000000' }}">
-            
-            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-                <div style="flex: 1;">
-                    <label>Total:</label>
-                    <input type="text" id="modal-total" class="form-control" readonly style="background: #fafafa; font-weight: bold; color: var(--brand-dark);">
+            <h2 id="encargo-modal-title">🛍️ Confirmar Datos de tu Pedido</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.2rem; font-size: 0.92rem;">
+                Verifica tus datos de contacto y la fecha en que deseas retirar tu pedido.
+            </p>
+
+            <div class="form-row-2">
+                <div>
+                    <label for="modal-nombre-cliente">Tu Nombre Completo:</label>
+                    <input type="text" id="modal-nombre-cliente" class="form-control" required value="{{ '' if (not user.nombre or user.nombre == 'Invitado') else user.nombre }}" placeholder="Ej: Ana García">
                 </div>
-                <div style="flex: 1; display: none;">
-                    <input type="number" id="modal-adelanto" class="form-control" readonly value="0">
+                <div>
+                    <label for="modal-telefono-cliente">Teléfono / WhatsApp:</label>
+                    <input type="tel" id="modal-telefono-cliente" class="form-control" required value="{{ '' if (not user.telefono or user.telefono == '00000000') else user.telefono }}" placeholder="Ej: 8888-5555">
                 </div>
             </div>
 
-            <label>Método de Pago Preferido:</label>
+            <div class="form-row-2">
+                <div>
+                    <label for="modal-total">Total Estimado:</label>
+                    <input type="text" id="modal-total" class="form-control" readonly style="background: var(--brand-crema); font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.1rem; color: var(--brand-cafe-dark);">
+                </div>
+                <div id="encargo-fecha-container">
+                    <label for="modal-fecha">Fecha de Entrega / Retiro:</label>
+                    <input type="date" id="modal-fecha" class="form-control" required>
+                </div>
+            </div>
+
+            <div class="form-group" style="display: none;">
+                <input type="number" id="modal-adelanto" class="form-control" readonly value="0">
+            </div>
+
+            <label for="modal-metodo-pago">Método de Pago Preferido:</label>
             <select id="modal-metodo-pago" class="form-control">
-                <option value="Efectivo">Pago al recoger (Efectivo)</option>
-                <option value="Transferencia">Transferencia Bancaria</option>
+                <option value="Efectivo">Pago en Efectivo al recoger en tienda</option>
+                <option value="Transferencia">Transferencia Bancaria / Depósito</option>
             </select>
-            
-            <div class="form-group"><label for="modal-referencia-encargo">Referencia de transferencia (si aplica)</label><input id="modal-referencia-encargo" class="form-control" maxlength="100"></div>
+
+            <div class="form-group" id="grupo-referencia-tienda" style="display: none;">
+                <label for="modal-referencia-encargo">Número de referencia o banco (si ya realizaste transferencia):</label>
+                <input id="modal-referencia-encargo" class="form-control" maxlength="100" placeholder="Ej: BAC #12345678 / LAFISE">
+            </div>
+
             <div id="encargo-efectivo-container" style="display: none;">
                 <input type="number" id="modal-efectivo-encargo" class="form-control" value="0">
                 <input type="text" id="modal-cambio-encargo">
+                <div id="desglose-cambio-encargo"></div>
             </div>
 
-            <div style="margin-top: 1rem; display: none;" id="encargo-fecha-container">
-                <label>Fecha de Recogida (Para Pasteles):</label>
-                <input type="date" id="modal-fecha" class="form-control">
+            <div class="form-group">
+                <label for="modal-notas-encargo">Notas adicionales para la panadería (Opcional):</label>
+                <input type="text" id="modal-notas-encargo" class="form-control" maxlength="200" placeholder="Ej: Retiro a las 3:00 PM / Empaque para regalo">
             </div>
-            
+
             <div class="modal-actions">
-                <button type="button" class="btn-outline" id="btn-cerrar-modal">Cancelar</button>
-                <button type="button" class="btn-primary" id="btn-confirmar-encargo">Confirmar Pedido</button>
+                <button type="button" class="btn-outline" id="btn-cerrar-modal">Volver al Carrito</button>
+                <button type="button" class="btn-primary" id="btn-confirmar-encargo">Enviar Pedido Ahora</button>
             </div>
         </div>
     </div>
 
-    <!-- Fake Modals for JS compatibility -->
+    <!-- Modal de Confirmación de Pedido Enviado -->
+    <div id="confirmacion-pedido-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="text-align: center;">
+            <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(22, 128, 60, 0.12); color: var(--success); font-size: 2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+                ✓
+            </div>
+            <h2>¡Tu solicitud fue recibida!</h2>
+            <p style="color: var(--text-muted); font-size: 0.93rem; margin-bottom: 1.25rem;">
+                Hemos registrado tu pedido en recepción. Nuestro equipo confirmará disponibilidad y detalles de entrega.
+            </p>
+
+            <div style="background: var(--brand-crema); border: 1px solid rgba(107, 58, 42, 0.14); border-radius: 16px; padding: 1.1rem; margin-bottom: 1.25rem; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; padding-bottom: 0.6rem; border-bottom: 1px dashed rgba(107, 58, 42, 0.15);">
+                    <span style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">N° DE SOLICITUD</span>
+                    <strong id="conf-pedido-codigo" style="font-family: 'Outfit', sans-serif; font-size: 1.15rem; color: var(--brand-cafe-dark);">#COT-0000</strong>
+                </div>
+                <div style="font-size: 0.86rem; color: var(--text-main); display: grid; gap: 0.35rem;">
+                    <div><strong>Cliente:</strong> <span id="conf-pedido-cliente">-</span></div>
+                    <div><strong>Fecha solicitada:</strong> <span id="conf-pedido-fecha">-</span></div>
+                    <div><strong>Total estimado:</strong> <strong id="conf-pedido-total" style="color: var(--brand-dorado-dark);">C$0.00</strong></div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="justify-content: center; flex-wrap: wrap;">
+                <button type="button" class="btn-outline" id="btn-cerrar-confirmacion-pedido">Seguir Comprando</button>
+                <button type="button" class="btn-primary" id="btn-ver-cotizaciones-desde-conf">Ver Estado en Mis Cotizaciones</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Elementos ocultos de compatibilidad con pos.js -->
     <div style="display:none;">
+        <span id="badge-pedidos">0</span>
         <button id="btn-cerrar-turno"></button>
         <button id="btn-ver-pedidos-clientes"></button>
         <button id="btn-nuevo-encargo"></button>
         <div id="pago-modal"><button id="btn-cerrar-pago"></button><button id="btn-confirmar-pago"></button></div>
-        <div id="ingredientes-modal"><button id="btn-cerrar-ingredientes"></button><button id="btn-confirmar-ingredientes"></button></div>
         <div id="base-encargo-modal"><button id="btn-cerrar-base-encargo"></button></div>
         <div id="pedidos-clientes-modal"><button id="btn-cerrar-pedidos-clientes"></button></div>
         <div id="arqueo-modal"><button id="btn-cerrar-arqueo"></button><button id="btn-confirmar-arqueo"></button></div>
-        <div id="factura-modal"><button id="btn-cerrar-ticket"></button><button id="btn-imprimir-ticket"></button></div>
-        <!-- Required elements inside fake modals to prevent null errors -->
+        <div id="factura-modal"><div id="ticket-printable"></div><button id="btn-cerrar-ticket"></button><button id="btn-imprimir-ticket"></button></div>
         <input id="pago-total">
         <input id="pago-efectivo">
         <input id="pago-dolares">
         <input id="pago-transferencia">
         <input id="pago-referencia">
         <input id="pago-cambio">
+        <div id="desglose-cambio-normal"></div>
         <select id="pago-metodo"></select>
-        <input id="factura-ruc-toggle">
+        <input id="factura-ruc-toggle" type="checkbox">
         <div id="factura-ruc-container"></div>
         <input id="ruc-razon-social">
         <input id="ruc-numero">
-        
-        <!-- Ticket -->
         <span id="ticket-numero"></span>
         <span id="ticket-fecha"></span>
         <span id="ticket-hora"></span>
@@ -308,82 +601,322 @@
         <span id="ticket-adelanto"></span>
         <span id="ticket-saldo"></span>
         <span id="ticket-fecha-entrega"></span>
-        <img id="ticket-qr-img">
+        <img id="ticket-qr-img" alt="">
     </div>
 
+    <!-- Footer -->
+    <footer class="tienda-footer">
+        <div class="tienda-footer-grid">
+            <div>
+                <h4>🌾 Panadería Amada — Brajher's Cake</h4>
+                <p style="margin: 0; line-height: 1.6; color: rgba(255,255,255,0.72);">
+                    Elaboramos cada pieza de pan y repostería con recetas tradicionales, ingredientes frescos y dedicación artesanal para acompañar la mesa de tu familia.
+                </p>
+            </div>
+            <div>
+                <h4>Horario de Atención</h4>
+                <p style="margin: 0; line-height: 1.7; color: rgba(255,255,255,0.72);">
+                    Lunes a Sábado: 6:00 AM – 8:00 PM<br>
+                    Domingos: 7:00 AM – 6:00 PM<br>
+                    Entregas y encargos programados
+                </p>
+            </div>
+            <div>
+                <h4>Accesos Rápidos</h4>
+                <p style="margin: 0; line-height: 1.8;">
+                    <a href="#catalogo-tienda" style="color: #FFE4B5; text-decoration: none;">• Catálogo de Productos</a><br>
+                    <a href="#" onclick="document.getElementById('btn-pastel-personalizado').click(); return false;" style="color: #FFE4B5; text-decoration: none;">• Cotizar Pastel Personalizado</a><br>
+                    <a href="#" onclick="document.getElementById('btn-rastrear-pedido').click(); return false;" style="color: #FFE4B5; text-decoration: none;">• Rastrear Código de Encargo</a>
+                </p>
+            </div>
+        </div>
+        <div class="tienda-footer-bottom">
+            <span>&copy; 2026 Panadería Amada & Brajher's Cake. Todos los derechos reservados.</span>
+            <span>Managua, Nicaragua • Moneda: Córdoba (C$)</span>
+        </div>
+    </footer>
+
     <!-- Spinners y Toasts -->
-    <div id="loading-overlay" class="modal-overlay hidden" style="background:rgba(255,255,255,0.8); flex-direction:column; color:var(--brand-dark);">
-        <span style="font-size: 2rem; margin-bottom:1rem;">🍞</span>
-        <span style="font-weight: 700;">Procesando...</span>
+    <div id="loading-overlay" class="modal-overlay hidden" style="background:rgba(255,253,249,0.85); flex-direction:column; color:var(--brand-dark);">
+        <span style="font-size: 2.5rem; margin-bottom:0.75rem;">🥐</span>
+        <span style="font-weight: 700; font-size: 1.05rem;">Procesando tu solicitud...</span>
     </div>
-    <div id="toast-container" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px;"></div>
+    <div id="toast-container" style="position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:10px;"></div>
 
     <script>
         window.esClienteOnline = true;
         window.configuracionGlobal = {{ configuracion|tojson|safe if configuracion else '{}' }};
-        
-        // Update cart badge dynamically (intercepting DOM changes in pos.js)
-        const cartObserver = new MutationObserver(() => {
-            const itemCount = document.querySelectorAll('#cart-items .cart-item').length;
-            document.getElementById('badge-pedidos').textContent = itemCount;
-            if (itemCount > 0 && !document.getElementById('cartDrawer').classList.contains('open')) {
-                // Auto open drawer on first add
-                document.getElementById('cartDrawer').classList.add('open'); 
-                document.getElementById('cartOverlay').classList.add('active');
-            }
-        });
-        
-        window.addEventListener('load', () => {
-            const cartItemsContainer = document.getElementById('cart-items');
-            if (cartItemsContainer) {
-                cartObserver.observe(cartItemsContainer, { childList: true });
-            }
-
-            // Realizar Pedido Logic
-            const btnRealizarPedido = document.getElementById('btn-realizar-pedido');
-            const encargoModal = document.getElementById('encargo-modal');
-            const btnCerrarEncargoModal = document.getElementById('btn-cerrar-modal');
-
-            if (btnRealizarPedido) {
-                btnRealizarPedido.addEventListener('click', () => {
-                    document.getElementById('cartDrawer').classList.remove('open');
-                    document.getElementById('cartOverlay').classList.remove('active');
-                    encargoModal.classList.remove('hidden');
-                    
-                    // Llenar el total desde el carrito (el script principal mantiene actualizado total-display)
-                    const totalStr = document.getElementById('total-display').innerText.replace('C$', '').trim();
-                    document.getElementById('modal-total').value = totalStr;
-                });
-            }
-
-            if (btnCerrarEncargoModal) {
-                btnCerrarEncargoModal.addEventListener('click', () => {
-                    encargoModal.classList.add('hidden');
-                });
-            }
-        });
     </script>
-    <script src="{{ url_for('static', filename='js/api_services.js', v=6) }}"></script>
-    <script src="{{ url_for('static', filename='js/pos.js', v=6) }}"></script>
+    <script src="{{ url_for('static', filename='js/api_services.js', v=7) }}"></script>
+    <script src="{{ url_for('static', filename='js/pos.js', v=7) }}"></script>
 
-    <!-- Inyectar visuales por categoría (non-blocking) -->
+    <!-- Storefront Interactive Enhancements -->
     <script>
-    requestAnimationFrame(function() {
-        document.querySelectorAll('.store-product-card .product-visual, .filterable-product .product-visual').forEach(function(visual) {
-            var card = visual.closest('[data-nombre]');
+    document.addEventListener('DOMContentLoaded', function() {
+        const cartDrawer = document.getElementById('cartDrawer');
+        const cartOverlay = document.getElementById('cartOverlay');
+        const btnAbrirCarritoNav = document.getElementById('btn-abrir-carrito-nav');
+        const btnCerrarDrawer = document.getElementById('btn-cerrar-drawer-carrito');
+        const btnFloatingVerPedido = document.getElementById('btn-floating-ver-pedido');
+        const floatingBar = document.getElementById('floating-cart-bar');
+        const btnVaciarTienda = document.getElementById('btn-vaciar-carrito-tienda');
+
+        function abrirDrawerCarrito() {
+            cartDrawer.classList.add('open');
+            cartOverlay.classList.add('active');
+        }
+        function cerrarDrawerCarrito() {
+            cartDrawer.classList.remove('open');
+            cartOverlay.classList.remove('active');
+        }
+
+        if (btnAbrirCarritoNav) btnAbrirCarritoNav.addEventListener('click', abrirDrawerCarrito);
+        if (btnCerrarDrawer) btnCerrarDrawer.addEventListener('click', cerrarDrawerCarrito);
+        if (cartOverlay) cartOverlay.addEventListener('click', cerrarDrawerCarrito);
+        if (btnFloatingVerPedido) btnFloatingVerPedido.addEventListener('click', abrirDrawerCarrito);
+
+        if (btnVaciarTienda) {
+            btnVaciarTienda.addEventListener('click', function() {
+                if (typeof carrito !== 'undefined' && carrito.length > 0) {
+                    carrito.length = 0;
+                    if (typeof renderizarCarrito === 'function') renderizarCarrito();
+                    if (typeof showToast === 'function') showToast('Carrito vaciado');
+                }
+            });
+        }
+
+        // Sincronizar contadores y barra flotante con el evento carritoActualizado
+        window.addEventListener('carritoActualizado', function(e) {
+            const detail = e.detail || {};
+            const items = detail.carrito || [];
+            const totalQty = items.reduce((acc, item) => acc + (Number(item.cantidad) || 0), 0);
+            const totalMonto = Number(detail.total || 0);
+
+            const badgeNav = document.getElementById('badge-carrito-tienda');
+            const navTotal = document.getElementById('nav-cart-total');
+            const floatCount = document.getElementById('floating-cart-count');
+            const floatTotal = document.getElementById('floating-cart-total');
+
+            if (badgeNav) badgeNav.textContent = totalQty;
+            if (navTotal) navTotal.textContent = 'C$' + totalMonto.toFixed(2);
+            if (floatCount) floatCount.textContent = totalQty;
+            if (floatTotal) floatTotal.textContent = 'C$' + totalMonto.toFixed(2);
+
+            if (btnVaciarTienda) {
+                btnVaciarTienda.classList.toggle('hidden', totalQty === 0);
+            }
+            if (floatingBar) {
+                floatingBar.classList.toggle('visible', totalQty > 0);
+            }
+        });
+
+        // Al hacer clic en "Continuar con mi Pedido", cerrar el drawer para mostrar limpio el modal
+        const btnRealizarPedido = document.getElementById('btn-realizar-pedido');
+        if (btnRealizarPedido) {
+            btnRealizarPedido.addEventListener('click', function() {
+                cerrarDrawerCarrito();
+            });
+        }
+
+        // Fecha mínima hoy para pastel personalizado
+        const inputPastelFecha = document.getElementById('pastel-fecha');
+        if (inputPastelFecha) {
+            const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+            const today = (new Date(Date.now() - tzOffset)).toISOString().split('T')[0];
+            inputPastelFecha.min = today;
+            if (!inputPastelFecha.value) inputPastelFecha.value = today;
+        }
+
+        // Vista previa de foto en pastel personalizado
+        const inputPastelFoto = document.getElementById('pastel-foto');
+        const previewBox = document.getElementById('pastel-foto-preview-box');
+        const previewImg = document.getElementById('pastel-foto-preview');
+        if (inputPastelFoto && previewBox && previewImg) {
+            inputPastelFoto.addEventListener('change', function() {
+                if (this.files && this.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(ev) {
+                        previewImg.src = ev.target.result;
+                        previewBox.classList.remove('hidden');
+                    };
+                    reader.readAsDataURL(this.files[0]);
+                } else {
+                    previewBox.classList.add('hidden');
+                }
+            });
+        }
+
+        // Modal de Rastrear Pedido
+        const btnRastrear = document.getElementById('btn-rastrear-pedido');
+        const modalRastrear = document.getElementById('rastrear-pedido-modal');
+        const btnCerrarRastrear = document.getElementById('btn-cerrar-rastrear');
+        const formRastrear = document.getElementById('form-rastrear-pedido');
+        if (btnRastrear && modalRastrear) {
+            btnRastrear.addEventListener('click', () => {
+                modalRastrear.classList.remove('hidden');
+                setTimeout(() => document.getElementById('input-codigo-seguimiento')?.focus(), 80);
+            });
+        }
+        if (btnCerrarRastrear && modalRastrear) {
+            btnCerrarRastrear.addEventListener('click', () => modalRastrear.classList.add('hidden'));
+        }
+        if (formRastrear) {
+            formRastrear.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const code = (document.getElementById('input-codigo-seguimiento').value || '').trim().toUpperCase();
+                if (code) {
+                    window.location.href = '/seguimiento/' + encodeURIComponent(code);
+                }
+            });
+        }
+
+        // Modal de Confirmación de Pedido Enviado
+        const modalConfirmacion = document.getElementById('confirmacion-pedido-modal');
+        const btnCerrarConf = document.getElementById('btn-cerrar-confirmacion-pedido');
+        const btnVerCotDesdeConf = document.getElementById('btn-ver-cotizaciones-desde-conf');
+
+        window.mostrarConfirmacionPedidoTienda = function(info) {
+            if (!modalConfirmacion) return;
+            document.getElementById('conf-pedido-codigo').textContent = '#' + (info.numero_cotizacion || 'COT');
+            document.getElementById('conf-pedido-cliente').textContent = info.cliente || 'Cliente';
+            document.getElementById('conf-pedido-fecha').textContent = info.fecha_entrega || '-';
+            document.getElementById('conf-pedido-total').textContent = 'C$' + Number(info.total || 0).toFixed(2);
+            modalConfirmacion.classList.remove('hidden');
+        };
+
+        if (btnCerrarConf && modalConfirmacion) {
+            btnCerrarConf.addEventListener('click', () => modalConfirmacion.classList.add('hidden'));
+        }
+        if (btnVerCotDesdeConf && modalConfirmacion) {
+            btnVerCotDesdeConf.addEventListener('click', () => {
+                modalConfirmacion.classList.add('hidden');
+                const btnMisCot = document.getElementById('btn-mis-cotizaciones');
+                if (btnMisCot) btnMisCot.click();
+            });
+        }
+
+        // Búsqueda en vivo, filtro de ofertas y ordenamiento del catálogo
+        const searchInput = document.getElementById('tienda-search-input');
+        const searchClear = document.getElementById('tienda-search-clear');
+        const sortSelect = document.getElementById('tienda-sort-select');
+        const grid = document.getElementById('tienda-products-grid');
+        const emptyState = document.getElementById('tienda-empty-search');
+        const resultsCount = document.getElementById('tienda-results-count');
+        const btnResetFiltros = document.getElementById('btn-reset-filtros-tienda');
+        const btnOfertas = document.getElementById('btn-filter-ofertas');
+        let modoSoloOfertas = false;
+
+        function aplicarFiltrosYOrden() {
+            if (!grid) return;
+            const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+            if (searchClear) searchClear.style.display = query ? 'inline-flex' : 'none';
+
+            const activeCatBtn = document.querySelector('.category-btn.active');
+            const activeCategory = activeCatBtn ? activeCatBtn.dataset.filter : 'Todos';
+
+            const cards = Array.from(grid.querySelectorAll('.store-product-card'));
+            let visibles = 0;
+
+            cards.forEach(card => {
+                const nombre = (card.dataset.nombre || '').toLowerCase();
+                const cat = (card.dataset.categoria || '');
+                const desc = parseFloat(card.dataset.descuento || '0');
+
+                const matchCat = modoSoloOfertas ? (desc > 0) : (activeCategory === 'Todos' || cat === activeCategory);
+                const matchSearch = !query || nombre.includes(query) || cat.toLowerCase().includes(query);
+
+                if (matchCat && matchSearch) {
+                    card.classList.remove('hidden');
+                    visibles++;
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+
+            // Ordenamiento
+            const sortMode = sortSelect ? sortSelect.value : 'default';
+            if (sortMode !== 'default') {
+                const sorted = [...cards].sort((a, b) => {
+                    const priceA = parseFloat(a.dataset.precioFinal || a.dataset.precio || '0');
+                    const priceB = parseFloat(b.dataset.precioFinal || b.dataset.precio || '0');
+                    const nameA = (a.dataset.nombre || '').toLowerCase();
+                    const nameB = (b.dataset.nombre || '').toLowerCase();
+                    if (sortMode === 'price-asc') return priceA - priceB;
+                    if (sortMode === 'price-desc') return priceB - priceA;
+                    if (sortMode === 'name-asc') return nameA.localeCompare(nameB, 'es');
+                    return 0;
+                });
+                sorted.forEach(el => grid.appendChild(el));
+            }
+
+            if (resultsCount) {
+                resultsCount.textContent = `${visibles} producto${visibles === 1 ? '' : 's'} disponible${visibles === 1 ? '' : 's'}`;
+            }
+            if (emptyState) {
+                emptyState.classList.toggle('hidden', visibles > 0);
+            }
+        }
+
+        if (searchInput) searchInput.addEventListener('input', aplicarFiltrosYOrden);
+        if (searchClear) {
+            searchClear.addEventListener('click', () => {
+                searchInput.value = '';
+                aplicarFiltrosYOrden();
+                searchInput.focus();
+            });
+        }
+        if (sortSelect) sortSelect.addEventListener('change', aplicarFiltrosYOrden);
+
+        document.querySelectorAll('.category-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                modoSoloOfertas = false;
+                if (btnOfertas) btnOfertas.classList.remove('active');
+                setTimeout(aplicarFiltrosYOrden, 0);
+            });
+        });
+
+        if (btnOfertas) {
+            btnOfertas.addEventListener('click', () => {
+                modoSoloOfertas = true;
+                document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+                btnOfertas.classList.add('active');
+                aplicarFiltrosYOrden();
+            });
+        }
+
+        if (btnResetFiltros) {
+            btnResetFiltros.addEventListener('click', () => {
+                if (searchInput) searchInput.value = '';
+                if (sortSelect) sortSelect.value = 'default';
+                modoSoloOfertas = false;
+                if (btnOfertas) btnOfertas.classList.remove('active');
+                const todosBtn = document.querySelector('.category-btn[data-filter="Todos"]');
+                if (todosBtn) todosBtn.click();
+                aplicarFiltrosYOrden();
+            });
+        }
+
+        // Emojis en pestañas de categoría y tarjetas sin foto
+        document.querySelectorAll('.cat-tab-emoji').forEach(span => {
+            const cName = (span.dataset.catName || '').toLowerCase();
+            span.textContent = window.CATEGORY_EMOJI_MAP[cName] || '🥖';
+        });
+
+        document.querySelectorAll('.store-product-card .product-visual').forEach(function(visual) {
+            const card = visual.closest('[data-nombre]');
             if (!card || visual.children.length > 0) return;
-            var nombre    = card.dataset.nombre    || '';
-            var categoria = card.dataset.categoria || '';
+            const nombre = card.dataset.nombre || '';
+            const categoria = card.dataset.categoria || '';
             visual.classList.add(getCategoryClass(categoria));
             visual.innerHTML = '<span class="product-visual-emoji" aria-hidden="true">' + getProductEmoji(nombre, categoria) + '</span>';
         });
 
-        // Feedback al añadir al carrito
+        // Feedback visual al añadir al carrito
         document.addEventListener('click', function(e) {
-            var card = e.target.closest('.product-card');
+            const card = e.target.closest('.product-card');
             if (!card) return;
             card.classList.add('added-to-cart');
-            setTimeout(function() { card.classList.remove('added-to-cart'); }, 500);
+            setTimeout(function() { card.classList.remove('added-to-cart'); }, 450);
         });
     });
     </script>

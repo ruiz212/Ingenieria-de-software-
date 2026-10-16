@@ -623,13 +623,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (metodoPagoSelect) {
         metodoPagoSelect.addEventListener('change', (e) => {
             const efectivoContainer = document.getElementById('encargo-efectivo-container');
-            if (e.target.value === 'Efectivo') {
+            const refTiendaGroup = document.getElementById('grupo-referencia-tienda');
+            if (refTiendaGroup) {
+                refTiendaGroup.style.display = e.target.value === 'Transferencia' ? 'block' : 'none';
+            }
+            if (e.target.value === 'Efectivo' && !window.esClienteOnline) {
                 efectivoContainer.style.display = 'block';
             } else {
-                efectivoContainer.style.display = 'none';
-                document.getElementById('modal-efectivo-encargo').value = '';
-                document.getElementById('modal-cambio-encargo').value = '';
-                document.getElementById('desglose-cambio-encargo').innerHTML = '';
+                if (efectivoContainer) efectivoContainer.style.display = 'none';
+                const efInput = document.getElementById('modal-efectivo-encargo');
+                const camInput = document.getElementById('modal-cambio-encargo');
+                const desgEl = document.getElementById('desglose-cambio-encargo');
+                if (efInput) efInput.value = '';
+                if (camInput) camInput.value = '';
+                if (desgEl) desgEl.innerHTML = '';
             }
         });
     }
@@ -667,9 +674,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const { total } = calcularTotales();
         const metodoPago = document.getElementById('modal-metodo-pago') ? document.getElementById('modal-metodo-pago').value : 'Efectivo';
         
-        // Verificar si es cliente online (adelanto oculto)
+        // Verificar si es cliente online (adelanto oculto o flag global)
         const adelantoContainer = document.getElementById('modal-adelanto').closest('.form-group');
-        const esClienteOnline = adelantoContainer && adelantoContainer.style.display === 'none';
+        const esClienteOnline = Boolean(window.esClienteOnline) || (adelantoContainer && adelantoContainer.style.display === 'none');
         
         let especificaciones = null;
         let ruta_imagen = null;
@@ -991,6 +998,7 @@ function renderizarCarrito() {
         totalDisplay.textContent = 'C$0.00';
         if (btnFacturar) btnFacturar.disabled = true;
         if (btnRealizarPedido) btnRealizarPedido.disabled = true;
+        window.dispatchEvent(new CustomEvent('carritoActualizado', { detail: { carrito, subtotal: 0, iva: 0, total: 0 } }));
         return;
     }
 
@@ -1027,6 +1035,7 @@ function renderizarCarrito() {
     totalDisplay.textContent = `C$${total.toFixed(2)}`;
     if (btnFacturar) btnFacturar.disabled = false;
     if (btnRealizarPedido) btnRealizarPedido.disabled = false;
+    window.dispatchEvent(new CustomEvent('carritoActualizado', { detail: { carrito, subtotal: subVal, iva, total } }));
 }
 
 function calcularSubtotal() {
@@ -1080,15 +1089,30 @@ async function procesarFactura(esEncargo = false, datosExtra = null) {
 
         if (window.esClienteOnline) {
             const details=payload.encargo_detalles || {};
-            await API.solicitarCotizacion({
+            const notasInput = document.getElementById('modal-notas-encargo');
+            const notasExtra = notasInput && notasInput.value ? ` | Notas: ${notasInput.value.trim()}` : '';
+            const refExtra = details.referencia ? ` | Ref. Transferencia: ${details.referencia}` : '';
+            const resCot = await API.solicitarCotizacion({
                 nombre:details.nombre_cliente, telefono:details.telefono,
                 fecha_entrega:details.fecha_entrega,
-                especificaciones:'Solicitud de pedido: '+carrito.map(i=>`${i.cantidad} × ${i.nombre}`).join('; ')+' '+(details.especificaciones || ''),
+                especificaciones:'Solicitud de pedido: '+carrito.map(i=>`${i.cantidad} × ${i.nombre}`).join('; ')+' '+(details.especificaciones || '')+refExtra+notasExtra,
                 ruta_imagen_referencia:details.ruta_imagen_referencia
             });
+            const resumenItems = carrito.map(i => ({ ...i }));
             carrito=[];renderizarCarrito();
             document.getElementById('encargo-modal').classList.add('hidden');
             showToast('Solicitud enviada. La panadería confirmará disponibilidad, precio y pago.');
+            if (typeof window.mostrarConfirmacionPedidoTienda === 'function') {
+                window.mostrarConfirmacionPedidoTienda({
+                    numero_cotizacion: (resCot && resCot.numero_cotizacion) || 'PENDIENTE',
+                    cliente: details.nombre_cliente,
+                    telefono: details.telefono,
+                    fecha_entrega: details.fecha_entrega,
+                    metodo_pago: details.metodo_adelanto || 'Efectivo',
+                    total: total,
+                    items: resumenItems
+                });
+            }
             return;
         }
         const data = await API.procesarFactura(payload);
