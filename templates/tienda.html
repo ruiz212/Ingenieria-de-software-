@@ -3,14 +3,444 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tienda Online — Panadería Amada & Brajher's Cake</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/tienda.css', v=5) }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/pos_product_visuals.css', v=5) }}">
+    <title>Panadería Amada — Boutique en Línea & Pastelería de Autor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/tienda.css', v=8) }}">
     <style>
+        /* Estilos integrados para garantizar renderizado inmediato sin truncamiento de caché */
+        :root {
+            --ink: #22140E;
+            --ink-soft: #5C4338;
+            --ink-muted: #8C7365;
+            --parchment: #FAF5EE;
+            --parchment-deep: #F1E7D8;
+            --card-surface: #FFFDF9;
+            --terracotta: #9E3B24;
+            --terracotta-dark: #7D2B17;
+            --crust-gold: #C68628;
+            --crust-gold-light: #F6E6C8;
+            --espresso: #2B1810;
+            --sage: #2D6A4F;
+            --line-rule: #E4D7C5;
+            --line-strong: #CBB89F;
+            --danger: #B42318;
+            --success: #1E6F43;
+            --text-main: var(--ink);
+            --text-muted: var(--ink-muted);
+            --primary-color: var(--terracotta);
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body.tienda-body {
+            margin: 0; padding: 0;
+            background-color: var(--parchment);
+            color: var(--ink);
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
         .catalog-panel { display: contents; }
+        .hidden { display: none !important; }
+
+        /* 1. Barra Superior Editorial */
+        .utility-bar {
+            background: var(--espresso);
+            color: #F4E9DA;
+            font-size: 0.78rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .utility-bar-inner {
+            max-width: 1360px; margin: 0 auto; padding: 0.5rem 2rem;
+            display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+        }
+        .utility-tagline { display: flex; align-items: center; gap: 0.6rem; letter-spacing: 0.02em; }
+        .utility-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--crust-gold); display: inline-block; }
+        .utility-links { display: flex; align-items: center; gap: 1.35rem; }
+        .utility-link-btn {
+            background: none; border: none; color: #EAD8C0; font-family: inherit;
+            font-size: 0.78rem; font-weight: 600; cursor: pointer; padding: 0;
+            display: inline-flex; align-items: center; gap: 0.35rem; text-decoration: none;
+        }
+        .utility-link-btn:hover { color: #FFFFFF; text-decoration: underline; }
+
+        /* 2. Cabecera Principal de Boutique */
+        .tienda-nav {
+            background: rgba(250, 245, 238, 0.96);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--line-rule);
+            position: sticky; top: 0; z-index: 1000;
+        }
+        .tienda-nav-inner {
+            max-width: 1360px; margin: 0 auto; padding: 0.95rem 2rem;
+            display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 2rem;
+        }
+        .brand-logo { display: flex; align-items: center; gap: 0.9rem; text-decoration: none; color: var(--ink); }
+        .brand-seal {
+            width: 44px; height: 44px; border-radius: 50%;
+            border: 1.5px solid var(--ink); background: var(--parchment-deep);
+            display: flex; align-items: center; justify-content: center; color: var(--ink); flex-shrink: 0;
+        }
+        .brand-logo h1 {
+            margin: 0; font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: 1.85rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1; color: var(--ink);
+        }
+        .brand-kicker {
+            display: block; font-size: 0.64rem; text-transform: uppercase;
+            letter-spacing: 0.18em; color: var(--terracotta); font-weight: 700; margin-top: 0.2rem;
+        }
+        .header-search-wrap { max-width: 500px; width: 100%; justify-self: center; position: relative; }
+        .header-search-input {
+            width: 100%; height: 42px; padding: 0 2.5rem 0 2.65rem;
+            background: var(--card-surface); border: 1px solid var(--line-strong);
+            border-radius: 8px; font-family: inherit; font-size: 0.88rem; color: var(--ink);
+        }
+        .header-search-input:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px rgba(34,20,14,0.08); }
+        .header-search-icon { position: absolute; left: 0.9rem; top: 50%; transform: translateY(-50%); color: var(--ink-muted); pointer-events: none; display: flex; }
+        .header-search-clear {
+            position: absolute; right: 0.7rem; top: 50%; transform: translateY(-50%);
+            background: var(--parchment-deep); border: none; width: 22px; height: 22px;
+            border-radius: 50%; cursor: pointer; font-size: 0.85rem; color: var(--ink); display: none;
+            align-items: center; justify-content: center;
+        }
+        .nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+        .account-chip {
+            display: inline-flex; align-items: center; gap: 0.45rem;
+            padding: 0.45rem 0.85rem; border: 1px solid var(--line-rule);
+            border-radius: 8px; background: var(--card-surface);
+            font-size: 0.82rem; font-weight: 600; color: var(--ink-soft);
+        }
+        .cart-toggle {
+            background: var(--ink); color: #FFFDF9; border: 1px solid var(--ink);
+            height: 42px; padding: 0 1.1rem; border-radius: 8px; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 0.6rem;
+            font-family: inherit; font-size: 0.85rem; font-weight: 700; transition: all 0.18s ease;
+        }
+        .cart-toggle:hover { background: var(--terracotta); border-color: var(--terracotta); }
+        .cart-badge {
+            background: var(--crust-gold); color: var(--ink); font-weight: 800; font-size: 0.74rem;
+            min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .cart-toggle-total {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: #F6E6C8;
+            padding-left: 0.55rem; border-left: 1px solid rgba(255,255,255,0.2);
+        }
+
+        /* 3. Vitrina Editorial Asimétrica */
+        .editorial-showcase { max-width: 1360px; margin: 1.5rem auto 0; padding: 0 2rem; }
+        .showcase-grid {
+            display: grid; grid-template-columns: 1.15fr 0.85fr;
+            background: var(--espresso); border-radius: 14px; overflow: hidden;
+            border: 1px solid var(--line-strong); box-shadow: 0 16px 36px rgba(34,20,14,0.1);
+        }
+        .showcase-copy {
+            padding: 2.75rem 3rem; display: flex; flex-direction: column; justify-content: center;
+            color: #FAF5EE; background: radial-gradient(circle at 0% 0%, rgba(198,134,40,0.15), transparent 55%), var(--espresso);
+        }
+        .showcase-kicker {
+            font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.16em;
+            color: #E9B96E; font-weight: 700; margin-bottom: 0.75rem;
+        }
+        .showcase-copy h2 {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: clamp(2rem, 3.2vw, 3rem); font-weight: 700; line-height: 1.08;
+            margin: 0 0 0.9rem 0; color: #FFFDF9;
+        }
+        .showcase-copy h2 em { font-style: italic; color: #F3C878; font-weight: 600; }
+        .showcase-copy p { margin: 0 0 1.6rem 0; font-size: 0.95rem; line-height: 1.6; color: #D9CABC; max-width: 520px; }
+        .showcase-actions { display: flex; flex-wrap: wrap; gap: 0.85rem; }
+        .btn-atelier-primary {
+            background: var(--terracotta); color: #FFFDF9; border: 1px solid var(--terracotta);
+            padding: 0.8rem 1.4rem; border-radius: 8px; font-family: inherit; font-size: 0.86rem;
+            font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none;
+        }
+        .btn-atelier-primary:hover { background: var(--terracotta-dark); }
+        .btn-atelier-outline {
+            background: transparent; color: #FAF5EE; border: 1px solid rgba(250,245,238,0.35);
+            padding: 0.8rem 1.35rem; border-radius: 8px; font-family: inherit; font-size: 0.86rem;
+            font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;
+        }
+        .btn-atelier-outline:hover { background: rgba(255,255,255,0.08); border-color: #FAF5EE; }
+        .showcase-visual {
+            position: relative; min-height: 280px;
+            background: url('https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=1400&auto=format&fit=crop') center/cover no-repeat;
+            display: flex; align-items: flex-end; padding: 1.5rem;
+        }
+        .showcase-visual::before {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(to top, rgba(25,13,8,0.78) 0%, rgba(25,13,8,0.15) 60%, transparent 100%);
+        }
+        .showcase-stamp-card {
+            position: relative; z-index: 1; background: rgba(255,253,249,0.95); color: var(--ink);
+            padding: 0.9rem 1.15rem; border-radius: 10px; border: 1px solid var(--line-strong); max-width: 330px;
+        }
+        .showcase-stamp-card strong { display: block; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.15rem; color: var(--ink); }
+        .showcase-stamp-card span { font-size: 0.78rem; color: var(--ink-soft); }
+
+        /* 4. Barra de Departamentos y Orden */
+        .department-bar-wrap { max-width: 1360px; margin: 1.75rem auto 0; padding: 0 2rem; }
+        .department-bar {
+            display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+            border-bottom: 1.5px solid var(--line-rule); flex-wrap: wrap;
+        }
+        .store-filters { display: flex; align-items: center; gap: 0.2rem; overflow-x: auto; scrollbar-width: none; }
+        .store-filters::-webkit-scrollbar { display: none; }
+        .filter-btn {
+            background: transparent; border: none; border-bottom: 2.5px solid transparent;
+            color: var(--ink-soft); padding: 0.8rem 1rem; font-family: inherit; font-size: 0.86rem;
+            font-weight: 600; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 0.4rem;
+        }
+        .filter-btn:hover { color: var(--ink); background: rgba(198,134,40,0.06); }
+        .filter-btn.active { color: var(--terracotta); border-bottom-color: var(--terracotta); font-weight: 700; background: rgba(158,59,36,0.05); }
+        .filter-count-pill {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--ink-muted);
+            background: var(--parchment-deep); padding: 0.1rem 0.4rem; border-radius: 4px;
+        }
+        .filter-btn.active .filter-count-pill { background: var(--terracotta); color: white; }
+        .catalog-meta-controls { display: flex; align-items: center; gap: 0.85rem; padding-bottom: 0.45rem; }
+        .results-counter { font-size: 0.8rem; color: var(--ink-muted); font-weight: 600; }
+        .sort-select-tienda {
+            height: 36px; padding: 0 0.8rem; border: 1px solid var(--line-strong); border-radius: 6px;
+            background: var(--card-surface); color: var(--ink); font-family: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+        }
+
+        /* 5. Cuadrícula de Productos (4 columnas amplias en escritorio) */
+        .store-catalog { max-width: 1360px; margin: 0 auto; padding: 1.85rem 2rem 4.5rem; width: 100%; }
+        .store-grid {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(265px, 1fr)) !important;
+            gap: 1.65rem !important;
+        }
+        .store-product-card {
+            background: var(--card-surface) !important;
+            border: 1px solid var(--line-rule) !important;
+            border-radius: 12px !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            position: relative !important;
+            transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease !important;
+            cursor: pointer;
+        }
+        .store-product-card:hover {
+            transform: translateY(-4px) !important;
+            border-color: var(--line-strong) !important;
+            box-shadow: 0 14px 30px rgba(34,20,14,0.09) !important;
+        }
+        .store-product-card .product-visual {
+            width: 100% !important; height: 210px !important;
+            background: var(--parchment-deep); position: relative; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            border-bottom: 1px solid var(--line-rule);
+        }
+        .store-product-card .product-visual img.product-real-img {
+            width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important;
+            object-fit: cover !important; object-position: center;
+            transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .store-product-card:hover .product-visual img.product-real-img { transform: scale(1.05); }
+        .product-visual.cat-pan-dulce { background: linear-gradient(145deg, #F3DFC1, #E6C38E); }
+        .product-visual.cat-pan-salado { background: linear-gradient(145deg, #EBD6B7, #D5B17E); }
+        .product-visual.cat-reposteria { background: linear-gradient(145deg, #F2D7D5, #DDA49E); }
+        .product-visual.cat-galletas { background: linear-gradient(145deg, #EED8B8, #CFA572); }
+        .product-visual.cat-bebidas { background: linear-gradient(145deg, #DCE7EB, #A9C4CE); }
+        .product-visual.cat-postres-frios { background: linear-gradient(145deg, #E5DFF2, #BEB2DC); }
+        .product-visual.cat-default { background: linear-gradient(145deg, #EFE5D8, #DCC6A8); }
+        .product-visual-emoji { font-size: 3.4rem; }
+
+        .customizable-pill-badge {
+            position: absolute; top: 12px; left: 12px; z-index: 5;
+            background: rgba(34,20,14,0.88); color: #F6E6C8;
+            font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.08em; padding: 0.28rem 0.6rem; border-radius: 4px;
+        }
+        .product-discount-badge {
+            position: absolute; top: 12px; right: 12px; z-index: 5;
+            background: var(--terracotta); color: #FFFFFF;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 700;
+            padding: 0.24rem 0.55rem; border-radius: 4px;
+        }
+        .store-card-body {
+            padding: 1.1rem 1.25rem 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; flex: 1;
+        }
+        .card-cat {
+            font-size: 0.66rem !important; text-transform: uppercase !important;
+            letter-spacing: 0.12em !important; color: var(--ink-muted) !important; font-weight: 700 !important;
+        }
+        .store-product-card h3.card-title {
+            font-family: 'Cormorant Garamond', Georgia, serif !important;
+            font-size: 1.4rem !important; font-weight: 700 !important;
+            color: var(--ink) !important; margin: 0 !important; line-height: 1.18 !important;
+        }
+        .card-subtitle-hint { font-size: 0.79rem; color: var(--ink-soft); margin: 0.15rem 0 0; }
+        .card-price-add {
+            padding: 0.85rem 1.25rem 1.1rem; margin-top: auto;
+            border-top: 1px solid var(--line-rule); display: flex;
+            align-items: center; justify-content: space-between; gap: 0.75rem; background: #FCF9F4;
+        }
+        .price-stack { display: flex; flex-direction: column; line-height: 1.15; }
+        .price-old { font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--ink-muted); text-decoration: line-through; }
+        .card-price {
+            font-family: 'JetBrains Mono', monospace !important;
+            font-size: 1.1rem !important; font-weight: 700 !important; color: var(--ink) !important; margin: 0 !important;
+        }
+        .card-price.is-discounted { color: var(--terracotta) !important; }
+        .btn-add {
+            background: var(--card-surface); color: var(--ink); border: 1px solid var(--ink);
+            height: 36px; padding: 0 0.9rem; border-radius: 6px; font-family: inherit;
+            font-size: 0.79rem; font-weight: 700; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 0.35rem; transition: all 0.18s ease;
+        }
+        .store-product-card:hover .btn-add, .btn-add:hover { background: var(--ink); color: #FFFDF9; }
+        .store-product-card.added-to-cart .btn-add { background: var(--sage) !important; border-color: var(--sage) !important; color: #FFFFFF !important; }
+
+        /* 6. Banner de Atelier de Pastelería */
+        .atelier-banner {
+            margin-top: 3rem; background: var(--parchment-deep); border: 1px solid var(--line-strong);
+            border-radius: 14px; padding: 2rem 2.25rem; display: grid;
+            grid-template-columns: 1fr auto; align-items: center; gap: 2rem;
+        }
+        .atelier-banner-kicker { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--terracotta); font-weight: 700; margin-bottom: 0.3rem; }
+        .atelier-banner h3 { margin: 0 0 0.35rem 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.85rem; color: var(--ink); }
+        .atelier-banner p { margin: 0; color: var(--ink-soft); font-size: 0.9rem; max-width: 620px; line-height: 1.5; }
+
+        /* 7. Bolsa de Compra Lateral (Drawer) */
+        .cart-drawer-overlay {
+            position: fixed; inset: 0; background: rgba(34,20,14,0.48); backdrop-filter: blur(3px);
+            z-index: 1050; opacity: 0; visibility: hidden; transition: all 0.25s ease;
+        }
+        .cart-drawer-overlay.active { opacity: 1; visibility: visible; }
+        .cart-drawer {
+            position: fixed; top: 0; right: -460px; bottom: 0; width: 100%; max-width: 420px;
+            background: var(--card-surface); z-index: 1060; border-left: 1px solid var(--line-strong);
+            box-shadow: -16px 0 40px rgba(34,20,14,0.16); transition: right 0.32s cubic-bezier(0.16,1,0.3,1);
+            display: flex; flex-direction: column;
+        }
+        .cart-drawer.open { right: 0; }
+        .cart-header {
+            padding: 1.2rem 1.5rem; border-bottom: 1px solid var(--line-rule);
+            display: flex; justify-content: space-between; align-items: center; background: var(--parchment);
+        }
+        .cart-header-title { display: flex; align-items: center; gap: 0.65rem; }
+        .cart-header h2 { margin: 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.55rem; color: var(--ink); }
+        .btn-clear-cart {
+            background: transparent; border: 1px solid rgba(180,35,24,0.3); color: var(--danger);
+            padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.74rem; font-weight: 700; cursor: pointer;
+        }
+        .btn-close-cart {
+            background: transparent; border: 1px solid var(--line-strong); width: 32px; height: 32px;
+            border-radius: 6px; font-size: 1.2rem; color: var(--ink); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .cart-body { flex: 1; overflow-y: auto; padding: 1.2rem 1.5rem; }
+        .cart-body .empty-cart { text-align: center; color: var(--ink-muted); padding: 3.5rem 1rem; font-size: 0.9rem; }
+        .cart-body .cart-item {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 0.75rem; padding: 0.85rem 0; border-bottom: 1px solid var(--line-rule);
+        }
+        .cart-body .cart-item-info { flex: 1; min-width: 0; }
+        .cart-body .cart-item-name { font-weight: 700; font-size: 0.9rem; color: var(--ink) !important; margin-bottom: 0.15rem; }
+        .cart-body .cart-item-price { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem !important; color: var(--ink-muted) !important; }
+        .cart-body .cart-item-actions {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            border: 1px solid var(--line-strong); border-radius: 6px; padding: 2px; background: var(--parchment);
+        }
+        .cart-body .btn-qty {
+            width: 26px; height: 26px; border: none; background: var(--card-surface);
+            color: var(--ink); font-weight: 700; border-radius: 4px; cursor: pointer;
+        }
+        .cart-footer { padding: 1.25rem 1.5rem 1.5rem; background: var(--parchment); border-top: 1px solid var(--line-strong); }
+        .summary-row { display: flex; justify-content: space-between; margin-bottom: 0.4rem; font-size: 0.88rem; color: var(--ink-soft); }
+        .total-row { font-size: 1.18rem; font-weight: 800; color: var(--ink); margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px solid var(--line-strong); }
+        #btn-realizar-pedido {
+            width: 100%; padding: 0.95rem; background: var(--terracotta); color: white; border: none;
+            border-radius: 8px; font-family: inherit; font-weight: 700; font-size: 0.95rem; margin-top: 1rem; cursor: pointer;
+        }
+        #btn-realizar-pedido:disabled { background: #CFC3B4; color: #7D7065; cursor: not-allowed; }
+
+        /* 8. Barra Flotante de Compra */
+        .floating-cart-bar {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(130%);
+            z-index: 990; background: var(--espresso); color: #FAF5EE; padding: 0.65rem 1rem 0.65rem 1.25rem;
+            border-radius: 10px; box-shadow: 0 14px 34px rgba(34,20,14,0.32);
+            display: flex; align-items: center; gap: 1.25rem; transition: transform 0.3s cubic-bezier(0.16,1,0.3,1);
+            border: 1px solid rgba(243,200,120,0.3);
+        }
+        .floating-cart-bar.visible { transform: translateX(-50%) translateY(0); }
+        .floating-cart-info { display: flex; align-items: center; gap: 0.6rem; font-size: 0.88rem; }
+        .floating-cart-btn {
+            background: var(--terracotta); color: white; border: none; padding: 0.5rem 1rem;
+            border-radius: 6px; font-weight: 700; font-size: 0.84rem; cursor: pointer; font-family: inherit;
+        }
+
+        /* 9. Modales */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(34,20,14,0.55); backdrop-filter: blur(4px);
+            z-index: 2000; display: flex; align-items: center; justify-content: center;
+            padding: 1rem; opacity: 0; visibility: hidden; transition: all 0.22s ease;
+        }
+        .modal-overlay:not(.hidden) { opacity: 1; visibility: visible; }
+        .modal-content {
+            background: var(--card-surface); color: var(--ink); padding: 2rem; border-radius: 14px;
+            width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto;
+            border: 1px solid var(--line-strong); box-shadow: 0 24px 48px rgba(34,20,14,0.24);
+        }
+        .modal-content h2 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.8rem; color: var(--ink); margin: 0 0 0.35rem 0; }
+        .modal-content label { display: block; font-size: 0.82rem; font-weight: 700; color: var(--ink-soft); margin-bottom: 0.3rem; }
+        .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+        .form-control {
+            width: 100%; padding: 0.7rem 0.9rem; background: white; color: var(--ink);
+            border: 1px solid var(--line-strong); border-radius: 8px; font-family: inherit; font-size: 0.9rem; margin-bottom: 0.85rem;
+        }
+        .ingredientes-grid-tienda { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin: 1rem 0; max-height: 240px; overflow-y: auto; }
+        .ingrediente-option {
+            display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.8rem;
+            background: var(--parchment); border: 1px solid var(--line-rule); border-radius: 8px; cursor: pointer; font-size: 0.84rem; font-weight: 600;
+        }
+        .ingrediente-option .ing-precio { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--terracotta); font-weight: 700; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; }
+        .btn-primary {
+            background: var(--ink); color: white; border: 1px solid var(--ink);
+            padding: 0.75rem 1.4rem; border-radius: 8px; font-family: inherit; font-weight: 700; font-size: 0.88rem; cursor: pointer;
+        }
+        .btn-primary:hover { background: var(--terracotta); border-color: var(--terracotta); }
+        .btn-outline {
+            background: transparent; color: var(--ink); border: 1px solid var(--line-strong);
+            padding: 0.75rem 1.25rem; border-radius: 8px; font-family: inherit; font-weight: 600; font-size: 0.88rem; cursor: pointer;
+        }
+        .empty-search-state { text-align: center; padding: 3.5rem 1.5rem; background: var(--card-surface); border: 1px dashed var(--line-strong); border-radius: 12px; }
+        .toast { background: var(--espresso); color: #FAF5EE; padding: 0.8rem 1.15rem; border-radius: 8px; font-size: 0.86rem; font-weight: 600; border-left: 4px solid var(--crust-gold); box-shadow: 0 10px 24px rgba(0,0,0,0.2); }
+        .toast.error { background: #691911; border-left-color: #F97066; }
+
+        .tienda-footer { margin-top: auto; background: var(--espresso); color: #D9CABC; padding: 3rem 2rem 2rem; font-size: 0.85rem; }
+        .tienda-footer-grid { max-width: 1360px; margin: 0 auto; display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .tienda-footer h4 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.25rem; color: #F6E6C8; margin: 0 0 0.65rem 0; }
+        .tienda-footer-bottom { max-width: 1360px; margin: 1.25rem auto 0; display: flex; justify-content: space-between; flex-wrap: wrap; font-size: 0.78rem; color: #9E8C7E; }
+
+        @media (max-width: 960px) {
+            .tienda-nav-inner { grid-template-columns: 1fr auto; }
+            .header-search-wrap { grid-column: 1 / -1; order: 3; max-width: none; }
+            .showcase-grid { grid-template-columns: 1fr; }
+            .showcase-visual { min-height: 220px; }
+            .atelier-banner { grid-template-columns: 1fr; }
+            .tienda-footer-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 600px) {
+            .utility-bar-inner, .tienda-nav-inner, .editorial-showcase, .department-bar-wrap, .store-catalog { padding-left: 1rem; padding-right: 1rem; }
+            .showcase-copy { padding: 2rem 1.5rem; }
+            .store-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 0.9rem !important; }
+            .store-product-card .product-visual { height: 145px !important; }
+            .card-price-add { flex-direction: column; align-items: stretch; }
+            .btn-add { justify-content: center; width: 100%; }
+            .form-row-2, .ingredientes-grid-tienda { grid-template-columns: 1fr; }
+        }
     </style>
 
-    <!-- Emoji/category maps -->
     <script>
     window.PRODUCT_EMOJI_MAP = {
         'concha': '🥐','dona': '🍩','panuelito': '🥞','milanesa': '🍞','cuerno': '🥐',
@@ -33,7 +463,7 @@
     function getProductEmoji(n,c){
         const nl=(n||'').toLowerCase();
         for(const[k,e] of Object.entries(window.PRODUCT_EMOJI_MAP)){if(nl.includes(k))return e;}
-        return window.CATEGORY_EMOJI_MAP[(c||'').toLowerCase()]||'🛍️';
+        return window.CATEGORY_EMOJI_MAP[(c||'').toLowerCase()]||'🥖';
     }
     function getCategoryClass(c){
         return window.CATEGORY_CLASS_MAP[(c||'').toLowerCase()]||'cat-default';
@@ -41,184 +471,156 @@
     </script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/accessibility.css', v=1) }}">
     <script>window.tasasProductos = Object.fromEntries({{ productos|tojson }}.map(p=>[p.id,p.tasa_iva]));</script>
 </head>
 <body class="tienda-body pos-body">
 
-    <!-- Top Announcement Bar -->
-    <div class="top-announcement-bar">
-        <span>🥖 Pan recién horneado todos los días desde las 6:00 AM</span>
-        <span class="highlight-pill">✨ Pasteles personalizados bajo pedido</span>
+    <!-- 1. Barra Superior Editorial -->
+    <div class="utility-bar">
+        <div class="utility-bar-inner">
+            <div class="utility-tagline">
+                <span class="utility-dot"></span>
+                <span>Horneado diario desde las 6:00 AM en Managua · Panadería & Pastelería de Autor</span>
+            </div>
+            <div class="utility-links">
+                <button type="button" id="btn-rastrear-pedido" class="utility-link-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <span>Rastrear código de encargo</span>
+                </button>
+                {% if user.is_authenticated %}
+                <button type="button" id="btn-mis-cotizaciones" class="utility-link-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>Mis Cotizaciones</span>
+                </button>
+                <a href="/logout" class="utility-link-btn">Cerrar sesión</a>
+                {% else %}
+                <a href="/login" class="utility-link-btn">Iniciar sesión</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
     {% if user.fecha_nacimiento and user.fecha_nacimiento.month == mes_actual %}
-    <div class="birthday-banner">
-        🎉 ¡Feliz mes de tu cumpleaños, {{ user.nombre.split()[0] if user.nombre else 'Cliente' }}! Celebra con nuestros pasteles recién horneados.
+    <div style="background: var(--terracotta); color: #FFFDF9; text-align: center; padding: 0.5rem 1rem; font-size: 0.84rem; font-weight: 600;">
+        Celebramos contigo el mes de tu cumpleaños, {{ user.nombre.split()[0] if user.nombre else 'Cliente' }} — Disfruta nuestra repostería recién horneada.
     </div>
     {% endif %}
 
-    <!-- Sticky Navbar -->
+    <!-- 2. Cabecera Principal con Buscador Integrado -->
     <nav class="tienda-nav app-header">
-        <a href="/" class="brand-logo">
-            <div class="brand-logo-icon" aria-hidden="true">🌾</div>
-            <div class="brand-logo-text">
-                <h1>Panadería Amada</h1>
-                <span class="brand-subtitle">Artesanal & Repostería Fina</span>
-            </div>
-        </a>
-        <div class="nav-actions">
-            <button type="button" id="btn-rastrear-pedido" class="nav-btn-ghost" title="Consultar estado con código de seguimiento">
-                <span>🔍</span> <span>Rastrear Pedido</span>
-            </button>
+        <div class="tienda-nav-inner">
+            <a href="/" class="brand-logo">
+                <div class="brand-seal" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2v20"/>
+                        <path d="M17 5c0 3-5 5-5 5s-5-2-5-5c0-1.5 2-3 5-3s5 1.5 5 3z"/>
+                        <path d="M18 11c0 3-6 5-6 5s-6-2-6-5c0-1.5 2.5-3 6-3s6 1.5 6 3z"/>
+                        <path d="M17 17c0 2.5-5 4-5 4s-5-1.5-5-4c0-1.5 2-2.5 5-2.5s5 1 5 2.5z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1>Panadería Amada</h1>
+                    <span class="brand-kicker">Obrador &amp; Repostería · Brajher's Cake</span>
+                </div>
+            </a>
 
-            {% if user.is_authenticated %}
-                <button type="button" id="btn-mis-cotizaciones" class="nav-btn-ghost">
-                    <span>📋</span> <span>Mis Cotizaciones</span>
-                </button>
-                <span class="user-greeting-pill">
-                    <span>👋</span>
-                    <span>Hola, {{ user.nombre.split()[0] if user.nombre else 'Invitado' }}</span>
+            <div class="header-search-wrap">
+                <span class="header-search-icon" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                 </span>
-                <a href="/logout" class="nav-link-logout">Salir</a>
-            {% else %}
-                <a href="/login" class="nav-btn-ghost">Iniciar Sesión</a>
-            {% endif %}
+                <input type="search" id="tienda-search-input" class="header-search-input" placeholder="Buscar concha, bolillo, tres leches, café..." autocomplete="off">
+                <button type="button" id="tienda-search-clear" class="header-search-clear" aria-label="Limpiar búsqueda">×</button>
+            </div>
 
-            <button type="button" class="cart-toggle" id="btn-abrir-carrito-nav" aria-label="Abrir carrito de compras">
-                <span>🛒</span>
-                <span class="cart-badge" id="badge-carrito-tienda">0</span>
-                <span class="cart-toggle-total" id="nav-cart-total">C$0.00</span>
-            </button>
+            <div class="nav-actions">
+                {% if user.is_authenticated %}
+                <div class="account-chip">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span>{{ user.nombre.split()[0] if user.nombre else 'Invitado' }}</span>
+                </div>
+                {% endif %}
+
+                <button type="button" class="cart-toggle" id="btn-abrir-carrito-nav" aria-label="Abrir bolsa de compra">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                    <span>Pedido</span>
+                    <span class="cart-badge" id="badge-carrito-tienda">0</span>
+                    <span class="cart-toggle-total" id="nav-cart-total">C$0.00</span>
+                </button>
+            </div>
         </div>
     </nav>
 
-    <!-- Editorial Hero Section -->
-    <header class="hero-section">
-        <div class="hero-content">
-            <div class="hero-copy">
-                <div class="hero-eyebrow">✨ Tradición Nicaragüense en cada horneada</div>
-                <h2>El sabor artesanal de siempre, <em>listo para ti</em>.</h2>
-                <p>Explora nuestro catálogo de pan fresco, postres fríos y repostería personalizada. Haz tu pedido en línea o solicita la cotización de tu pastel soñado en segundos.</p>
-                <div class="hero-cta-group">
-                    <button type="button" id="btn-pastel-personalizado" class="btn-hero">
-                        <span>🎂</span> <span>Pedir Pastel Personalizado</span>
+    <!-- 3. Vitrina Editorial Asimétrica -->
+    <header class="editorial-showcase">
+        <div class="showcase-grid">
+            <div class="showcase-copy">
+                <div class="showcase-kicker">Vitrina del Día &amp; Encargos Especiales</div>
+                <h2>Pan de corteza dorada y <em>pastelería hecha a mano</em>.</h2>
+                <p>Selecciona tus piezas recién salidas del horno para retiro en tienda o solicita una cotización personalizada con nuestro equipo de maestros pasteleros.</p>
+                <div class="showcase-actions">
+                    <button type="button" id="btn-pastel-personalizado" class="btn-atelier-primary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/><path d="M7 8v3"/><path d="M12 8v3"/><path d="M17 8v3"/></svg>
+                        <span>Cotizar Pastel a Medida</span>
                     </button>
-                    <a href="#catalogo-tienda" class="btn-hero-secondary">
-                        <span>🥐</span> <span>Explorar Catálogo</span>
+                    <a href="#catalogo-tienda" class="btn-atelier-outline">
+                        <span>Explorar la Vitrina</span>
                     </a>
                 </div>
             </div>
-
-            <div class="hero-showcase-card">
-                <div class="hero-showcase-header">
-                    <div class="hero-showcase-icon" aria-hidden="true">🍰</div>
-                    <div>
-                        <h3>¿Cómo comprar en línea?</h3>
-                        <span>Rápido, transparente y sin filas</span>
-                    </div>
+            <div class="showcase-visual">
+                <div class="showcase-stamp-card">
+                    <strong>Especialidad de la Casa</strong>
+                    <span>Pasteles Tres Leches, Selva Negra y diseños exclusivos con seguimiento en línea.</span>
                 </div>
-                <ul class="hero-steps-list">
-                    <li>
-                        <span class="step-number-badge">1</span>
-                        <div><strong>Elige o personaliza:</strong> Agrega panes, postres o diseña tu pastel con ingredientes extras o foto de referencia.</div>
-                    </li>
-                    <li>
-                        <span class="step-number-badge">2</span>
-                        <div><strong>Confirma fecha y pago:</strong> Selecciona la fecha de recogida y tu método de pago preferido.</div>
-                    </li>
-                    <li>
-                        <span class="step-number-badge">3</span>
-                        <div><strong>Sigue tu orden en vivo:</strong> Recibe confirmación de recepción y consulta el avance de horneado en tiempo real.</div>
-                    </li>
-                </ul>
             </div>
         </div>
     </header>
 
-    <!-- Value Proposition Strip -->
-    <section class="value-strip" aria-label="Beneficios de compra">
-        <div class="value-strip-inner">
-            <div class="value-item">
-                <div class="value-icon" aria-hidden="true">🔥</div>
-                <div class="value-text">
-                    <strong>Horneado Fresco Diario</strong>
-                    <span>Ingredientes locales seleccionados cada mañana</span>
-                </div>
-            </div>
-            <div class="value-item">
-                <div class="value-icon" aria-hidden="true">🎨</div>
-                <div class="value-text">
-                    <strong>Repostería a tu Medida</strong>
-                    <span>Cotiza pasteles para bodas, cumpleaños y eventos</span>
-                </div>
-            </div>
-            <div class="value-item">
-                <div class="value-icon" aria-hidden="true">📲</div>
-                <div class="value-text">
-                    <strong>Atención Directa y Seguimiento</strong>
-                    <span>Notificaciones de cotización y rastreo con código QR</span>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <main class="pos-layout" id="catalogo-tienda">
-        <!-- Catalog wrapper for pos.js event delegation -->
         <div class="catalog-panel pos-main" style="width: 100%;">
 
-            <!-- Search, Sort & Category Toolbar -->
-            <div class="store-toolbar-wrapper">
-                <div class="store-search-sort-bar">
-                    <div class="search-box-tienda">
-                        <span class="search-box-icon" aria-hidden="true">🔎</span>
-                        <input type="search" id="tienda-search-input" placeholder="Buscar pan dulce, pastel, tres leches, café..." autocomplete="off">
-                        <button type="button" id="tienda-search-clear" class="search-clear-btn" aria-label="Limpiar búsqueda">×</button>
-                    </div>
+            <!-- 4. Barra de Departamentos y Orden -->
+            <div class="department-bar-wrap">
+                <div class="department-bar">
+                    <section class="store-filters category-tabs" aria-label="Departamentos de la panadería">
+                        <button type="button" class="filter-btn category-btn active" data-filter="Todos">
+                            <span>Toda la Vitrina</span>
+                            <span class="filter-count-pill">{{ productos|length }}</span>
+                        </button>
+                        {% set ns = namespace(ofertas=0) %}
+                        {% for p in productos if p.descuento > 0 %}
+                            {% set ns.ofertas = ns.ofertas + 1 %}
+                        {% endfor %}
+                        {% if ns.ofertas > 0 %}
+                        <button type="button" class="filter-btn" id="btn-filter-ofertas" data-special-filter="ofertas">
+                            <span>Especiales del Día</span>
+                            <span class="filter-count-pill">{{ ns.ofertas }}</span>
+                        </button>
+                        {% endif %}
+                        {% for cat in categorias %}
+                        {% set cat_count = productos|selectattr('categoria', 'equalto', cat.nombre)|list|length %}
+                        {% if cat_count > 0 %}
+                        <button type="button" class="filter-btn category-btn" data-filter="{{ cat.nombre }}">
+                            <span>{{ cat.nombre }}</span>
+                            <span class="filter-count-pill">{{ cat_count }}</span>
+                        </button>
+                        {% endif %}
+                        {% endfor %}
+                    </section>
 
-                    <div class="store-controls-right">
-                        <span class="results-counter" id="tienda-results-count">{{ productos|length }} productos disponibles</span>
-                        <select id="tienda-sort-select" class="sort-select-tienda" aria-label="Ordenar productos">
-                            <option value="default">Ordenar: Destacados</option>
+                    <div class="catalog-meta-controls">
+                        <span class="results-counter" id="tienda-results-count">{{ productos|length }} piezas</span>
+                        <select id="tienda-sort-select" class="sort-select-tienda" aria-label="Ordenar vitrina">
+                            <option value="default">Orden: Recomendados</option>
                             <option value="price-asc">Precio: Menor a Mayor</option>
                             <option value="price-desc">Precio: Mayor a Menor</option>
                             <option value="name-asc">Nombre: A - Z</option>
                         </select>
                     </div>
                 </div>
-
-                <!-- Category Filters -->
-                <section class="store-filters category-tabs" aria-label="Categorías de productos">
-                    <button type="button" class="filter-btn category-btn active" data-filter="Todos">
-                        <span>✨</span>
-                        <span>Todos</span>
-                        <span class="filter-count-pill">{{ productos|length }}</span>
-                    </button>
-                    {% set ns = namespace(ofertas=0) %}
-                    {% for p in productos if p.descuento > 0 %}
-                        {% set ns.ofertas = ns.ofertas + 1 %}
-                    {% endfor %}
-                    {% if ns.ofertas > 0 %}
-                    <button type="button" class="filter-btn" id="btn-filter-ofertas" data-special-filter="ofertas">
-                        <span>🔥</span>
-                        <span>Ofertas</span>
-                        <span class="filter-count-pill">{{ ns.ofertas }}</span>
-                    </button>
-                    {% endif %}
-                    {% for cat in categorias %}
-                    {% set cat_count = productos|selectattr('categoria', 'equalto', cat.nombre)|list|length %}
-                    {% if cat_count > 0 %}
-                    <button type="button" class="filter-btn category-btn" data-filter="{{ cat.nombre }}">
-                        <span class="cat-tab-emoji" data-cat-name="{{ cat.nombre }}">🥖</span>
-                        <span>{{ cat.nombre }}</span>
-                        <span class="filter-count-pill">{{ cat_count }}</span>
-                    </button>
-                    {% endif %}
-                    {% endfor %}
-                </section>
             </div>
 
-            <!-- Products Grid -->
+            <!-- 5. Cuadrícula de Productos -->
             <section class="store-catalog">
                 <div class="store-grid products-grid" id="tienda-products-grid">
                     {% for producto in productos %}
@@ -233,11 +635,11 @@
                         data-imagen-url="{{ producto.imagen_url }}"
                     >
                         {% if producto.categoria == 'Reposteria' %}
-                            <div class="customizable-pill-badge">✨ Personalizable</div>
+                            <div class="customizable-pill-badge">Personalizable</div>
                         {% endif %}
 
                         {% if producto.descuento > 0 %}
-                            <div class="product-discount-badge">-{{ "%.0f"|format(producto.descuento) }}% OFF</div>
+                            <div class="product-discount-badge">-{{ "%.0f"|format(producto.descuento) }}%</div>
                         {% endif %}
 
                         {% if producto.imagen_url %}
@@ -255,9 +657,9 @@
                             <div class="card-cat category-label">{{ producto.categoria }}</div>
                             <h3 class="card-title">{{ producto.nombre }}</h3>
                             {% if producto.categoria == 'Reposteria' %}
-                            <p class="card-subtitle-hint">Elige extras o rellenos al agregar</p>
+                            <p class="card-subtitle-hint">Permite elegir rellenos o ingredientes extra</p>
                             {% else %}
-                            <p class="card-subtitle-hint">Recién horneado • Calidad artesanal</p>
+                            <p class="card-subtitle-hint">Elaboración artesanal del día</p>
                             {% endif %}
                         </div>
 
@@ -270,7 +672,7 @@
                             {% else %}
                                 <p class="card-price price">C${{ "%.2f"|format(producto.precio) }}</p>
                             {% endif %}
-                            <button type="button" class="btn-add" aria-label="Agregar {{ producto.nombre }} al pedido">
+                            <button type="button" class="btn-add" aria-label="Agregar {{ producto.nombre }}">
                                 <span>{% if producto.categoria == 'Reposteria' %}Personalizar{% else %}Agregar{% endif %}</span>
                                 <span>+</span>
                             </button>
@@ -279,57 +681,55 @@
                     {% endfor %}
                 </div>
 
-                <!-- Empty Search State -->
+                <!-- Estado vacío de búsqueda -->
                 <div id="tienda-empty-search" class="empty-search-state hidden">
-                    <div style="font-size: 2.8rem;">🥐</div>
-                    <h3>No encontramos productos con ese criterio</h3>
-                    <p style="color: var(--text-muted); margin-bottom: 1.25rem;">Prueba con otro término o explora todas nuestras categorías recién horneadas.</p>
-                    <button type="button" id="btn-reset-filtros-tienda" class="btn-primary">Ver todo el catálogo</button>
+                    <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.7rem; margin: 0 0 0.5rem 0;">No encontramos coincidencias en la vitrina</h3>
+                    <p style="color: var(--ink-soft); margin-bottom: 1.25rem;">Intenta con otro término o restablece los filtros para ver todo el catálogo.</p>
+                    <button type="button" id="btn-reset-filtros-tienda" class="btn-primary">Mostrar toda la vitrina</button>
                 </div>
 
-                <!-- Custom Cake Promo Banner Inside Catalog -->
-                <div class="custom-cake-promo-banner">
-                    <div class="custom-cake-promo-copy">
-                        <h3>🎂 ¿Tienes una celebración especial en puerta?</h3>
-                        <p>Diseñamos pasteles temáticos para cumpleaños, bodas y eventos corporativos. Sube tu foto de referencia y nuestro equipo maestro pastelero te enviará la cotización.</p>
+                <!-- 6. Banner de Atelier de Pastelería -->
+                <div class="atelier-banner">
+                    <div>
+                        <div class="atelier-banner-kicker">Servicio de Pastelería a Medida</div>
+                        <h3>¿Celebras un evento, boda o cumpleaños especial?</h3>
+                        <p>Comparte los sabores, número de porciones y una imagen de referencia. Nuestro obrador cotizará tu diseño y podrás darle seguimiento desde tu cuenta.</p>
                     </div>
-                    <button type="button" class="btn-hero" onclick="document.getElementById('btn-pastel-personalizado').click();">
-                        ✨ Cotizar Diseño a Medida
+                    <button type="button" class="btn-atelier-primary" onclick="document.getElementById('btn-pastel-personalizado').click();">
+                        Solicitar Cotización de Autor →
                     </button>
                 </div>
             </section>
         </div>
     </main>
 
-    <!-- Floating Bottom Cart Bar -->
-    <div id="floating-cart-bar" class="floating-cart-bar" role="region" aria-label="Resumen rápido del carrito">
+    <!-- Barra Flotante Inferior -->
+    <div id="floating-cart-bar" class="floating-cart-bar" role="region" aria-label="Resumen rápido del pedido">
         <div class="floating-cart-info">
-            <span>🛍️</span>
-            <span><strong id="floating-cart-count">0</strong> productos</span>
-            <span>•</span>
-            <strong id="floating-cart-total" style="color: #FFE4B5; font-family: 'Outfit', sans-serif;">C$0.00</strong>
+            <span>Bolsa: <strong id="floating-cart-count">0</strong> pzas</span>
+            <span>·</span>
+            <strong id="floating-cart-total" style="color: #F3C878; font-family: 'JetBrains Mono', monospace;">C$0.00</strong>
         </div>
         <button type="button" class="floating-cart-btn" id="btn-floating-ver-pedido">
-            Ver mi Pedido →
+            Revisar Pedido →
         </button>
     </div>
 
-    <!-- Cart Drawer -->
+    <!-- Bolsa de Compra Lateral -->
     <div id="cartOverlay" class="cart-drawer-overlay"></div>
     <aside id="cartDrawer" class="cart-drawer invoice-panel" aria-label="Tu Pedido">
         <div class="cart-header invoice-header">
             <div class="cart-header-title">
-                <h2>Tu Pedido</h2>
+                <h2>Tu Bolsa de Compra</h2>
                 <button type="button" id="btn-vaciar-carrito-tienda" class="btn-clear-cart hidden">Vaciar</button>
             </div>
-            <button type="button" class="btn-close-cart" id="btn-cerrar-drawer-carrito" aria-label="Cerrar carrito">×</button>
+            <button type="button" class="btn-close-cart" id="btn-cerrar-drawer-carrito" aria-label="Cerrar">×</button>
         </div>
 
         <div class="cart-body cart-items" id="cart-items">
             <div class="empty-cart-msg empty-cart">
-                <div style="font-size: 3rem; margin-bottom: 0.75rem;">🛒</div>
-                <strong>Tu carrito está vacío</strong><br>
-                <span style="font-size: 0.85rem;">Agrega panes recién horneados o pasteles del catálogo para comenzar.</span>
+                <strong>Tu bolsa está vacía</strong><br>
+                <span style="font-size: 0.84rem;">Selecciona piezas recién horneadas o pasteles de la vitrina para comenzar.</span>
             </div>
         </div>
 
@@ -347,20 +747,20 @@
                 <span id="total-display">C$0.00</span>
             </div>
             <button type="button" id="btn-realizar-pedido" disabled>
-                Continuar con mi Pedido →
+                Continuar con el Pedido →
             </button>
         </div>
     </aside>
 
-    <!-- Modals Background -->
+    <!-- Modales -->
     <div id="modal-overlay" class="modal-overlay hidden"></div>
 
     <!-- Modal Personalizar Ingredientes (Repostería) -->
     <div id="ingredientes-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 id="modal-ingredientes-title">Personalizar Pastel</h2>
-            <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.92rem;">
-                Selecciona los rellenos, coberturas o extras que desees agregar a tu pastel:
+            <p style="color: var(--ink-soft); margin-bottom: 1rem; font-size: 0.9rem;">
+                Selecciona los rellenos, coberturas o extras adicionales para esta pieza:
             </p>
 
             <div id="ingredientes-list-container" class="ingredientes-grid-tienda">
@@ -373,35 +773,35 @@
                     <span class="ing-precio">+C${{ "%.2f"|format(ing.precio) }}</span>
                 </label>
                 {% else %}
-                <p style="grid-column: 1 / -1; color: var(--text-muted); font-size: 0.88rem;">
-                    Puedes agregar este producto directamente o indicar detalles en el paso final.
+                <p style="grid-column: 1 / -1; color: var(--ink-muted); font-size: 0.86rem;">
+                    Puedes agregar esta pieza directamente o anotar detalles al confirmar tu pedido.
                 </p>
                 {% endfor %}
             </div>
 
-            <div class="form-group" style="margin-top: 1rem; background: var(--brand-crema); padding: 0.9rem 1.1rem; border-radius: 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-weight: 700; color: var(--brand-cafe-dark);">Precio con extras:</span>
-                <input type="text" id="modal-ingredientes-total" readonly style="border: none; background: transparent; font-family: 'Outfit', sans-serif; font-size: 1.3rem; font-weight: 800; color: var(--brand-cafe-dark); text-align: right; width: 140px;" value="C$0.00">
+            <div class="form-group" style="margin-top: 1rem; background: var(--parchment); padding: 0.85rem 1rem; border-radius: 8px; border: 1px solid var(--line-rule); display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 700; color: var(--ink);">Importe de la pieza:</span>
+                <input type="text" id="modal-ingredientes-total" readonly style="border: none; background: transparent; font-family: 'JetBrains Mono', monospace; font-size: 1.2rem; font-weight: 700; color: var(--ink); text-align: right; width: 140px;" value="C$0.00">
             </div>
 
             <div class="modal-actions">
                 <button type="button" class="btn-outline" id="btn-cerrar-ingredientes">Cancelar</button>
-                <button type="button" class="btn-primary" id="btn-confirmar-ingredientes">Agregar al Pedido</button>
+                <button type="button" class="btn-primary" id="btn-confirmar-ingredientes">Agregar a la Bolsa</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal Pastel Personalizado (Cotización a Medida) -->
+    <!-- Modal Pastel Personalizado -->
     <div id="pastel-personalizado-modal" class="modal-overlay hidden">
         <div class="modal-content">
-            <h2>🎂 Diseñar Pastel Personalizado</h2>
-            <p style="color: var(--text-muted); margin-bottom: 1.25rem; font-size: 0.92rem;">
-                Cuéntanos cómo imaginas tu pastel ideal y te enviaremos la cotización a la brevedad.
+            <h2>Cotizar Pastel a Medida</h2>
+            <p style="color: var(--ink-soft); margin-bottom: 1.2rem; font-size: 0.9rem;">
+                Describe el diseño, sabores y porciones que deseas. Nuestro equipo revisará tu solicitud y te asignará el precio en línea.
             </p>
 
             <form id="form-pastel-personalizado">
                 <label for="pastel-especificaciones">Especificaciones (Sabores, porciones, dedicatoria, decoración):</label>
-                <textarea id="pastel-especificaciones" class="form-control" rows="3" required placeholder="Ej: Pastel para 25 personas, sabor vainilla con relleno de dulce de leche y decoración floral dorada..."></textarea>
+                <textarea id="pastel-especificaciones" class="form-control" rows="3" required placeholder="Ej: Pastel para 25 personas, sabor vainilla con relleno de dulce de leche y cobertura crema marfil..."></textarea>
 
                 <div class="form-row-2">
                     <div>
@@ -409,13 +809,13 @@
                         <input type="date" id="pastel-fecha" class="form-control" required>
                     </div>
                     <div>
-                        <label for="pastel-foto">Foto de referencia (Opcional):</label>
-                        <input type="file" id="pastel-foto" class="form-control" accept="image/*" style="padding: 0.58rem;">
+                        <label for="pastel-foto">Imagen de referencia (Opcional):</label>
+                        <input type="file" id="pastel-foto" class="form-control" accept="image/*" style="padding: 0.5rem;">
                     </div>
                 </div>
 
-                <div id="pastel-foto-preview-box" class="hidden" style="margin-bottom: 1rem; text-align: center; background: var(--brand-crema); padding: 0.65rem; border-radius: 12px;">
-                    <img id="pastel-foto-preview" src="" alt="Vista previa de referencia" style="max-height: 130px; border-radius: 8px; object-fit: contain;">
+                <div id="pastel-foto-preview-box" class="hidden" style="margin-bottom: 1rem; text-align: center; background: var(--parchment); padding: 0.65rem; border-radius: 8px; border: 1px solid var(--line-rule);">
+                    <img id="pastel-foto-preview" src="" alt="Vista previa de referencia" style="max-height: 130px; border-radius: 6px; object-fit: contain;">
                 </div>
 
                 {% if user.rol_nombre == 'Invitado' or not user.telefono %}
@@ -433,7 +833,7 @@
 
                 <div class="modal-actions">
                     <button type="button" class="btn-outline" id="btn-cerrar-pastel">Cancelar</button>
-                    <button type="submit" class="btn-primary">Enviar Solicitud de Cotización</button>
+                    <button type="submit" class="btn-primary">Enviar Solicitud</button>
                 </div>
             </form>
         </div>
@@ -442,12 +842,12 @@
     <!-- Modal Mis Cotizaciones -->
     <div id="mis-cotizaciones-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width: 620px;">
-            <h2>📋 Mis Solicitudes y Cotizaciones</h2>
-            <p style="color: var(--text-muted); margin-bottom: 1.25rem; font-size: 0.92rem;">
-                Consulta el estado y precio autorizado de tus pedidos y pasteles personalizados.
+            <h2>Mis Solicitudes y Cotizaciones</h2>
+            <p style="color: var(--ink-soft); margin-bottom: 1.2rem; font-size: 0.9rem;">
+                Revisa el estado y precio autorizado de tus pedidos y pasteles personalizados.
             </p>
             <div id="cotizaciones-cliente-list" style="max-height: 60vh; overflow-y: auto;">
-                <p style="text-align: center; color: var(--text-muted);">Cargando...</p>
+                <p style="text-align: center; color: var(--ink-muted);">Cargando...</p>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn-outline" id="btn-cerrar-mis-cotizaciones">Cerrar</button>
@@ -455,19 +855,19 @@
         </div>
     </div>
 
-    <!-- Modal Rastrear Pedido por Código -->
+    <!-- Modal Rastrear Pedido -->
     <div id="rastrear-pedido-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width: 440px;">
-            <h2>🔍 Rastrear mi Encargo</h2>
-            <p style="color: var(--text-muted); margin-bottom: 1.25rem; font-size: 0.92rem;">
-                Ingresa el código de seguimiento que aparece en tu comprobante o junto al código QR.
+            <h2>Rastrear Código de Encargo</h2>
+            <p style="color: var(--ink-soft); margin-bottom: 1.2rem; font-size: 0.9rem;">
+                Ingresa el código de seguimiento que aparece en tu comprobante para consultar el estado en cocina.
             </p>
             <form id="form-rastrear-pedido">
                 <label for="input-codigo-seguimiento">Código de Seguimiento:</label>
-                <input type="text" id="input-codigo-seguimiento" class="form-control" placeholder="Ej: A1B2C3D4E5" required maxlength="30" style="text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em;">
+                <input type="text" id="input-codigo-seguimiento" class="form-control" placeholder="Ej: A1B2C3D4E5" required maxlength="30" style="text-transform: uppercase; font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: 0.08em;">
                 <div class="modal-actions">
                     <button type="button" class="btn-outline" id="btn-cerrar-rastrear">Cancelar</button>
-                    <button type="submit" class="btn-primary">Ver Estado en Vivo →</button>
+                    <button type="submit" class="btn-primary">Consultar Estado →</button>
                 </div>
             </form>
         </div>
@@ -476,14 +876,14 @@
     <!-- Modal Encargo / Finalizar Pedido Cliente -->
     <div id="encargo-modal" class="modal-overlay hidden">
         <div class="modal-content">
-            <h2 id="encargo-modal-title">🛍️ Confirmar Datos de tu Pedido</h2>
-            <p style="color: var(--text-muted); margin-bottom: 1.2rem; font-size: 0.92rem;">
-                Verifica tus datos de contacto y la fecha en que deseas retirar tu pedido.
+            <h2 id="encargo-modal-title">Confirmar Datos del Pedido</h2>
+            <p style="color: var(--ink-soft); margin-bottom: 1.2rem; font-size: 0.9rem;">
+                Completa tus datos de contacto y la fecha en que deseas retirar tu pedido.
             </p>
 
             <div class="form-row-2">
                 <div>
-                    <label for="modal-nombre-cliente">Tu Nombre Completo:</label>
+                    <label for="modal-nombre-cliente">Nombre Completo:</label>
                     <input type="text" id="modal-nombre-cliente" class="form-control" required value="{{ '' if (not user.nombre or user.nombre == 'Invitado') else user.nombre }}" placeholder="Ej: Ana García">
                 </div>
                 <div>
@@ -495,7 +895,7 @@
             <div class="form-row-2">
                 <div>
                     <label for="modal-total">Total Estimado:</label>
-                    <input type="text" id="modal-total" class="form-control" readonly style="background: var(--brand-crema); font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.1rem; color: var(--brand-cafe-dark);">
+                    <input type="text" id="modal-total" class="form-control" readonly style="background: var(--parchment); font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1.05rem; color: var(--ink);">
                 </div>
                 <div id="encargo-fecha-container">
                     <label for="modal-fecha">Fecha de Entrega / Retiro:</label>
@@ -507,14 +907,14 @@
                 <input type="number" id="modal-adelanto" class="form-control" readonly value="0">
             </div>
 
-            <label for="modal-metodo-pago">Método de Pago Preferido:</label>
+            <label for="modal-metodo-pago">Modalidad de Pago Preferida:</label>
             <select id="modal-metodo-pago" class="form-control">
-                <option value="Efectivo">Pago en Efectivo al recoger en tienda</option>
+                <option value="Efectivo">Pago en Efectivo al retirar en tienda</option>
                 <option value="Transferencia">Transferencia Bancaria / Depósito</option>
             </select>
 
             <div class="form-group" id="grupo-referencia-tienda" style="display: none;">
-                <label for="modal-referencia-encargo">Número de referencia o banco (si ya realizaste transferencia):</label>
+                <label for="modal-referencia-encargo">Número de referencia o banco (si aplica):</label>
                 <input id="modal-referencia-encargo" class="form-control" maxlength="100" placeholder="Ej: BAC #12345678 / LAFISE">
             </div>
 
@@ -525,13 +925,13 @@
             </div>
 
             <div class="form-group">
-                <label for="modal-notas-encargo">Notas adicionales para la panadería (Opcional):</label>
-                <input type="text" id="modal-notas-encargo" class="form-control" maxlength="200" placeholder="Ej: Retiro a las 3:00 PM / Empaque para regalo">
+                <label for="modal-notas-encargo">Notas adicionales (Opcional):</label>
+                <input type="text" id="modal-notas-encargo" class="form-control" maxlength="200" placeholder="Ej: Retiro a las 3:00 PM / Empaque especial">
             </div>
 
             <div class="modal-actions">
-                <button type="button" class="btn-outline" id="btn-cerrar-modal">Volver al Carrito</button>
-                <button type="button" class="btn-primary" id="btn-confirmar-encargo">Enviar Pedido Ahora</button>
+                <button type="button" class="btn-outline" id="btn-cerrar-modal">Volver</button>
+                <button type="button" class="btn-primary" id="btn-confirmar-encargo">Confirmar Solicitud</button>
             </div>
         </div>
     </div>
@@ -539,29 +939,29 @@
     <!-- Modal de Confirmación de Pedido Enviado -->
     <div id="confirmacion-pedido-modal" class="modal-overlay hidden">
         <div class="modal-content" style="text-align: center;">
-            <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(22, 128, 60, 0.12); color: var(--success); font-size: 2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(30, 111, 67, 0.12); color: var(--success); font-size: 1.7rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.9rem;">
                 ✓
             </div>
-            <h2>¡Tu solicitud fue recibida!</h2>
-            <p style="color: var(--text-muted); font-size: 0.93rem; margin-bottom: 1.25rem;">
-                Hemos registrado tu pedido en recepción. Nuestro equipo confirmará disponibilidad y detalles de entrega.
+            <h2>Solicitud Registrada</h2>
+            <p style="color: var(--ink-soft); font-size: 0.9rem; margin-bottom: 1.2rem;">
+                Tu orden fue enviada a recepción. Confirmaremos disponibilidad y detalles de entrega.
             </p>
 
-            <div style="background: var(--brand-crema); border: 1px solid rgba(107, 58, 42, 0.14); border-radius: 16px; padding: 1.1rem; margin-bottom: 1.25rem; text-align: left;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; padding-bottom: 0.6rem; border-bottom: 1px dashed rgba(107, 58, 42, 0.15);">
-                    <span style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">N° DE SOLICITUD</span>
-                    <strong id="conf-pedido-codigo" style="font-family: 'Outfit', sans-serif; font-size: 1.15rem; color: var(--brand-cafe-dark);">#COT-0000</strong>
+            <div style="background: var(--parchment); border: 1px solid var(--line-strong); border-radius: 10px; padding: 1rem; margin-bottom: 1.2rem; text-align: left;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.55rem; padding-bottom: 0.55rem; border-bottom: 1px dashed var(--line-strong);">
+                    <span style="font-size: 0.76rem; color: var(--ink-muted); font-weight: 700;">N° DE SOLICITUD</span>
+                    <strong id="conf-pedido-codigo" style="font-family: 'JetBrains Mono', monospace; font-size: 1.05rem; color: var(--ink);">#COT-0000</strong>
                 </div>
-                <div style="font-size: 0.86rem; color: var(--text-main); display: grid; gap: 0.35rem;">
+                <div style="font-size: 0.85rem; color: var(--ink); display: grid; gap: 0.3rem;">
                     <div><strong>Cliente:</strong> <span id="conf-pedido-cliente">-</span></div>
                     <div><strong>Fecha solicitada:</strong> <span id="conf-pedido-fecha">-</span></div>
-                    <div><strong>Total estimado:</strong> <strong id="conf-pedido-total" style="color: var(--brand-dorado-dark);">C$0.00</strong></div>
+                    <div><strong>Total estimado:</strong> <strong id="conf-pedido-total" style="color: var(--terracotta); font-family: 'JetBrains Mono', monospace;">C$0.00</strong></div>
                 </div>
             </div>
 
             <div class="modal-actions" style="justify-content: center; flex-wrap: wrap;">
-                <button type="button" class="btn-outline" id="btn-cerrar-confirmacion-pedido">Seguir Comprando</button>
-                <button type="button" class="btn-primary" id="btn-ver-cotizaciones-desde-conf">Ver Estado en Mis Cotizaciones</button>
+                <button type="button" class="btn-outline" id="btn-cerrar-confirmacion-pedido">Seguir Explorando</button>
+                <button type="button" class="btn-primary" id="btn-ver-cotizaciones-desde-conf">Ver Mis Solicitudes</button>
             </div>
         </div>
     </div>
@@ -608,38 +1008,37 @@
     <footer class="tienda-footer">
         <div class="tienda-footer-grid">
             <div>
-                <h4>🌾 Panadería Amada — Brajher's Cake</h4>
-                <p style="margin: 0; line-height: 1.6; color: rgba(255,255,255,0.72);">
-                    Elaboramos cada pieza de pan y repostería con recetas tradicionales, ingredientes frescos y dedicación artesanal para acompañar la mesa de tu familia.
+                <h4>Panadería Amada · Brajher's Cake</h4>
+                <p style="margin: 0; line-height: 1.6;">
+                    Obrador tradicional y pastelería de autor. Cada pieza se hornea diariamente con ingredientes frescos seleccionados para llevar el auténtico sabor a tu mesa.
                 </p>
             </div>
             <div>
-                <h4>Horario de Atención</h4>
-                <p style="margin: 0; line-height: 1.7; color: rgba(255,255,255,0.72);">
+                <h4>Horario de Obrador y Tienda</h4>
+                <p style="margin: 0; line-height: 1.7;">
                     Lunes a Sábado: 6:00 AM – 8:00 PM<br>
                     Domingos: 7:00 AM – 6:00 PM<br>
-                    Entregas y encargos programados
+                    Retiro en tienda y encargos programados
                 </p>
             </div>
             <div>
-                <h4>Accesos Rápidos</h4>
+                <h4>Atención al Cliente</h4>
                 <p style="margin: 0; line-height: 1.8;">
-                    <a href="#catalogo-tienda" style="color: #FFE4B5; text-decoration: none;">• Catálogo de Productos</a><br>
-                    <a href="#" onclick="document.getElementById('btn-pastel-personalizado').click(); return false;" style="color: #FFE4B5; text-decoration: none;">• Cotizar Pastel Personalizado</a><br>
-                    <a href="#" onclick="document.getElementById('btn-rastrear-pedido').click(); return false;" style="color: #FFE4B5; text-decoration: none;">• Rastrear Código de Encargo</a>
+                    <a href="#catalogo-tienda" style="color: #F6E6C8; text-decoration: none;">· Vitrina de Productos</a><br>
+                    <a href="#" onclick="document.getElementById('btn-pastel-personalizado').click(); return false;" style="color: #F6E6C8; text-decoration: none;">· Cotizar Pastel a Medida</a><br>
+                    <a href="#" onclick="document.getElementById('btn-rastrear-pedido').click(); return false;" style="color: #F6E6C8; text-decoration: none;">· Seguimiento de Encargos</a>
                 </p>
             </div>
         </div>
         <div class="tienda-footer-bottom">
-            <span>&copy; 2026 Panadería Amada & Brajher's Cake. Todos los derechos reservados.</span>
-            <span>Managua, Nicaragua • Moneda: Córdoba (C$)</span>
+            <span>&copy; 2026 Panadería Amada &amp; Brajher's Cake. Todos los derechos reservados.</span>
+            <span>Managua, Nicaragua · Precios expresados en Córdobas (C$)</span>
         </div>
     </footer>
 
     <!-- Spinners y Toasts -->
-    <div id="loading-overlay" class="modal-overlay hidden" style="background:rgba(255,253,249,0.85); flex-direction:column; color:var(--brand-dark);">
-        <span style="font-size: 2.5rem; margin-bottom:0.75rem;">🥐</span>
-        <span style="font-weight: 700; font-size: 1.05rem;">Procesando tu solicitud...</span>
+    <div id="loading-overlay" class="modal-overlay hidden" style="background:rgba(250,245,238,0.88); flex-direction:column; color:var(--ink);">
+        <span style="font-weight: 700; font-size: 1rem; letter-spacing: 0.04em;">PROCESANDO SOLICITUD...</span>
     </div>
     <div id="toast-container" style="position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:10px;"></div>
 
@@ -647,10 +1046,9 @@
         window.esClienteOnline = true;
         window.configuracionGlobal = {{ configuracion|tojson|safe if configuracion else '{}' }};
     </script>
-    <script src="{{ url_for('static', filename='js/api_services.js', v=7) }}"></script>
-    <script src="{{ url_for('static', filename='js/pos.js', v=7) }}"></script>
+    <script src="{{ url_for('static', filename='js/api_services.js', v=8) }}"></script>
+    <script src="{{ url_for('static', filename='js/pos.js', v=8) }}"></script>
 
-    <!-- Storefront Interactive Enhancements -->
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const cartDrawer = document.getElementById('cartDrawer');
@@ -680,12 +1078,11 @@
                 if (typeof carrito !== 'undefined' && carrito.length > 0) {
                     carrito.length = 0;
                     if (typeof renderizarCarrito === 'function') renderizarCarrito();
-                    if (typeof showToast === 'function') showToast('Carrito vaciado');
+                    if (typeof showToast === 'function') showToast('Bolsa vaciada');
                 }
             });
         }
 
-        // Sincronizar contadores y barra flotante con el evento carritoActualizado
         window.addEventListener('carritoActualizado', function(e) {
             const detail = e.detail || {};
             const items = detail.carrito || [];
@@ -702,23 +1099,15 @@
             if (floatCount) floatCount.textContent = totalQty;
             if (floatTotal) floatTotal.textContent = 'C$' + totalMonto.toFixed(2);
 
-            if (btnVaciarTienda) {
-                btnVaciarTienda.classList.toggle('hidden', totalQty === 0);
-            }
-            if (floatingBar) {
-                floatingBar.classList.toggle('visible', totalQty > 0);
-            }
+            if (btnVaciarTienda) btnVaciarTienda.classList.toggle('hidden', totalQty === 0);
+            if (floatingBar) floatingBar.classList.toggle('visible', totalQty > 0);
         });
 
-        // Al hacer clic en "Continuar con mi Pedido", cerrar el drawer para mostrar limpio el modal
         const btnRealizarPedido = document.getElementById('btn-realizar-pedido');
         if (btnRealizarPedido) {
-            btnRealizarPedido.addEventListener('click', function() {
-                cerrarDrawerCarrito();
-            });
+            btnRealizarPedido.addEventListener('click', cerrarDrawerCarrito);
         }
 
-        // Fecha mínima hoy para pastel personalizado
         const inputPastelFecha = document.getElementById('pastel-fecha');
         if (inputPastelFecha) {
             const tzOffset = (new Date()).getTimezoneOffset() * 60000;
@@ -727,7 +1116,6 @@
             if (!inputPastelFecha.value) inputPastelFecha.value = today;
         }
 
-        // Vista previa de foto en pastel personalizado
         const inputPastelFoto = document.getElementById('pastel-foto');
         const previewBox = document.getElementById('pastel-foto-preview-box');
         const previewImg = document.getElementById('pastel-foto-preview');
@@ -746,7 +1134,6 @@
             });
         }
 
-        // Modal de Rastrear Pedido
         const btnRastrear = document.getElementById('btn-rastrear-pedido');
         const modalRastrear = document.getElementById('rastrear-pedido-modal');
         const btnCerrarRastrear = document.getElementById('btn-cerrar-rastrear');
@@ -764,13 +1151,10 @@
             formRastrear.addEventListener('submit', function(e) {
                 e.preventDefault();
                 const code = (document.getElementById('input-codigo-seguimiento').value || '').trim().toUpperCase();
-                if (code) {
-                    window.location.href = '/seguimiento/' + encodeURIComponent(code);
-                }
+                if (code) window.location.href = '/seguimiento/' + encodeURIComponent(code);
             });
         }
 
-        // Modal de Confirmación de Pedido Enviado
         const modalConfirmacion = document.getElementById('confirmacion-pedido-modal');
         const btnCerrarConf = document.getElementById('btn-cerrar-confirmacion-pedido');
         const btnVerCotDesdeConf = document.getElementById('btn-ver-cotizaciones-desde-conf');
@@ -795,7 +1179,6 @@
             });
         }
 
-        // Búsqueda en vivo, filtro de ofertas y ordenamiento del catálogo
         const searchInput = document.getElementById('tienda-search-input');
         const searchClear = document.getElementById('tienda-search-clear');
         const sortSelect = document.getElementById('tienda-sort-select');
@@ -833,7 +1216,6 @@
                 }
             });
 
-            // Ordenamiento
             const sortMode = sortSelect ? sortSelect.value : 'default';
             if (sortMode !== 'default') {
                 const sorted = [...cards].sort((a, b) => {
@@ -850,7 +1232,7 @@
             }
 
             if (resultsCount) {
-                resultsCount.textContent = `${visibles} producto${visibles === 1 ? '' : 's'} disponible${visibles === 1 ? '' : 's'}`;
+                resultsCount.textContent = `${visibles} pieza${visibles === 1 ? '' : 's'}`;
             }
             if (emptyState) {
                 emptyState.classList.toggle('hidden', visibles > 0);
@@ -896,12 +1278,6 @@
             });
         }
 
-        // Emojis en pestañas de categoría y tarjetas sin foto
-        document.querySelectorAll('.cat-tab-emoji').forEach(span => {
-            const cName = (span.dataset.catName || '').toLowerCase();
-            span.textContent = window.CATEGORY_EMOJI_MAP[cName] || '🥖';
-        });
-
         document.querySelectorAll('.store-product-card .product-visual').forEach(function(visual) {
             const card = visual.closest('[data-nombre]');
             if (!card || visual.children.length > 0) return;
@@ -911,7 +1287,6 @@
             visual.innerHTML = '<span class="product-visual-emoji" aria-hidden="true">' + getProductEmoji(nombre, categoria) + '</span>';
         });
 
-        // Feedback visual al añadir al carrito
         document.addEventListener('click', function(e) {
             const card = e.target.closest('.product-card');
             if (!card) return;
