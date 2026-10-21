@@ -93,3 +93,8 @@ def web_manifest():
 @hub_bp.route('/google-site-verification')
 def google_verification_txt():
     return Response('google-site-verification=BCiu1Rhy4tzrQXvp-WJ8FVEawiEc1kYeV_M5LDN0PNg', mimetype='text/plain; charset=utf-8')
+
+
+@hub_bp.route('/google63f1328f737677ff.html')
+def google_verification_file():
+    return Response('google-site-verification: google63f1328f737677ff.html', mimetype='text/html; charset=utf-8')
