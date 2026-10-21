@@ -3,7 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panadería Amada — Boutique en Línea & Pastelería de Autor</title>
+    <title>Brajher's Cake · Panadería Amada | Panadería y Repostería Artesanal en Managua</title>
+    <meta name="description" content="Brajher's Cake (Panadería Amada) en Managua, Nicaragua. Panadería artesanal, pastelería de autor, queques personalizados por encargo, pan dulce recién horneado, postres fríos y café.">
+    <meta name="keywords" content="Brajher's Cake, Brajhers Cake, Panadería Amada, panadería en Managua, repostería artesanal Nicaragua, pasteles personalizados, queques por encargo Managua, pan dulce nicaragüense">
+    <meta name="author" content="Brajher's Cake · Panadería Amada">
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+    <meta name="theme-color" content="#6B3A2A">
+    <link rel="canonical" href="{{ request.url_root.rstrip('/') }}/tienda">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="es_NI">
+    <meta property="og:site_name" content="Brajher's Cake · Panadería Amada">
+    <meta property="og:title" content="Brajher's Cake · Panadería Amada | Panadería y Pastelería de Autor">
+    <meta property="og:description" content="Descubre nuestro catálogo de panadería artesanal, pasteles personalizados, repostería fina y encargos en línea en Managua, Nicaragua.">
+    <meta property="og:url" content="{{ request.url_root.rstrip('/') }}/tienda">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Brajher's Cake · Panadería Amada | Boutique en Línea">
+    <meta name="twitter:description" content="Panadería artesanal y pastelería de autor en Managua. Cotiza tu pastel personalizado o explora nuestro menú del día.">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": ["Bakery", "FoodEstablishment", "Store"],
+          "@id": "{{ request.url_root.rstrip('/') }}/#bakery",
+          "name": "Brajher's Cake — Panadería Amada",
+          "alternateName": [
+            "Brajher's Cake",
+            "Brajhers Cake",
+            "Panadería Amada",
+            "Panadería y Repostería Brajher's Cake"
+          ],
+          "description": "Panadería artesanal y pastelería de autor en Managua, Nicaragua. Especialistas en pasteles personalizados, pan dulce recién horneado y repostería fina.",
+          "url": "{{ request.url_root.rstrip('/') }}/tienda",
+          "servesCuisine": ["Panadería artesanal", "Repostería", "Pastelería de autor"],
+          "currenciesAccepted": "NIO, USD",
+          "paymentAccepted": "Efectivo, Transferencia Bancaria",
+          "priceRange": "C$",
+          "openingHours": "Mo-Su 06:00-20:00",
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "Managua",
+            "addressRegion": "Managua",
+            "addressCountry": "NI"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "{{ request.url_root.rstrip('/') }}/#website",
+          "url": "{{ request.url_root.rstrip('/') }}/tienda",
+          "name": "Brajher's Cake · Panadería Amada",
+          "alternateName": ["Panadería Amada", "Brajher's Cake"],
+          "inLanguage": "es-NI"
+        }
+      ]
+    }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">

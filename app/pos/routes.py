@@ -11,7 +11,7 @@ from werkzeug.utils import secure_filename
 from flask_login import login_required, current_user
 
 from app.pos import pos_bp
-from app.db import get_db_connection, execute_sp, is_sqlserver_cursor
+from app.db import get_db_connection, execute_sp, is_sqlserver_cursor, as_db_role
 from app.services.business_time import business_now
 from app.services.reference_images import validate_reference_image
 from app.extensions import csrf
@@ -19,15 +19,8 @@ from app.utils.qr import generar_qr_base64
 from app.auth.decorators import roles_required
 
 
-@pos_bp.route('/pos')
-@login_required
-@roles_required('Estandar', 'Admin', 'SuperAdmin', 'Cliente', 'Invitado')
-def index():
-    """Carga productos, categorías e ingredientes desde la BD."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # Obtener categorías activas que tengan al menos un producto activo
+def _cargar_datos_catalogo_publico(cursor):
+    """Obtiene categorías, productos activos, ingredientes y configuración pública."""
     execute_sp(
         cursor,
         'catalogo.sp_ObtenerCategoriasConProductosActivos',
@@ -41,7 +34,6 @@ def index():
     )
     categorias = [{'id': row.ID, 'nombre': row.Nombre} for row in cursor.fetchall()]
 
-    # Obtener productos activos con su categoría e imagen
     execute_sp(
         cursor,
         'catalogo.sp_ObtenerProductosPOS',
@@ -62,7 +54,6 @@ def index():
         for row in cursor.fetchall()
     ]
 
-    # Obtener ingredientes extras activos
     execute_sp(
         cursor,
         'catalogo.sp_ObtenerIngredientesPOS',
@@ -73,13 +64,50 @@ def index():
         for row in cursor.fetchall()
     ]
 
-    # Obtener configuración del sistema (IVA, etc)
     execute_sp(
         cursor,
         'seguridad.sp_ObtenerConfiguracionGlobal',
         fallback_sql="SELECT Clave, Valor FROM ConfiguracionSistema",
     )
     configuracion = {row.Clave: row.Valor for row in cursor.fetchall()}
+    return categorias, productos, ingredientes, configuracion
+
+
+@pos_bp.route('/tienda')
+def tienda_publica():
+    """Vitrina pública indexable por Google Search para Brajher's Cake — Panadería Amada."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if not current_user.is_authenticated and is_sqlserver_cursor(cursor):
+            with as_db_role(cursor, 'db_rol_portal_cliente'):
+                categorias, productos, ingredientes, configuracion = _cargar_datos_catalogo_publico(cursor)
+        else:
+            categorias, productos, ingredientes, configuracion = _cargar_datos_catalogo_publico(cursor)
+    finally:
+        conn.close()
+
+    return render_template(
+        'tienda.html',
+        productos=productos,
+        ingredientes=ingredientes,
+        categorias=categorias,
+        configuracion=configuracion,
+        user=current_user,
+        turno_activo=None,
+        mes_actual=business_now().month,
+    )
+
+
+@pos_bp.route('/pos')
+@login_required
+@roles_required('Estandar', 'Admin', 'SuperAdmin', 'Cliente', 'Invitado')
+def index():
+    """Carga productos, categorías e ingredientes desde la BD."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    categorias, productos, ingredientes, configuracion = _cargar_datos_catalogo_publico(cursor)
 
     es_cliente = getattr(current_user, 'rol_nombre', '') in ['Cliente', 'Invitado']
     turno = None

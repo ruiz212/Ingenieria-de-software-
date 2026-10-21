@@ -3,7 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Brajher's Cake · Panadería Amada | Bienvenido</title>
+    <title>Brajher's Cake · Panadería Amada | Panadería y Repostería en Managua</title>
+    <meta name="description" content="Bienvenido a Brajher's Cake (Panadería Amada) en Managua, Nicaragua. Explora nuestro catálogo de panadería artesanal, pasteles personalizados y repostería recién horneada.">
+    <meta name="keywords" content="Brajher's Cake, Brajhers Cake, Panadería Amada, panadería en Managua, repostería artesanal Nicaragua, pasteles por encargo">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="{{ request.url_root.rstrip('/') }}/cliente/bienvenida">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="es_NI">
+    <meta property="og:site_name" content="Brajher's Cake · Panadería Amada">
+    <meta property="og:title" content="Brajher's Cake · Panadería Amada | Panadería y Repostería">
+    <meta property="og:description" content="Panadería artesanal y pastelería de autor en Managua. Explora nuestro menú, cotiza tu pastel personalizado o rastrea tu pedido.">
+    <meta property="og:url" content="{{ request.url_root.rstrip('/') }}/cliente/bienvenida">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Bakery",
+      "name": "Brajher's Cake — Panadería Amada",
+      "alternateName": ["Brajher's Cake", "Brajhers Cake", "Panadería Amada"],
+      "description": "Panadería y repostería artesanal en Managua, Nicaragua.",
+      "url": "{{ request.url_root.rstrip('/') }}/tienda",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Managua",
+        "addressCountry": "NI"
+      }
+    }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
