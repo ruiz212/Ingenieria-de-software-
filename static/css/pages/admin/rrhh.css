@@ -104,22 +104,472 @@
     line-height: 1.8;
 }
 
+/* ============================================================
+   EXPEDIENTES DE EMPLEADOS — Dossier Cards
+   Editorial, high-contrast, artisanal bakery styling
+   ============================================================ */
+
 .page-rrhh .rrhh-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 1.25rem;
+    align-items: stretch;
 }
 
+.page-rrhh .dossier-card {
+    background: #FFFFFF;
+    border: 1px solid rgba(107, 58, 42, 0.16);
+    border-radius: 18px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 1rem;
+    box-shadow: 0 4px 14px rgba(78, 42, 30, 0.05), 0 1px 3px rgba(78, 42, 30, 0.03);
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.22s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.page-rrhh .dossier-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #D4952B, #B87D1E 45%, #6B3A2A 100%);
+    opacity: 0.85;
+}
+
+.page-rrhh .dossier-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(78, 42, 30, 0.09), 0 2px 6px rgba(78, 42, 30, 0.04);
+    border-color: rgba(212, 149, 43, 0.38);
+}
+
+/* ── Dossier Header & Profile ── */
+.page-rrhh .dossier-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.page-rrhh .dossier-profile {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.page-rrhh .dossier-avatar {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6B3A2A 0%, #4E2A1E 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFF9F3;
+    box-shadow: 0 3px 8px rgba(78, 42, 30, 0.22);
+    border: 2px solid rgba(212, 149, 43, 0.35);
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.page-rrhh .dossier-avatar-text {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+    line-height: 1;
+    color: #FFF9F3;
+}
+
+.page-rrhh .dossier-identity {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.page-rrhh .dossier-name {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 700;
+    font-size: 1.125rem;
+    line-height: 1.3;
+    color: #2B1E16 !important;
+    margin: 0 0 0.15rem 0;
+    word-break: break-word;
+    letter-spacing: -0.01em;
+}
+
+.page-rrhh .dossier-role-line {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.82rem;
+    color: #6B584C !important;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    line-height: 1.35;
+}
+
+.page-rrhh .dossier-cargo {
+    font-weight: 600;
+    color: #4E2A1E !important;
+}
+
+.page-rrhh .dossier-bullet {
+    color: #A89585;
+    font-size: 0.8rem;
+    line-height: 1;
+}
+
+.page-rrhh .dossier-contrato {
+    color: #6B584C;
+}
+
+.page-rrhh .dossier-status-badge {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    letter-spacing: 0.02em;
+    text-transform: capitalize;
+}
+
+/* ── Dossier Body & Data Grid ── */
+.page-rrhh .dossier-body {
+    flex: 1 1 auto;
+}
+
+.page-rrhh .dossier-data-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 0.85rem;
+    background: #FDFBF8;
+    border: 1px solid rgba(107, 58, 42, 0.10);
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+}
+
+.page-rrhh .dossier-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.page-rrhh .dossier-field-full {
+    grid-column: 1 / -1;
+}
+
+.page-rrhh .dossier-field-label {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #6B584C !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
+}
+
+.page-rrhh .dossier-field-value {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #2B1E16 !important;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.page-rrhh .dossier-salary-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #1A6330 !important;
+    background: rgba(74, 157, 91, 0.14);
+    border: 1px solid rgba(74, 157, 91, 0.32);
+    padding: 0.15rem 0.55rem;
+    border-radius: 6px;
+    width: fit-content;
+}
+
+.page-rrhh .dossier-salary-currency {
+    font-size: 0.75rem;
+    font-weight: 800;
+    opacity: 0.85;
+}
+
+.page-rrhh .dossier-horario-text {
+    color: #2B1E16 !important;
+}
+
+/* ── Dossier Footer & Actions ── */
+.page-rrhh .dossier-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(107, 58, 42, 0.10);
+}
+
+.page-rrhh .dossier-legal-status {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.page-rrhh .dossier-stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    line-height: 1.25;
+}
+
+.page-rrhh .stamp-complete {
+    background: rgba(74, 157, 91, 0.12);
+    border: 1px solid rgba(74, 157, 91, 0.30);
+    color: #1B6632 !important;
+}
+
+.page-rrhh .stamp-complete svg {
+    stroke: #1B6632;
+}
+
+.page-rrhh .stamp-pending {
+    background: rgba(212, 149, 43, 0.14);
+    border: 1px solid rgba(212, 149, 43, 0.35);
+    color: #92530A !important;
+}
+
+.page-rrhh .stamp-pending svg {
+    stroke: #92530A;
+}
+
+.page-rrhh .dossier-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.page-rrhh .dossier-btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 0.32rem 0.65rem;
+    border-radius: 8px;
+    cursor: pointer;
+    line-height: 1.2;
+    transition: all 0.18s ease;
+    text-decoration: none;
+}
+
+.page-rrhh .dossier-btn-edit {
+    background: #FFFDF9;
+    border: 1px solid rgba(212, 149, 43, 0.40);
+    color: #855715 !important;
+}
+
+.page-rrhh .dossier-btn-edit svg {
+    stroke: #855715;
+}
+
+.page-rrhh .dossier-btn-edit:hover {
+    background: rgba(212, 149, 43, 0.16);
+    border-color: #B87D1E;
+    color: #5D3705 !important;
+    transform: translateY(-1px);
+}
+
+.page-rrhh .dossier-btn-edit:hover svg {
+    stroke: #5D3705;
+}
+
+.page-rrhh .dossier-btn-suspend {
+    background: #FFFDF9;
+    border: 1px solid rgba(196, 69, 54, 0.32);
+    color: #C44536 !important;
+}
+
+.page-rrhh .dossier-btn-suspend svg {
+    stroke: #C44536;
+}
+
+.page-rrhh .dossier-btn-suspend:hover {
+    background: rgba(196, 69, 54, 0.12);
+    border-color: #C44536;
+    color: #9E2B1E !important;
+    transform: translateY(-1px);
+}
+
+.page-rrhh .dossier-btn-suspend:hover svg {
+    stroke: #9E2B1E;
+}
+
+/* ── Dark Mode Overrides ── */
+html.dark-theme .page-rrhh .dossier-card,
+body.dark-theme .page-rrhh .dossier-card {
+    background: #251B15;
+    border-color: rgba(245, 237, 230, 0.14);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+html.dark-theme .page-rrhh .dossier-name,
+body.dark-theme .page-rrhh .dossier-name {
+    color: #F7EEE6 !important;
+}
+
+html.dark-theme .page-rrhh .dossier-cargo,
+body.dark-theme .page-rrhh .dossier-cargo {
+    color: #E8DDD0 !important;
+}
+
+html.dark-theme .page-rrhh .dossier-contrato,
+body.dark-theme .page-rrhh .dossier-contrato {
+    color: #C4AFA0 !important;
+}
+
+html.dark-theme .page-rrhh .dossier-data-grid,
+body.dark-theme .page-rrhh .dossier-data-grid {
+    background: rgba(33, 24, 18, 0.85);
+    border-color: rgba(245, 237, 230, 0.08);
+}
+
+html.dark-theme .page-rrhh .dossier-field-label,
+body.dark-theme .page-rrhh .dossier-field-label {
+    color: #B59E8E !important;
+}
+
+html.dark-theme .page-rrhh .dossier-field-value,
+body.dark-theme .page-rrhh .dossier-field-value {
+    color: #F7EEE6 !important;
+}
+
+html.dark-theme .page-rrhh .dossier-horario-text,
+body.dark-theme .page-rrhh .dossier-horario-text {
+    color: #F7EEE6 !important;
+}
+
+html.dark-theme .page-rrhh .dossier-salary-badge,
+body.dark-theme .page-rrhh .dossier-salary-badge {
+    color: #90D79C !important;
+    background: rgba(74, 157, 91, 0.18);
+    border-color: rgba(74, 157, 91, 0.40);
+}
+
+html.dark-theme .page-rrhh .dossier-footer,
+body.dark-theme .page-rrhh .dossier-footer {
+    border-top-color: rgba(245, 237, 230, 0.10);
+}
+
+html.dark-theme .page-rrhh .stamp-complete,
+body.dark-theme .page-rrhh .stamp-complete {
+    background: rgba(74, 157, 91, 0.16);
+    color: #90D79C !important;
+    border-color: rgba(74, 157, 91, 0.40);
+}
+
+html.dark-theme .page-rrhh .stamp-complete svg,
+body.dark-theme .page-rrhh .stamp-complete svg {
+    stroke: #90D79C;
+}
+
+html.dark-theme .page-rrhh .stamp-pending,
+body.dark-theme .page-rrhh .stamp-pending {
+    background: rgba(212, 149, 43, 0.18);
+    color: #E8A838 !important;
+    border-color: rgba(212, 149, 43, 0.45);
+}
+
+html.dark-theme .page-rrhh .stamp-pending svg,
+body.dark-theme .page-rrhh .stamp-pending svg {
+    stroke: #E8A838;
+}
+
+html.dark-theme .page-rrhh .dossier-btn-edit,
+body.dark-theme .page-rrhh .dossier-btn-edit {
+    background: rgba(212, 149, 43, 0.12);
+    border-color: rgba(212, 149, 43, 0.40);
+    color: #EFBC69 !important;
+}
+
+html.dark-theme .page-rrhh .dossier-btn-edit svg,
+body.dark-theme .page-rrhh .dossier-btn-edit svg {
+    stroke: #EFBC69;
+}
+
+html.dark-theme .page-rrhh .dossier-btn-edit:hover,
+body.dark-theme .page-rrhh .dossier-btn-edit:hover {
+    background: rgba(212, 149, 43, 0.25);
+    color: #FFD899 !important;
+}
+
+html.dark-theme .page-rrhh .dossier-btn-suspend,
+body.dark-theme .page-rrhh .dossier-btn-suspend {
+    background: rgba(196, 69, 54, 0.12);
+    border-color: rgba(196, 69, 54, 0.35);
+    color: #F28B82 !important;
+}
+
+html.dark-theme .page-rrhh .dossier-btn-suspend svg,
+body.dark-theme .page-rrhh .dossier-btn-suspend svg {
+    stroke: #F28B82;
+}
+
+html.dark-theme .page-rrhh .dossier-btn-suspend:hover,
+body.dark-theme .page-rrhh .dossier-btn-suspend:hover {
+    background: rgba(196, 69, 54, 0.24);
+    color: #FFABA3 !important;
+}
+
+/* ── Responsive Behavior ── */
+@media screen and (max-width: 640px) {
+    .page-rrhh .rrhh-grid {
+        grid-template-columns: 1fr;
+    }
+    .page-rrhh .dossier-data-grid {
+        grid-template-columns: 1fr;
+    }
+    .page-rrhh .dossier-footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .page-rrhh .dossier-actions {
+        justify-content: flex-end;
+    }
+}
+
+/* ── Legacy Helpers Compatibility ── */
 .page-rrhh .rrhh-card {
-    padding: 1rem;
+    padding: 1.25rem;
 }
 
 .page-rrhh .rrhh-fw-700 {
-    font-size: 1.1rem;
+    font-size: 1.125rem;
+    color: #2B1E16 !important;
 }
 
 .page-rrhh .rrhh-text-muted {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    color: #6B584C !important;
 }
 
 .page-rrhh .rrhh-row-2 {
@@ -127,6 +577,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+    color: #2B1E16;
 }
 
 .page-rrhh .rrhh-btn-outline-8 {
