@@ -1,0 +1,174 @@
+{
+  "app": {
+    "file": "dist/app.css",
+    "version": "4d6c74e55c37"
+  },
+  "accessibility": {
+    "file": "dist/accessibility.css",
+    "version": "de6199de235d"
+  },
+  "theme": {
+    "file": "dist/theme.css",
+    "version": "7fb354efa694"
+  },
+  "pages/auth/access": {
+    "file": "dist/pages/auth/access.css",
+    "version": "51131b21feaf"
+  },
+  "pages/auth/registration": {
+    "file": "dist/pages/auth/registration.css",
+    "version": "22946ff8ed5e"
+  },
+  "pages/admin/dashboard": {
+    "file": "dist/pages/admin/dashboard.css",
+    "version": "0c7f6ea1a692"
+  },
+  "pages/admin/dgi": {
+    "file": "dist/pages/admin/dgi.css",
+    "version": "f56e43b74094"
+  },
+  "pages/sales/monitor": {
+    "file": "dist/pages/sales/monitor.css",
+    "version": "9eb679698027"
+  },
+  "pages/sales/pos": {
+    "file": "dist/pages/sales/pos.css",
+    "version": "dd0a9d3b7973"
+  },
+  "pages/sales/product-visuals": {
+    "file": "dist/pages/sales/product-visuals.css",
+    "version": "66f462f2a9bb"
+  },
+  "pages/customer/store": {
+    "file": "dist/pages/customer/store.css",
+    "version": "5fab73a96ade"
+  },
+  "pages/admin/arqueos": {
+    "file": "dist/pages/admin/arqueos.css",
+    "version": "7b05c22a205c"
+  },
+  "pages/admin/asistencia": {
+    "file": "dist/pages/admin/asistencia.css",
+    "version": "f443db7270d1"
+  },
+  "pages/admin/auditoria": {
+    "file": "dist/pages/admin/auditoria.css",
+    "version": "68bb0ef391a6"
+  },
+  "pages/admin/balance_comprobacion": {
+    "file": "dist/pages/admin/balance_comprobacion.css",
+    "version": "e79c59d2d49a"
+  },
+  "pages/admin/balance_general": {
+    "file": "dist/pages/admin/balance_general.css",
+    "version": "45c829de8976"
+  },
+  "print/balance_imprimir": {
+    "file": "dist/print/balance_imprimir.css",
+    "version": "9801f051d097"
+  },
+  "pages/admin/catalogo": {
+    "file": "dist/pages/admin/catalogo.css",
+    "version": "5ceb5400a146"
+  },
+  "pages/admin/catalogo_cuentas": {
+    "file": "dist/pages/admin/catalogo_cuentas.css",
+    "version": "2a0c75bdb2fe"
+  },
+  "print/colilla_liquidacion": {
+    "file": "dist/print/colilla_liquidacion.css",
+    "version": "faffd92a3e67"
+  },
+  "print/colilla_pago": {
+    "file": "dist/print/colilla_pago.css",
+    "version": "beea3a351b40"
+  },
+  "print/comprobante_imprimir": {
+    "file": "dist/print/comprobante_imprimir.css",
+    "version": "d9a90414624d"
+  },
+  "pages/admin/configuracion": {
+    "file": "dist/pages/admin/configuracion.css",
+    "version": "e5c2e43b9da7"
+  },
+  "pages/admin/contabilidad": {
+    "file": "dist/pages/admin/contabilidad.css",
+    "version": "5b0edc0d4edf"
+  },
+  "pages/admin/estadistica": {
+    "file": "dist/pages/admin/estadistica.css",
+    "version": "5bd47000b6d7"
+  },
+  "pages/admin/estado_resultados": {
+    "file": "dist/pages/admin/estado_resultados.css",
+    "version": "40f68b35ae69"
+  },
+  "print/estado_resultados_imprimir": {
+    "file": "dist/print/estado_resultados_imprimir.css",
+    "version": "0582d2913b49"
+  },
+  "print/factura_imprimir": {
+    "file": "dist/print/factura_imprimir.css",
+    "version": "d458b0942b76"
+  },
+  "pages/admin/fidelizacion": {
+    "file": "dist/pages/admin/fidelizacion.css",
+    "version": "ea8f9476871b"
+  },
+  "pages/admin/inventario": {
+    "file": "dist/pages/admin/inventario.css",
+    "version": "cf4fd4a3d973"
+  },
+  "pages/admin/kiosco": {
+    "file": "dist/pages/admin/kiosco.css",
+    "version": "ccadccc5c8d4"
+  },
+  "pages/admin/libro_mayor": {
+    "file": "dist/pages/admin/libro_mayor.css",
+    "version": "db00666ea4b3"
+  },
+  "pages/admin/produccion": {
+    "file": "dist/pages/admin/produccion.css",
+    "version": "63ad934e867c"
+  },
+  "print/reporte_aguinaldo": {
+    "file": "dist/print/reporte_aguinaldo.css",
+    "version": "7e1ea8bfaccf"
+  },
+  "print/reporte_inss": {
+    "file": "dist/print/reporte_inss.css",
+    "version": "a878bf24c24c"
+  },
+  "pages/admin/rrhh": {
+    "file": "dist/pages/admin/rrhh.css",
+    "version": "967d83b59d9a"
+  },
+  "pages/admin/setup_totp": {
+    "file": "dist/pages/admin/setup_totp.css",
+    "version": "c7dc2c377d54"
+  },
+  "pages/admin/usuarios": {
+    "file": "dist/pages/admin/usuarios.css",
+    "version": "7394ff22569f"
+  },
+  "pages/auth/success": {
+    "file": "dist/pages/auth/success.css",
+    "version": "ac36b31cb816"
+  },
+  "pages/kiosk/attendance": {
+    "file": "dist/pages/kiosk/attendance.css",
+    "version": "2df962e3974b"
+  },
+  "pages/customer/tracking": {
+    "file": "dist/pages/customer/tracking.css",
+    "version": "0a013b2f5e80"
+  },
+  "pages/auth/totp": {
+    "file": "dist/pages/auth/totp.css",
+    "version": "f0e0c7bc4527"
+  },
+  "motion": {
+    "file": "dist/motion.css",
+    "version": "8c6cd1fe0f71"
+  }
+}

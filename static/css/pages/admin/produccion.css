@@ -1,0 +1,33 @@
+
+
+.page-produccion .produccion-h2-text {
+    font-size: 1.15rem;
+    font-weight: 700;
+    font-family: 'Playfair Display', serif;
+}
+
+.page-produccion .produccion-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+.page-produccion .produccion-h3-text {
+    font-family: 'Inter', sans-serif;
+}
+
+.page-produccion .produccion-ul-spacing {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.page-produccion .produccion-div-spacing {
+    grid-column: 1/-1;
+}
+
+.page-produccion .produccion-text-muted {
+    display:block;
+    margin-top:0.4rem;
+    font-size:0.8rem;
+}

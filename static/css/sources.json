@@ -1,0 +1,156 @@
+{
+  "app": [
+    "base/_variables.css",
+    "base/_reset.css",
+    "layout/_sidebar.css",
+    "layout/_header.css",
+    "layout/_dashboard.css",
+    "components/_buttons.css",
+    "components/_forms.css",
+    "components/_badges.css",
+    "components/_cards.css",
+    "components/_modals.css",
+    "components/_stepper.css",
+    "components/_confirmation.css",
+    "components/_data_viz.css",
+    "components/_toast.css",
+    "components/_reports.css",
+    "utilities/_helpers.css",
+    "components/_workspace.css",
+    "components/_legacy-navbar.css",
+    "components/_sales-widgets.css"
+  ],
+  "accessibility": [
+    "base/_accessibility.css"
+  ],
+  "theme": [
+    "themes/_tokens.css",
+    "themes/_access.css",
+    "themes/_workspace.css",
+    "themes/_pos.css",
+    "themes/_store.css",
+    "themes/_responsive.css"
+  ],
+  "pages/auth/access": [
+    "pages/auth/access.css"
+  ],
+  "pages/auth/registration": [
+    "pages/auth/registration.css"
+  ],
+  "pages/admin/dashboard": [
+    "pages/admin/dashboard.css"
+  ],
+  "pages/admin/dgi": [
+    "pages/admin/dgi.css"
+  ],
+  "pages/sales/monitor": [
+    "pages/sales/monitor.css"
+  ],
+  "pages/sales/pos": [
+    "pages/sales/pos.css"
+  ],
+  "pages/sales/product-visuals": [
+    "pages/sales/product-visuals.css"
+  ],
+  "pages/customer/store": [
+    "components/_sales-widgets.css",
+    "pages/customer/store.css"
+  ],
+  "pages/admin/arqueos": [
+    "pages/admin/arqueos.css"
+  ],
+  "pages/admin/asistencia": [
+    "pages/admin/asistencia.css"
+  ],
+  "pages/admin/auditoria": [
+    "pages/admin/auditoria.css"
+  ],
+  "pages/admin/balance_comprobacion": [
+    "pages/admin/balance_comprobacion.css"
+  ],
+  "pages/admin/balance_general": [
+    "pages/admin/balance_general.css"
+  ],
+  "print/balance_imprimir": [
+    "print/balance_imprimir.css"
+  ],
+  "pages/admin/catalogo": [
+    "pages/admin/catalogo.css"
+  ],
+  "pages/admin/catalogo_cuentas": [
+    "pages/admin/catalogo_cuentas.css"
+  ],
+  "print/colilla_liquidacion": [
+    "print/colilla_liquidacion.css"
+  ],
+  "print/colilla_pago": [
+    "print/colilla_pago.css"
+  ],
+  "print/comprobante_imprimir": [
+    "print/comprobante_imprimir.css"
+  ],
+  "pages/admin/configuracion": [
+    "pages/admin/configuracion.css"
+  ],
+  "pages/admin/contabilidad": [
+    "pages/admin/contabilidad.css"
+  ],
+  "pages/admin/estadistica": [
+    "pages/admin/estadistica.css"
+  ],
+  "pages/admin/estado_resultados": [
+    "pages/admin/estado_resultados.css"
+  ],
+  "print/estado_resultados_imprimir": [
+    "print/estado_resultados_imprimir.css"
+  ],
+  "print/factura_imprimir": [
+    "print/factura_imprimir.css"
+  ],
+  "pages/admin/fidelizacion": [
+    "pages/admin/fidelizacion.css"
+  ],
+  "pages/admin/inventario": [
+    "pages/admin/inventario.css"
+  ],
+  "pages/admin/kiosco": [
+    "pages/admin/kiosco.css"
+  ],
+  "pages/admin/libro_mayor": [
+    "pages/admin/libro_mayor.css"
+  ],
+  "pages/admin/produccion": [
+    "pages/admin/produccion.css"
+  ],
+  "print/reporte_aguinaldo": [
+    "print/reporte_aguinaldo.css"
+  ],
+  "print/reporte_inss": [
+    "print/reporte_inss.css"
+  ],
+  "pages/admin/rrhh": [
+    "pages/admin/rrhh.css"
+  ],
+  "pages/admin/setup_totp": [
+    "pages/admin/setup_totp.css"
+  ],
+  "pages/admin/usuarios": [
+    "pages/admin/usuarios.css"
+  ],
+  "pages/auth/success": [
+    "pages/auth/success.css"
+  ],
+  "pages/kiosk/attendance": [
+    "pages/kiosk/attendance.css"
+  ],
+  "pages/customer/tracking": [
+    "pages/customer/tracking.css"
+  ],
+  "pages/auth/totp": [
+    "pages/auth/totp.css"
+  ],
+  "motion": [
+    "base/_motion-tokens.css",
+    "components/_motion.css"
+  ]
+}

@@ -1,0 +1,305 @@
+/* Access: the existing bakery palette, one clear task, and a named mobile brand. */
+.login-page{
+    min-height:100dvh;
+    background:var(--surface);
+}
+.l-split{
+    display:grid;
+    grid-template-columns:minmax(0, .92fr) minmax(0, 1.08fr);
+    min-height:100dvh;
+    width:100%;
+}
+.l-split__left{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    padding:clamp(32px,4.5vw,72px);
+    background:var(--brand-cafe-dark);
+    color:#fff;
+    isolation:isolate;
+}
+.l-split__left::before{
+    content:'';
+    position:absolute;
+    inset:0;
+    z-index:-1;
+    background:url('https://images.unsplash.com/photo-1509440159596-0249088772ff?q=75&w=1200&auto=format&fit=crop') center/cover;
+    opacity:.28;
+}
+.c-brand{
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+.c-brand__logo, .c-login-header__logo-mobile{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:48px;
+    height:48px;
+    background:var(--brand-dorado);
+    color:var(--on-primary);
+    border-radius:4px;
+    font:700 1.25rem var(--font-display);
+    flex-shrink:0;
+}
+.c-brand__info h1{
+    color:#fff;
+    font:600 clamp(1.375rem,2vw,1.75rem) var(--font-display);
+    margin-bottom:4px;
+}
+.c-brand__info p{
+    color:#f0ded1;
+    font-size:.875rem;
+    line-height:1.5;
+}
+.c-welcome{
+    margin:5rem 0;
+    max-width:480px;
+}
+.c-welcome h2{
+    font:500 clamp(2.5rem,4.25vw,4.5rem)/1.06 var(--font-display);
+    letter-spacing:-.03em;
+    color:#fff;
+    margin-bottom:1.5rem;
+}
+.c-welcome p{
+    font-size:1rem;
+    line-height:1.75;
+    color:#f0ded1;
+    max-width:36ch;
+}
+.l-split__footer{
+    color:#f0ded1;
+    font-size:.75rem;
+    line-height:1.6;
+}
+.l-split__right{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:48px clamp(32px,5vw,80px);
+    background:var(--surface);
+}
+.c-login-container{
+    width:100%;
+    max-width:420px;
+    padding:24px 0;
+}
+.c-login-header {
+    margin-bottom:36px;
+}
+.c-login-header h2{
+    font:600 clamp(1.75rem,2.5vw,2.25rem)/1.16 var(--font-display);
+    letter-spacing:-.025em;
+    margin-bottom:12px;
+    color:var(--text-main);
+}
+.c-login-header p{
+    color:var(--text-muted);
+    font-size:1rem;
+}
+.c-login-header__logo-mobile {
+    display:flex;
+}
+.c-access-brand-mobile {
+    display:none;
+}
+.c-access-brand-mobile__name{
+    font:600 1.375rem/1.25 var(--font-display);
+    color:var(--text-main);
+}
+.c-access-brand-mobile__description{
+    margin-top:3px;
+    font-size:.8125rem;
+    line-height:1.5;
+    color:var(--text-muted);
+}
+.c-login-card{
+    background:none;
+    border:0;
+    box-shadow:none;
+    padding:0;
+}
+.login-page .form-group {
+    margin-bottom:24px;
+}
+.login-page .form-label{
+    display:block;
+    margin-bottom:8px;
+    color:var(--text-main);
+    font-size:.875rem;
+    font-weight:500;
+}
+.login-page .form-input{
+    min-height:52px;
+    padding:12px 14px;
+    font-size:1rem;
+    background:var(--card-bg);
+    border:1px solid var(--border-interactive);
+    border-radius:4px;
+    box-shadow:none;
+}
+.login-page .form-input:focus{
+    border-color:var(--action-ink);
+    outline:2px solid var(--focus-color);
+    outline-offset:2px;
+    box-shadow:none;
+}
+.login-page .form-input::placeholder{
+    color:var(--text-muted);
+    opacity:1;
+}
+.c-password-wrapper {
+    position:relative;
+}
+.c-password-wrapper .form-input {
+    padding-right:56px;
+}
+.c-password-toggle{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:absolute;
+    top:4px;
+    right:4px;
+    width:44px;
+    height:44px;
+    border:0;
+    border-radius:4px;
+    color:var(--text-muted);
+    background:none;
+    cursor:pointer;
+}
+.c-password-toggle:hover{
+    background:var(--surface-sunken);
+    color:var(--text-main);
+}
+.login-page .login-submit{
+    width:100%;
+    min-height:52px;
+    justify-content:space-between;
+    padding:12px 18px;
+    font-size:1rem;
+    border-radius:4px;
+    font-weight:600;
+}
+.c-portal-link {
+    margin-top:36px;
+}
+.c-portal-link a{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    min-height:88px;
+    padding:18px 20px;
+    background:var(--surface-sunken);
+    border-radius:4px;
+    color:var(--text-main);
+    font-size:.875rem;
+    line-height:1.5;
+    text-decoration:none;
+}
+.c-portal-link__intro{
+    display:block;
+    margin-bottom:5px;
+    color:var(--text-muted);
+}
+.c-portal-link__action{
+    font-weight:600;
+    color:var(--action-ink);
+    text-decoration:underline;
+    text-decoration-thickness:1px;
+    text-underline-offset:4px;
+}
+.c-portal-link__arrow{
+    font-size:1.25rem;
+    color:var(--action-ink);
+}
+.c-portal-link a:hover .c-portal-link__action {
+    text-decoration-thickness:2px;
+}
+.login-page a:focus-visible,
+.login-page button:focus-visible{
+    outline:3px solid var(--focus-color);
+    outline-offset:4px;
+}
+.login-alert{
+    padding:14px 16px;
+    background:var(--danger-bg);
+    border-radius:var(--radius-sm);
+    color:var(--danger);
+    font-size:.875rem;
+    line-height:1.6;
+    margin-bottom:24px;
+}
+.login-page .customer-actions .btn{
+    min-height:54px;
+    padding:14px 18px;
+    border-radius:4px;
+    font-size:1rem;
+    white-space:normal;
+    line-height:1.5;
+}
+.login-page .customer-actions .btn-outline{
+    background:var(--surface-sunken);
+    border:0;
+}
+.login-page .customer-actions p{
+    line-height:1.6;
+    margin-bottom:20px;
+}
+.login-page .customer-register{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:48px;
+}
+@media (max-width:900px){
+    .l-split {
+        grid-template-columns:1fr;
+    }
+    .l-split__left {
+        display:none;
+    }
+    .l-split__right{
+        min-height:100dvh;
+        padding:40px 24px;
+        align-items:start;
+    }
+    .c-access-brand-mobile{
+        display:flex;
+        align-items:center;
+        gap:12px;
+        margin-bottom:48px;
+    }
+    .c-login-container{
+        max-width:440px;
+        padding:0;
+    }
+    .c-login-header {
+        margin-bottom:32px;
+    }
+    .c-login-header h2 {
+        font-size:clamp(1.75rem,6.7vw,2.25rem);
+    }
+    .c-portal-link {
+        margin-top:32px;
+    }
+}
+@media (max-height:650px){
+    .l-split__right {
+        align-items:start;
+    }
+    .c-login-container {
+        padding:12px 0;
+    }
+    .c-login-header {
+        margin-bottom:24px;
+    }
+    .c-access-brand-mobile {
+        margin-bottom:28px;
+    }
+}

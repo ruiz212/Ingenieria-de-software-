@@ -1,6 +1,8 @@
 import sys
 import os
+from dotenv import load_dotenv
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+load_dotenv()
 
 from app.db import get_db_connection
 
@@ -22,6 +24,7 @@ def run_migration():
                     RutaImagenReferencia VARCHAR(255) NULL,
                     TelefonoContacto VARCHAR(20) NULL,
                     PrecioCotizado DECIMAL(10,2) NULL,
+                    NombreContacto VARCHAR(150) NULL,
                     Estado VARCHAR(20) NOT NULL DEFAULT 'Pendiente',
                     FechaSolicitud DATETIME NOT NULL DEFAULT GETDATE(),
                     CONSTRAINT FK_Cotizaciones_Clientes FOREIGN KEY (ClienteID) REFERENCES Clientes(ID)
@@ -31,6 +34,12 @@ def run_migration():
             print("Tabla Cotizaciones creada exitosamente.")
         else:
             print("La tabla Cotizaciones ya existe.")
+            cursor.execute("""
+                IF COL_LENGTH('Cotizaciones', 'NombreContacto') IS NULL
+                    ALTER TABLE Cotizaciones ADD NombreContacto VARCHAR(150) NULL;
+            """)
+            conn.commit()
+            print("Columna NombreContacto verificada.")
             
     except Exception as e:
         conn.rollback()

@@ -9,3 +9,6 @@ venv/
 scratch/
 static/uploads/
 app/static/uploads/
+node_modules/
+.pytest_cache/
+~$*

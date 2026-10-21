@@ -5,10 +5,12 @@ import json
 import traceback
 
 from app.admin import admin_bp
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime
+from app.services.validation import required_text
+
 
 @admin_bp.route('/fidelizacion')
 @login_required
@@ -18,34 +20,50 @@ def fidelizacion():
     cursor = conn.cursor()
 
     # Métricas Globales
-    cursor.execute("SELECT COUNT(ID) FROM Clientes WHERE ID > 1")
+    execute_sp(
+        cursor,
+        'crm.sp_ContarClientesReales',
+        fallback_sql="SELECT COUNT(ID) FROM Clientes WHERE ID > 1",
+    )
     total_clientes = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(ID) FROM Clientes WHERE NivelConfianzaID = 3")
+    execute_sp(
+        cursor,
+        'crm.sp_ContarClientesVIP',
+        fallback_sql="SELECT COUNT(ID) FROM Clientes WHERE NivelConfianzaID = 3",
+    )
     total_vip = cursor.fetchone()[0]
-    
+
     porcentaje_vip = int((total_vip / total_clientes * 100)) if total_clientes > 0 else 0
 
     # Promedio de ventas por nivel
-    cursor.execute(
-        "SELECT nc.Nombre, ISNULL(AVG(f.Total), 0) AS Promedio "
-        "FROM Facturas f "
-        "JOIN Clientes c ON f.ClienteID = c.ID "
-        "JOIN NivelesConfianza nc ON c.NivelConfianzaID = nc.ID "
-        "GROUP BY nc.Nombre"
+    execute_sp(
+        cursor,
+        'crm.sp_ObtenerPromedioVentasPorNivel',
+        fallback_sql=(
+            "SELECT nc.Nombre, ISNULL(AVG(f.Total), 0) AS Promedio "
+            "FROM Facturas f "
+            "JOIN Clientes c ON f.ClienteID = c.ID "
+            "JOIN NivelesConfianza nc ON c.NivelConfianzaID = nc.ID "
+            "WHERE f.EstadoFiscal='Emitida' GROUP BY nc.Nombre"
+        ),
     )
     promedios_nivel = {r.Nombre: float(r.Promedio) for r in cursor.fetchall()}
 
-    # Listado de clientes con gasto total
-    cursor.execute(
-        "SELECT c.ID, c.Nombre, c.Telefono, c.TotalCompras, nc.Nombre AS Nivel, "
-        "ISNULL(SUM(f.Total), 0) AS TotalGastado, MAX(f.FechaHora) AS UltimaCompra "
-        "FROM Clientes c "
-        "JOIN NivelesConfianza nc ON c.NivelConfianzaID = nc.ID "
-        "LEFT JOIN Facturas f ON f.ClienteID = c.ID "
-        "WHERE c.ID > 1 "
-        "GROUP BY c.ID, c.Nombre, c.Telefono, c.TotalCompras, nc.Nombre "
-        "ORDER BY c.TotalCompras DESC"
+    # Listado de clientes con gasto total vía SP
+    execute_sp(
+        cursor,
+        'crm.sp_ListarClientesFidelizacion',
+        fallback_sql=(
+            "SELECT c.ID, c.Nombre, c.Telefono, c.TotalCompras, nc.Nombre AS Nivel, "
+            "ISNULL(SUM(f.Total), 0) AS TotalGastado, MAX(f.FechaHora) AS UltimaCompra "
+            "FROM Clientes c "
+            "JOIN NivelesConfianza nc ON c.NivelConfianzaID = nc.ID "
+            "LEFT JOIN Facturas f ON f.ClienteID = c.ID AND f.EstadoFiscal='Emitida' "
+            "WHERE c.ID > 1 "
+            "GROUP BY c.ID, c.Nombre, c.Telefono, c.TotalCompras, nc.Nombre "
+            "ORDER BY c.TotalCompras DESC"
+        ),
     )
     clientes = [{
         'id': r.ID,
@@ -58,7 +76,7 @@ def fidelizacion():
     } for r in cursor.fetchall()]
 
     conn.close()
-    
+
     metricas = {
         'total_clientes': total_clientes,
         'porcentaje_vip': porcentaje_vip,
@@ -68,8 +86,101 @@ def fidelizacion():
     return render_template('admin/fidelizacion.html', user=current_user, clientes=clientes, metricas=metricas)
 
 
-# ============================================================
-# MÓDULO DE ARQUEO DE CAJA v2 (Multi-Etapa)
-# ============================================================
+@admin_bp.route('/api/fidelizacion/clientes/<int:cliente_id>', methods=['GET'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def detalle_cliente(cliente_id):
+    """Devuelve expediente e historial de compras de un cliente vía SP."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        execute_sp(
+            cursor,
+            'crm.sp_ObtenerExpedienteCliente',
+            (cliente_id,),
+            fallback_sql=(
+                "SELECT ID, Nombre, Apellidos, Telefono, Genero, FechaNacimiento, "
+                "RutaFotoPerfil, TotalCompras, NivelConfianzaID "
+                "FROM Clientes WHERE ID = ? AND ID > 1"
+            ),
+        )
+        cliente = cursor.fetchone()
+        if not cliente:
+            return jsonify(error='Cliente no encontrado.'), 404
+
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerHistorialFacturasCliente',
+            (cliente_id,),
+            fallback_sql=(
+                "SELECT ID, NumeroFactura, FechaHora, Subtotal, IVA, Total, EstadoFiscal "
+                "FROM Facturas WHERE ClienteID = ? ORDER BY FechaHora DESC"
+            ),
+        )
+        historial = [
+            {'id': row.ID, 'numero': row.NumeroFactura, 'fecha': row.FechaHora.isoformat(),
+             'subtotal': float(row.Subtotal), 'iva': float(row.IVA), 'total': float(row.Total),
+             'estado': row.EstadoFiscal}
+            for row in cursor.fetchall()
+        ]
+        return jsonify(cliente={
+            'id': cliente.ID, 'nombre': cliente.Nombre, 'apellidos': cliente.Apellidos,
+            'telefono': cliente.Telefono, 'genero': cliente.Genero,
+            'fecha_nacimiento': cliente.FechaNacimiento.isoformat() if cliente.FechaNacimiento else None,
+            'foto': cliente.RutaFotoPerfil, 'total_compras': cliente.TotalCompras,
+            'nivel_id': cliente.NivelConfianzaID, 'historial': historial
+        })
+    finally:
+        conn.close()
 
 
+@admin_bp.route('/api/fidelizacion/clientes/<int:cliente_id>', methods=['PUT'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def editar_cliente(cliente_id):
+    """Actualiza datos de contacto y nivel de fidelidad del cliente."""
+    data = request.get_json(silent=True) or {}
+    nombre = required_text(data.get('nombre'), 'Nombre', 100)
+    apellidos = (data.get('apellidos') or '').strip()[:100]
+    telefono = required_text(data.get('telefono'), 'Teléfono', 30)
+    nivel_id = data.get('nivel_id')
+    if nivel_id is None:
+        raise ValueError('Seleccione un nivel de fidelidad.')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        execute_sp(
+            cursor,
+            'crm.sp_VerificarTelefonoClienteDuplicado',
+            (telefono, cliente_id),
+            fallback_sql="SELECT ID FROM Clientes WHERE Telefono = ? AND ID <> ?",
+        )
+        if cursor.fetchone():
+            return jsonify(error='El teléfono ya pertenece a otro cliente.'), 409
+        execute_sp(
+            cursor,
+            'crm.sp_VerificarNivelConfianzaExiste',
+            (int(nivel_id),),
+            fallback_sql="SELECT ID FROM NivelesConfianza WHERE ID = ?",
+        )
+        if not cursor.fetchone():
+            return jsonify(error='Nivel de fidelidad inexistente.'), 400
+        execute_sp(
+            cursor,
+            'crm.sp_ActualizarClienteAdmin',
+            (nombre, apellidos, telefono, data.get('genero'), data.get('fecha_nacimiento'), int(nivel_id), cliente_id),
+            fallback_sql=(
+                "UPDATE Clientes SET Nombre=?, Apellidos=?, Telefono=?, Genero=?, "
+                "FechaNacimiento=?, NivelConfianzaID=? WHERE ID=? AND ID > 1"
+            ),
+        )
+        if cursor.rowcount != 1:
+            return jsonify(error='Cliente no encontrado.'), 404
+        conn.commit()
+        return jsonify(status='success', mensaje='Cliente actualizado.')
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

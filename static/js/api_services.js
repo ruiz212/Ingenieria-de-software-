@@ -4,6 +4,10 @@
  * Aislando la lógica de negocio de la manipulación del DOM
  */
 
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || '';
+}
+
 const API = {
     // ==========================================
     // COTIZACIONES
@@ -11,7 +15,10 @@ const API = {
     obtenerCotizacionesPendientes: async () => {
         try {
             const res = await fetch('/api/cotizaciones/pendientes');
-            if (!res.ok) throw new Error('Error al obtener cotizaciones');
+            if (!res.ok) {
+                const errData = await res.json().catch(() => null);
+                throw new Error((errData && errData.error) || 'Error al obtener cotizaciones pendientes');
+            }
             return await res.json();
         } catch (error) {
             console.error('API Error:', error);
@@ -22,7 +29,10 @@ const API = {
     obtenerCotizacionesCliente: async () => {
         try {
             const res = await fetch('/api/cotizaciones/cliente');
-            if (!res.ok) throw new Error('Error al obtener cotizaciones del cliente');
+            if (!res.ok) {
+                const errData = await res.json().catch(() => null);
+                throw new Error((errData && errData.error) || 'Error al obtener cotizaciones del cliente');
+            }
             return await res.json();
         } catch (error) {
             console.error('API Error:', error);
@@ -34,10 +44,14 @@ const API = {
         try {
             const res = await fetch(`/api/cotizaciones/${id}/cotizar`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
                 body: JSON.stringify({ precio: precio })
             });
-            if (!res.ok) throw new Error('Error al asignar precio');
+            const data = await res.json().catch(() => null);
+            if (!res.ok) throw new Error((data && data.error) || 'Error al asignar precio');
             return true;
         } catch (error) {
             console.error('API Error:', error);
@@ -48,10 +62,33 @@ const API = {
     rechazarPedido: async (id) => {
         try {
             const res = await fetch(`/api/cotizaciones/${id}/rechazar`, {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
             });
-            if (!res.ok) throw new Error('Error al rechazar pedido');
-            return true;
+            const data = await res.json().catch(() => null);
+            if (!res.ok) throw new Error((data && data.error) || 'Error al rechazar pedido');
+            return data || true;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    },
+
+    aceptarCotizacion: async (id) => {
+        try {
+            const response = await fetch(`/api/cotizaciones/${id}/aceptar`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.error || 'No se pudo aceptar la cotización');
+            return result;
         } catch (error) {
             console.error('API Error:', error);
             throw error;
@@ -62,11 +99,14 @@ const API = {
         try {
             const response = await fetch('/api/cotizaciones', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
                 body: JSON.stringify(cotizacionData)
             });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Error al enviar cotización');
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.error || `Error del servidor (${response.status})`);
             return result;
         } catch (error) {
             console.error('API Error:', error);
@@ -99,7 +139,7 @@ const API = {
     // ==========================================
     obtenerTipoCambio: async () => {
         try {
-            const res = await fetch('/api/tipo_cambio');
+            const res = await fetch('/admin/api/tipo_cambio');
             if (res.ok) {
                 const data = await res.json();
                 return data.tipo_cambio;
@@ -111,6 +151,14 @@ const API = {
     },
 
     procesarFactura: async (datosFactura) => {
+        // Mantener la clave si una respuesta se pierde; cambiarla al cambiar el contenido.
+        const fingerprint = JSON.stringify(datosFactura);
+        let pending = JSON.parse(sessionStorage.getItem('venta-pendiente') || 'null');
+        if (!pending || pending.fingerprint !== fingerprint) {
+            pending = {fingerprint, key: crypto.randomUUID()};
+            sessionStorage.setItem('venta-pendiente', JSON.stringify(pending));
+        }
+        datosFactura.clave_solicitud = pending.key;
         try {
             const response = await fetch('/api/factura', {
                 method: 'POST',
@@ -119,6 +167,7 @@ const API = {
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || 'Error al registrar factura');
+            sessionStorage.removeItem('venta-pendiente');
             return result;
         } catch (error) {
             console.error('API Error:', error);
@@ -131,7 +180,7 @@ const API = {
     // ==========================================
     cerrarTurno: async (datosArqueo) => {
         try {
-            const response = await fetch('/api/turno/cerrar', {
+            const response = await fetch('/admin/api/arqueo/etapa1-conteo', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(datosArqueo)

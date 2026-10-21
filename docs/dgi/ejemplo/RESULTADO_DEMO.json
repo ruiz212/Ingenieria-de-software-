@@ -1,0 +1,30 @@
+{
+  "base_qa": "PanaderiaQA_Prevalidacion_20261015",
+  "periodo_id": 37,
+  "mes": "2030-10",
+  "revision_inicial": 52,
+  "revision_corregida": 53,
+  "inicial": {
+    "compras_iva": "0.00",
+    "compras_total": "5000.00",
+    "diferencia": "10000.0000",
+    "ingresos_contables": "110000.0000",
+    "ventas_base": "120000.00",
+    "ventas_iva": "0.00",
+    "ventas_total": "120000.00"
+  },
+  "corregida": {
+    "compras_iva": "0.00",
+    "compras_total": "5000.00",
+    "diferencia": "0.0000",
+    "ingresos_contables": "120000.0000",
+    "ventas_base": "120000.00",
+    "ventas_iva": "0.00",
+    "ventas_total": "120000.00"
+  },
+  "bloqueantes_iniciales": 1,
+  "bloqueantes_corregidos": 0,
+  "archivo_sha256": "d7368422467486aed168ff631e11ed4d6e14ca426ff256c945ff61abe68770ac",
+  "exportacion_por_endpoint_real": true,
+  "datos": "EXCLUSIVAMENTE SINTÉTICOS"
+}

@@ -1,0 +1,104 @@
+
+
+.page-arqueos .arqueos-panel-accent-warning {
+    margin-bottom: 1.5rem;
+}
+
+.page-arqueos .arqueos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0.75rem;
+}
+
+.page-arqueos .arqueos-p-text {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 1rem;
+}
+
+.page-arqueos .arqueos-turno-card {
+    margin-bottom: 0.75rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+}
+
+.page-arqueos .arqueos-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.page-arqueos .arqueos-h4-text {
+    font-family: 'Inter', sans-serif;
+}
+
+.page-arqueos .arqueos-span-text {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.page-arqueos .arqueos-row-2 {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.page-arqueos .arqueos-comparison-grid {
+    margin: 0;
+}
+
+.page-arqueos .arqueos-div-surface {
+    border-top: 1px solid var(--border-light);
+    padding-top: 1rem;
+}
+
+.page-arqueos .arqueos-alert-box {
+    margin-bottom: 0.75rem;
+}
+
+.page-arqueos .arqueos-form-textarea {
+    min-height: 50px;
+}
+
+.page-arqueos .arqueos-row-3 {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.page-arqueos .arqueos-form-search {
+    width: 240px;
+}
+
+.page-arqueos .arqueos-h4-text-2 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.75rem;
+}
+
+.page-arqueos .arqueos-denomination-cell {
+    text-align: center;
+}
+
+.page-arqueos .arqueos-p-text-2 {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.page-arqueos .arqueos-span-text-2 {
+    font-size: 0.8rem;
+}
+
+/* Data-driven visual states, shared by server and client rendering. */
+.page-arqueos .arqueos-balance-negative {
+    border-color:var(--danger);
+    background:var(--danger-bg);
+}
+.page-arqueos .arqueos-balance-positive {
+    border-color:var(--info);
+    background:var(--info-bg);
+}

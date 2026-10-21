@@ -12,13 +12,15 @@ from app.hub import hub_bp
 def main_hub():
     """Redirige al módulo correspondiente según el rol del usuario."""
     rol = current_user.rol_nombre
-    
+
     if rol in ['SuperAdmin', 'Admin']:
         return redirect(url_for('admin.dashboard'))
     elif rol == 'Operativo':
         return redirect(url_for('monitor.monitor_pedidos'))
+    elif rol == 'Kiosco':
+        return redirect(url_for('kiosco.kiosco_vista'))
     elif rol in ['Estandar', 'Cliente', 'Invitado']:
         return redirect(url_for('pos.index'))
-    
+
     # Fallback por si acaso
     return redirect(url_for('pos.index'))

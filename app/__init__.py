@@ -14,23 +14,33 @@ def create_app(config_class=Config):
         static_folder='../static'
     )
     app.config.from_object(config_class)
+    app.config['TEMPLATES_AUTO_RELOAD'] = True
+    app.jinja_env.auto_reload = True
+    from app.assets import init_assets
+    init_assets(app)
 
     # Configuración para producción (Azure App Service)
-    from werkzeug.middleware.proxy_fix import ProxyFix
+    from app.services.request_context import TrustedProxyFix
     from whitenoise import WhiteNoise
     
-    # 1. Confiar en los encabezados X-Forwarded-* de los balanceadores de Azure (HTTPS)
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+    # Forwarded headers are accepted only from the explicitly configured edge.
+    app.wsgi_app = TrustedProxyFix(
+        app.wsgi_app,
+        trusted_cidrs=app.config.get('TRUSTED_PROXY_CIDRS', ()),
+        forwarded_for_hops=app.config.get('PROXY_X_FOR_HOPS', 1),
+    )
     
-    # 2. Servir archivos estáticos eficientemente en producción
+    # 2. Servir archivos estáticos eficientemente en producción y desarrollo
     import os
     static_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../static')
-    app.wsgi_app = WhiteNoise(app.wsgi_app, root=static_path, prefix='static/')
+    app.wsgi_app = WhiteNoise(app.wsgi_app, root=static_path, prefix='static/', autorefresh=True)
 
     # Inicializar extensiones
     from app.extensions import login_manager, csrf
     login_manager.init_app(app)
     csrf.init_app(app)
+    from app.security import init_security
+    init_security(app)
 
     # Importar modelos para registrar el user_loader
     from app import models  # noqa: F401

@@ -1,18 +1,83 @@
 # app/admin/routes_hr.py
-from flask import render_template, request, jsonify, redirect, url_for, flash
+from flask import render_template, request, jsonify, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 import json
 import traceback
 import base64
 import os
 import uuid
-from flask import current_app
 
 from app.admin import admin_bp
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime, date, timedelta
+from app.services.validation import amount, positive_int, required_text
+from app.services.hr_calculations import as_date, absent_dates, liquidation, can_mark_exit
+from app.services.business_time import business_now
+
+def _fecha_contable_periodo(periodo_fin):
+    """Retorna la fecha contable dentro del mes del período sin quedar en el futuro si es el mes en curso."""
+    fin = date.fromisoformat(str(periodo_fin))
+    ahora = business_now()
+    if (fin.year, fin.month) == (ahora.year, ahora.month) and ahora.date() < fin:
+        return ahora
+    return datetime(fin.year, fin.month, fin.day, 17, 0, 0)
+
+
+def validar_periodo_nomina(cursor, empleado_id, inicio, fin, aguinaldo=False):
+    inicio = date.fromisoformat(str(inicio)); fin = date.fromisoformat(str(fin))
+    if not aguinaldo:
+        import calendar
+        if inicio.day != 1 or fin != date(inicio.year, inicio.month, calendar.monthrange(inicio.year, inicio.month)[1]):
+            raise ValueError('El cálculo mensual requiere el primer y último día del mismo mes.')
+    if fin < inicio:
+        raise ValueError('El período final no puede ser anterior al inicial.')
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerEmpleadoBloqueo',
+        (empleado_id,),
+        fallback_sql='SELECT ID FROM Empleados WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',
+    )
+    if not cursor.fetchone():
+        raise ValueError('Empleado inexistente.')
+    # Aguinaldo se guarda actualmente como nómina sin salario base.
+    comparison = '=' if aguinaldo else '>'
+    sp_name = 'rrhh.sp_VerificarNominaExistenteAguinaldo' if aguinaldo else 'rrhh.sp_VerificarNominaExistenteMensual'
+    execute_sp(
+        cursor,
+        sp_name,
+        (empleado_id, fin, inicio),
+        fallback_sql=f"SELECT ID, Estado FROM Nomina WHERE EmpleadoID=? AND PeriodoInicio<=? AND PeriodoFin>=? AND SalarioBruto {comparison} 0 AND Estado IN ('Contabilizada', 'Pagada')",
+    )
+    if cursor.fetchone():
+        raise ValueError('Ya existe una nómina para este empleado y período. Revise el registro anterior.')
+    # Si quedaron borradores previos sin asiento contable, se limpian antes de generar la nómina contabilizada.
+    execute_sp(
+        cursor,
+        'rrhh.sp_LimpiarBorradoresNominaPeriodo',
+        (empleado_id, fin, inicio, 1 if aguinaldo else 0),
+        fallback_sql=f"DELETE FROM Nomina WHERE EmpleadoID=? AND PeriodoInicio<=? AND PeriodoFin>=? AND SalarioBruto {comparison} 0 AND Estado = 'Borrador'",
+    )
+
+
+def calcular_deducciones_judiciales(cursor, empleado_id, salario_neto_pre, fecha):
+    """Calcula obligaciones vigentes por porcentaje y monto fijo."""
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerDeduccionesJudicialesVigentes',
+        (empleado_id, fecha, fecha),
+        fallback_sql=(
+            "SELECT PorcentajeSalarioNeto, MontoFijo FROM DeduccionesJudiciales "
+            "WHERE EmpleadoID=? AND Activa=1 AND FechaInicio<=? "
+            "AND (FechaFin IS NULL OR FechaFin>=?)"
+        ),
+    )
+    rows = cursor.fetchall()
+    porcentaje = min(sum(float(row.PorcentajeSalarioNeto or 0) for row in rows), 60)
+    monto_fijo = sum(float(row.MontoFijo or 0) for row in rows)
+    return min(max(0, salario_neto_pre * porcentaje / 100 + monto_fijo), max(0, salario_neto_pre))
+
 
 @admin_bp.route('/rrhh')
 @login_required
@@ -23,12 +88,16 @@ def rrhh():
     cursor = conn.cursor()
 
     # Empleados activos
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'rrhh.sp_ListarEmpleadosConUsuario',
+        fallback_sql="""
         SELECT e.*, u.Username 
         FROM Empleados e 
         LEFT JOIN Usuarios u ON e.UsuarioID = u.ID
         ORDER BY e.NombreCompleto
-    """)
+    """,
+    )
     empleados = []
     for r in cursor.fetchall():
         empleados.append({
@@ -44,39 +113,77 @@ def rrhh():
         })
 
     # Nóminas recientes
-    cursor.execute("""
-        SELECT TOP 20 n.ID, e.NombreCompleto, n.PeriodoInicio, n.PeriodoFin,
-               n.TotalDevengado, n.TotalDeducciones, n.SalarioNeto, n.Estado,
-               n.SalarioBruto, n.OtrosIngresos
+    execute_sp(
+        cursor,
+        'rrhh.sp_ListarNominasRecientes',
+        fallback_sql="""
+        SELECT TOP 50 n.ID, e.NombreCompleto, e.Cargo, n.PeriodoInicio, n.PeriodoFin,
+               n.TotalDevengado, n.TotalDeducciones, n.SalarioNeto,
+               n.INSSPatronal, n.INATEC, n.Estado,
+               n.SalarioBruto, n.OtrosIngresos,
+               a.ID AS AsientoID, a.NumeroComprobante
         FROM Nomina n
         JOIN Empleados e ON n.EmpleadoID = e.ID
-        ORDER BY n.FechaGeneracion DESC
-    """)
+        OUTER APPLY (
+            SELECT TOP 1 ID, NumeroComprobante
+            FROM AsientosDiario
+            WHERE ReferenciaExterna = CONCAT('NOM-', n.ID)
+              AND Estado = 'Contabilizado'
+            ORDER BY ID DESC
+        ) a
+        ORDER BY CASE WHEN n.SalarioBruto > 0 THEN 0 ELSE 1 END,
+                 n.PeriodoFin DESC,
+                 n.ID DESC
+    """,
+    )
     nominas = [{
-        'id': r.ID, 'empleado': r.NombreCompleto,
-        'periodo': f"{r.PeriodoInicio.strftime('%d/%m')} - {r.PeriodoFin.strftime('%d/%m/%Y')}",
-        'devengado': float(r.TotalDevengado), 'deducciones': float(r.TotalDeducciones),
-        'neto': float(r.SalarioNeto), 'estado': r.Estado,
+        'id': r.ID,
+        'empleado': r.NombreCompleto,
+        'cargo': getattr(r, 'Cargo', '') or '',
+        'periodo': f"{r.PeriodoInicio.strftime('%d/%m/%Y')} - {r.PeriodoFin.strftime('%d/%m/%Y')}",
+        'mes_anio': r.PeriodoFin.strftime('%Y-%m') if r.PeriodoFin else '',
+        'devengado': float(r.TotalDevengado),
+        'deducciones': float(r.TotalDeducciones),
+        'neto': float(r.SalarioNeto),
+        'inss_patronal': float(getattr(r, 'INSSPatronal', 0) or 0),
+        'inatec': float(getattr(r, 'INATEC', 0) or 0),
+        'costo_total': float(r.TotalDevengado) + float(getattr(r, 'INSSPatronal', 0) or 0) + float(getattr(r, 'INATEC', 0) or 0),
+        'estado': r.Estado,
+        'asiento_id': getattr(r, 'AsientoID', None),
+        'comprobante': getattr(r, 'NumeroComprobante', None) or (f"NOM-{r.ID}" if r.Estado in ('Contabilizada', 'Pagada') else None),
         'es_aguinaldo': float(r.SalarioBruto) == 0 and float(r.OtrosIngresos) > 0
     } for r in cursor.fetchall()]
 
     # Configuraciones de tasas
-    cursor.execute("SELECT Clave, Valor FROM ConfiguracionSistema WHERE Clave IN ('inss_laboral', 'inss_patronal_menos50', 'inss_patronal_mas50', 'inatec', 'ir_tabla')")
+    execute_sp(
+        cursor,
+        'seguridad.sp_ObtenerTasasLaboralesConfig',
+        fallback_sql="SELECT Clave, Valor FROM ConfiguracionSistema WHERE Clave IN ('inss_laboral', 'inss_patronal_menos50', 'inss_patronal_mas50', 'inatec', 'ir_tabla')",
+    )
     tasas = {r.Clave: r.Valor for r in cursor.fetchall()}
 
     # Conteo de empleados activos (para determinar tasa patronal)
-    cursor.execute("SELECT COUNT(*) FROM Empleados WHERE EstadoEmpleado = 'Activo'")
+    execute_sp(
+        cursor,
+        'rrhh.sp_ContarEmpleadosActivos',
+        fallback_sql="SELECT COUNT(*) FROM Empleados WHERE EstadoEmpleado = 'Activo'",
+    )
     total_activos = cursor.fetchone()[0]
 
     # Asistencia de hoy (Monitor)
     fecha_hoy = datetime.now().strftime('%Y-%m-%d')
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerAsistenciaPorFechaMonitor',
+        (fecha_hoy,),
+        fallback_sql="""
         SELECT a.EmpleadoID, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada, e.NombreCompleto, e.Cargo
         FROM Asistencia a 
         JOIN Empleados e ON a.EmpleadoID = e.ID
         WHERE a.Fecha = ?
         ORDER BY a.HoraEntrada DESC
-    """, fecha_hoy)
+    """,
+    )
     monitor_hoy = [{
         'empleado': r.NombreCompleto,
         'cargo': r.Cargo,
@@ -101,13 +208,18 @@ def rrhh_asistencia_hoy_json():
     cursor = conn.cursor()
     try:
         fecha_hoy = datetime.now().strftime('%Y-%m-%d')
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerAsistenciaPorFechaMonitor',
+            (fecha_hoy,),
+            fallback_sql="""
             SELECT a.EmpleadoID, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada, e.NombreCompleto, e.Cargo
             FROM Asistencia a 
             JOIN Empleados e ON a.EmpleadoID = e.ID
             WHERE a.Fecha = ?
             ORDER BY a.HoraEntrada DESC
-        """, fecha_hoy)
+        """,
+        )
         monitor_hoy = [{
             'empleado': r.NombreCompleto,
             'cargo': r.Cargo,
@@ -126,7 +238,6 @@ def rrhh_asistencia_hoy_json():
 
 
 @admin_bp.route('/api/rrhh/empleado', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def crear_empleado():
@@ -142,19 +253,14 @@ def crear_empleado():
         foto_path = None
         descriptor_str = None
         if 'foto' in datos and datos['foto']:
-            # Extraer descriptor con la IA nativa (SFace)
             from app.services.face_service import face_service
-            import json
             resultado_ia = face_service.procesar_imagen_registro_base64(datos['foto'])
             if resultado_ia['status'] == 'success':
                 descriptor_str = json.dumps(resultado_ia['descriptor'])
             else:
-                # Opcional: Podrías retornar error aquí si el rostro es obligatorio.
-                # Como el sistema tiene fallback, lo dejamos pasar como NULL si falla pero avisamos en el log.
                 import logging
                 logging.warning(f"No se pudo extraer descriptor SFace: {resultado_ia['message']}")
 
-            # Guardar imagen en disco
             try:
                 header, encoded = datos['foto'].split(",", 1)
                 ext = "png" if "png" in header else "jpg"
@@ -170,40 +276,47 @@ def crear_empleado():
                 import logging
                 logging.error(f"Error procesando foto: {e}")
 
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'rrhh.sp_CrearEmpleado',
+            (
+                datos.get('nombre'), datos.get('cedula'),
+                datos.get('fecha_nacimiento') or None, datos.get('genero') or None,
+                datos.get('direccion') or None, datos.get('telefono') or None,
+                datos.get('correo') or None, datos.get('numero_inss') or None,
+                datos.get('cargo'), datos.get('fecha_ingreso'),
+                datos.get('tipo_contrato', 'Indefinido'),
+                datos.get('fecha_fin_contrato') or None,
+                datos.get('tipo_jornada', 'Diurna'),
+                float(datos.get('salario_base')),
+                datos.get('forma_pago', 'Mensual'),
+                1 if datos.get('consentimiento') else 0,
+                foto_path,
+                datos.get('hora_entrada') or None,
+                datos.get('hora_salida') or None,
+                descriptor_str
+            ),
+            fallback_sql="""
             INSERT INTO Empleados (NombreCompleto, Cedula, FechaNacimiento, Genero, Direccion,
                 Telefono, CorreoElectronico, NumeroINSS, Cargo, FechaIngreso, TipoContrato, FechaFinContrato,
                 TipoJornada, SalarioBase, FormaPago, ConsentimientoDatos, FechaConsentimiento, FotoPerfil, HoraEntrada, HoraSalida, FaceDescriptor)
             OUTPUT INSERTED.ID
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), ?, ?, ?, ?)
         """,
-            datos.get('nombre'), datos.get('cedula'),
-            datos.get('fecha_nacimiento') or None, datos.get('genero') or None,
-            datos.get('direccion') or None, datos.get('telefono') or None,
-            datos.get('correo') or None, datos.get('numero_inss') or None,
-            datos.get('cargo'), datos.get('fecha_ingreso'),
-            datos.get('tipo_contrato', 'Indefinido'),
-            datos.get('fecha_fin_contrato') or None,
-            datos.get('tipo_jornada', 'Diurna'),
-            float(datos.get('salario_base')),
-            datos.get('forma_pago', 'Mensual'),
-            1 if datos.get('consentimiento') else 0,
-            foto_path,
-            datos.get('hora_entrada') or None,
-            datos.get('hora_salida') or None,
-            descriptor_str
         )
         
         row = cursor.fetchone()
         nuevo_id = row.ID if row else None
         conn.commit()
 
-        # Actualizar la caché de reconocimiento facial en caliente
         if nuevo_id and descriptor_str:
-            import json
+            from app.services.face_service import face_service
             face_service.actualizar_cache_empleado(nuevo_id, json.loads(descriptor_str))
             
         return jsonify({'status': 'success', 'mensaje': 'Empleado registrado'})
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)), 400
     except Exception as e:
         conn.rollback()
         import logging
@@ -213,47 +326,34 @@ def crear_empleado():
         conn.close()
 
 @admin_bp.route('/api/rrhh/empleado/<int:id>', methods=['DELETE'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def eliminar_empleado(id):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # 1. Eliminar dependencias en cascada (Nóminas, Asistencia, etc) para permitir el borrado
-        cursor.execute("DELETE FROM DetalleNomina WHERE NominaID IN (SELECT ID FROM Nomina WHERE EmpleadoID = ?)", (id,))
-        cursor.execute("DELETE FROM Nomina WHERE EmpleadoID = ?", (id,))
-        
-        # Intentamos borrar tablas de asistencia si existen
-        try:
-            cursor.execute("DELETE FROM Asistencia WHERE EmpleadoID = ?", (id,))
-        except Exception:
-            pass # Si la tabla Asistencia no existe en su esquema, ignoramos
-            
-        try:
-            cursor.execute("DELETE FROM LicenciasEmpleados WHERE EmpleadoID = ?", (id,))
-            cursor.execute("DELETE FROM DeduccionesJudiciales WHERE EmpleadoID = ?", (id,))
-            cursor.execute("DELETE FROM IncidentesLaborales WHERE EmpleadoID = ?", (id,))
-        except Exception:
-            pass
-
-        # 2. Intentamos borrar al empleado
-        cursor.execute("DELETE FROM Empleados WHERE ID = ?", (id,))
+        execute_sp(
+            cursor,
+            'rrhh.sp_SuspenderEmpleado',
+            (id,),
+            fallback_sql="UPDATE Empleados SET EstadoEmpleado='Suspendido' WHERE ID=?",
+        )
         if cursor.rowcount == 0:
             return jsonify({'error': 'Empleado no encontrado'}), 404
             
         conn.commit()
-        # Eliminar también de la caché de rostros si existe
         from app.services.face_service import face_service
         if id in face_service.encodings_cache:
             del face_service.encodings_cache[id]
             
-        return jsonify({'status': 'success', 'mensaje': 'Empleado eliminado junto con sus registros dependientes.'})
+        return jsonify({'status': 'success', 'mensaje': 'Empleado suspendido. Se conserva todo el historial laboral y contable.'})
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)), 400
     except Exception as e:
         conn.rollback()
         import logging
         logging.error(f"Error eliminando empleado: {e}")
-        # Error 547 es de Foreign Key Constraint en SQL Server
         if '547' in str(e) or 'REFERENCE' in str(e):
             return jsonify({'error': 'Aún existen otras dependencias fuertes. Bórralo manualmente o ponlo Inactivo.'}), 400
         return jsonify({'error': 'Error interno al eliminar el empleado'}), 500
@@ -261,7 +361,6 @@ def eliminar_empleado(id):
         conn.close()
 
 @admin_bp.route('/api/rrhh/empleado/<int:id>/horario', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def actualizar_horario_empleado(id):
@@ -271,9 +370,17 @@ def actualizar_horario_empleado(id):
     try:
         hora_entrada = datos.get('hora_entrada') or None
         hora_salida = datos.get('hora_salida') or None
-        cursor.execute("UPDATE Empleados SET HoraEntrada = ?, HoraSalida = ? WHERE ID = ?", hora_entrada, hora_salida, id)
+        execute_sp(
+            cursor,
+            'rrhh.sp_ActualizarHorarioEmpleado',
+            (hora_entrada, hora_salida, id),
+            fallback_sql="UPDATE Empleados SET HoraEntrada = ?, HoraSalida = ? WHERE ID = ?",
+        )
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Horario actualizado'})
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)), 400
     except Exception as e:
         conn.rollback()
         import logging
@@ -282,59 +389,194 @@ def actualizar_horario_empleado(id):
     finally:
         conn.close()
 
+
+@admin_bp.route('/api/rrhh/deducciones', methods=['GET', 'POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def deducciones_judiciales():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if request.method == 'GET':
+            execute_sp(
+                cursor,
+                'rrhh.sp_ListarDeduccionesJudiciales',
+                fallback_sql=(
+                    "SELECT d.ID, d.EmpleadoID, e.NombreCompleto, d.TipoDeduccion, d.Beneficiario, "
+                    "d.PorcentajeSalarioNeto, d.MontoFijo, d.NumeroJuzgado, d.FechaInicio, d.FechaFin, d.Activa "
+                    "FROM DeduccionesJudiciales d JOIN Empleados e ON e.ID=d.EmpleadoID ORDER BY d.Activa DESC, d.ID DESC"
+                ),
+            )
+            return jsonify([{
+                'id': row.ID, 'empleado_id': row.EmpleadoID, 'empleado': row.NombreCompleto,
+                'tipo': row.TipoDeduccion, 'beneficiario': row.Beneficiario,
+                'porcentaje': float(row.PorcentajeSalarioNeto),
+                'monto_fijo': float(row.MontoFijo) if row.MontoFijo is not None else None,
+                'juzgado': row.NumeroJuzgado, 'fecha_inicio': row.FechaInicio.isoformat(),
+                'fecha_fin': row.FechaFin.isoformat() if row.FechaFin else None, 'activa': bool(row.Activa)
+            } for row in cursor.fetchall()])
+
+        data = request.get_json(silent=True) or {}
+        empleado_id = positive_int(data.get('empleado_id'), 'Empleado')
+        tipo = data.get('tipo')
+        if tipo not in ('Pension Alimenticia', 'Embargo Comercial'):
+            raise ValueError('Tipo de deducción inválido.')
+        beneficiario = required_text(data.get('beneficiario'), 'Beneficiario', 150)
+        porcentaje = amount(data.get('porcentaje', 0), 'Porcentaje', maximum=60)
+        monto_fijo = amount(data.get('monto_fijo', 0), 'Monto fijo')
+        if porcentaje == 0 and monto_fijo == 0:
+            raise ValueError('Indique un porcentaje o un monto fijo.')
+        fecha_inicio = data.get('fecha_inicio')
+        if not fecha_inicio:
+            raise ValueError('La fecha de inicio es obligatoria.')
+        datetime.fromisoformat(fecha_inicio)
+        execute_sp(
+            cursor,
+            'rrhh.sp_VerificarEmpleadoExiste',
+            (empleado_id,),
+            fallback_sql="SELECT ID FROM Empleados WHERE ID=?",
+        )
+        if not cursor.fetchone():
+            return jsonify(error='Empleado inexistente.'), 400
+        execute_sp(
+            cursor,
+            'rrhh.sp_InsertarDeduccionJudicial',
+            (
+                empleado_id, tipo, beneficiario, porcentaje, monto_fijo or None,
+                (data.get('juzgado') or '').strip()[:50] or None, fecha_inicio, data.get('fecha_fin') or None
+            ),
+            fallback_sql=(
+                "INSERT INTO DeduccionesJudiciales (EmpleadoID,TipoDeduccion,Beneficiario,PorcentajeSalarioNeto,MontoFijo,NumeroJuzgado,FechaInicio,FechaFin) "
+                "VALUES (?,?,?,?,?,?,?,?)"
+            ),
+        )
+        conn.commit()
+        return jsonify(status='success', mensaje='Deducción judicial registrada.'), 201
+    except ValueError as error:
+        conn.rollback()
+        return jsonify(error=str(error)), 400
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/rrhh/incidentes', methods=['GET', 'POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def incidentes_laborales():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if request.method == 'GET':
+            execute_sp(
+                cursor,
+                'rrhh.sp_ListarIncidentesLaborales',
+                fallback_sql=(
+                    "SELECT i.ID, i.EmpleadoID, e.NombreCompleto, i.TipoIncidente, i.Gravedad, i.Descripcion, "
+                    "i.FechaIncidente, i.NotificadoMITRAB, i.AccionesCorrectivas "
+                    "FROM IncidentesLaborales i JOIN Empleados e ON e.ID=i.EmpleadoID ORDER BY i.FechaIncidente DESC"
+                ),
+            )
+            return jsonify([{
+                'id': row.ID, 'empleado_id': row.EmpleadoID, 'empleado': row.NombreCompleto,
+                'tipo': row.TipoIncidente, 'gravedad': row.Gravedad, 'descripcion': row.Descripcion,
+                'fecha': row.FechaIncidente.isoformat(), 'notificado_mitrab': bool(row.NotificadoMITRAB),
+                'acciones_correctivas': row.AccionesCorrectivas
+            } for row in cursor.fetchall()])
+
+        data = request.get_json(silent=True) or {}
+        empleado_id = positive_int(data.get('empleado_id'), 'Empleado')
+        tipo = data.get('tipo')
+        gravedad = data.get('gravedad')
+        if tipo not in ('Accidente', 'Casi Accidente', 'Enfermedad Ocupacional'):
+            raise ValueError('Tipo de incidente inválido.')
+        if gravedad not in ('Leve', 'Grave', 'Muy Grave', 'Mortal'):
+            raise ValueError('Gravedad inválida.')
+        descripcion = required_text(data.get('descripcion'), 'Descripción', 4000)
+        fecha = data.get('fecha') or datetime.now().isoformat()
+        datetime.fromisoformat(fecha)
+        execute_sp(
+            cursor,
+            'rrhh.sp_VerificarEmpleadoExiste',
+            (empleado_id,),
+            fallback_sql="SELECT ID FROM Empleados WHERE ID=?",
+        )
+        if not cursor.fetchone():
+            return jsonify(error='Empleado inexistente.'), 400
+        notificado = bool(data.get('notificado_mitrab'))
+        execute_sp(
+            cursor,
+            'rrhh.sp_InsertarIncidenteLaboral',
+            (
+                empleado_id, tipo, gravedad, descripcion, fecha, notificado,
+                datetime.now() if notificado else None,
+                (data.get('acciones_correctivas') or '').strip()[:4000] or None, current_user.id
+            ),
+            fallback_sql=(
+                "INSERT INTO IncidentesLaborales (EmpleadoID,TipoIncidente,Gravedad,Descripcion,FechaIncidente,NotificadoMITRAB,FechaNotificacionMITRAB,AccionesCorrectivas,RegistradoPor) "
+                "VALUES (?,?,?,?,?,?,?,?,?)"
+            ),
+        )
+        conn.commit()
+        return jsonify(status='success', mensaje='Incidente laboral registrado.'), 201
+    except ValueError as error:
+        conn.rollback()
+        return jsonify(error=str(error)), 400
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
 def obtener_dias_ausentes_auto(cursor, empleado_id, periodo_inicio, periodo_fin):
-    if isinstance(periodo_inicio, str):
-        periodo_inicio = datetime.strptime(periodo_inicio, '%Y-%m-%d').date()
-    if isinstance(periodo_fin, str):
-        periodo_fin = datetime.strptime(periodo_fin, '%Y-%m-%d').date()
-        
-    dias_totales = (periodo_fin - periodo_inicio).days + 1
-    
-    # 1. Contar domingos en el período (Días de descanso remunerados, no se marcan)
-    domingos = sum(1 for i in range(dias_totales) if (periodo_inicio + timedelta(days=i)).weekday() == 6)
-    dias_laborables_esperados = dias_totales - domingos
-    if dias_laborables_esperados <= 0:
+    inicio, fin = as_date(periodo_inicio), as_date(periodo_fin)
+    if fin < inicio:
+        raise ValueError('El período final no puede ser anterior al inicial.')
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerFechasIngresoEgresoEmpleado',
+        (empleado_id,),
+        fallback_sql="SELECT FechaIngreso, FechaEgreso FROM Empleados WHERE ID = ?",
+    )
+    empleado = cursor.fetchone()
+    if not empleado:
+        raise ValueError('Empleado inexistente.')
+    inicio = max(inicio, as_date(empleado.FechaIngreso))
+    if empleado.FechaEgreso:
+        fin = min(fin, as_date(empleado.FechaEgreso))
+    if fin < inicio:
         return 0
-        
-    # Salvaguarda: Verificar si hay uso del módulo de asistencia en la empresa
-    cursor.execute("SELECT COUNT(*) FROM Asistencia WHERE Fecha BETWEEN ? AND ?", periodo_inicio, periodo_fin)
-    total_marcas_empresa = cursor.fetchone()[0]
-    if total_marcas_empresa == 0:
-        return 0 # Si nadie marcó en toda la empresa, no penalizamos asumiendo que no usaron el kiosco.
-        
-    # 2. Contar días con marca de asistencia
-    cursor.execute("""
-        SELECT COUNT(DISTINCT Fecha) 
-        FROM Asistencia 
-        WHERE EmpleadoID = ? AND Fecha BETWEEN ? AND ?
-    """, empleado_id, periodo_inicio, periodo_fin)
-    dias_asistidos = cursor.fetchone()[0]
-    
-    # 3. Contar días de licencia justificada
-    cursor.execute("""
-        SELECT FechaInicio, FechaFin, TipoLicencia 
-        FROM LicenciasEmpleados 
-        WHERE EmpleadoID = ? AND (FechaInicio <= ? AND FechaFin >= ?)
-    """, empleado_id, periodo_fin, periodo_inicio)
-    licencias = cursor.fetchall()
-    
-    dias_ya_contados_licencia = set()
-    for lic in licencias:
-        f_ini = max(periodo_inicio, lic.FechaInicio)
-        f_fin = min(periodo_fin, lic.FechaFin)
-        for i in range((f_fin - f_ini).days + 1):
-            dia_actual = f_ini + timedelta(days=i)
-            if dia_actual.weekday() != 6: # Si no es domingo
-                dias_ya_contados_licencia.add(dia_actual)
-    
-    dias_justificados = len(dias_ya_contados_licencia)
-    
-    # 4. Cálculo final de ausencias injustificadas
-    ausencias_injustificadas = max(0, dias_laborables_esperados - dias_asistidos - dias_justificados)
-    return ausencias_injustificadas
+    # Conservar la salvaguarda cuando la empresa no utilizó el módulo ese mes.
+    execute_sp(
+        cursor,
+        'rrhh.sp_ContarAsistenciasRango',
+        (periodo_inicio, periodo_fin),
+        fallback_sql="SELECT COUNT(*) FROM Asistencia WHERE Fecha BETWEEN ? AND ?",
+    )
+    if cursor.fetchone()[0] == 0:
+        return 0
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerFechasAsistidasEmpleado',
+        (empleado_id, inicio, fin),
+        fallback_sql="SELECT DISTINCT Fecha FROM Asistencia WHERE EmpleadoID = ? AND Fecha BETWEEN ? AND ? AND HoraEntrada IS NOT NULL",
+    )
+    asistidas = [as_date(row.Fecha) for row in cursor.fetchall()]
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerLicenciasSolapadasEmpleado',
+        (empleado_id, fin, inicio),
+        fallback_sql=(
+            "SELECT FechaInicio, FechaFin, TipoLicencia FROM LicenciasEmpleados "
+            "WHERE EmpleadoID = ? AND FechaInicio <= ? AND FechaFin >= ?"
+        ),
+    )
+    return len(absent_dates(inicio, fin, asistidas, cursor.fetchall()))
+
 
 @admin_bp.route('/api/rrhh/nomina/calcular', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def calcular_nomina():
@@ -342,12 +584,11 @@ def calcular_nomina():
     empleado_id = datos.get('empleado_id')
     periodo_inicio = datos.get('periodo_inicio')
     periodo_fin = datos.get('periodo_fin')
-    horas_extras = float(datos.get('horas_extras', 0))
-    otros_ingresos = float(datos.get('otros_ingresos', 0))
+    horas_extras = float(amount(datos.get('horas_extras', 0)))
+    otros_ingresos = float(amount(datos.get('otros_ingresos', 0)))
     
-    # Nuevos parámetros (Ley 185)
-    dias_ausentes = float(datos.get('dias_ausentes', 0))
-    dias_feriados_trabajados = float(datos.get('dias_feriados_trabajados', 0))
+    dias_ausentes = float(amount(datos.get('dias_ausentes', 0), maximum=31))
+    dias_feriados_trabajados = float(amount(datos.get('dias_feriados_trabajados', 0), maximum=31))
 
     if not all([empleado_id, periodo_inicio, periodo_fin]):
         return jsonify({'error': 'Faltan datos del período'}), 400
@@ -355,11 +596,16 @@ def calcular_nomina():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        if dias_ausentes == 0:
-            # Si el usuario no especificó manualmente días ausentes, calcular automático
+        validar_periodo_nomina(cursor, empleado_id, periodo_inicio, periodo_fin)
+        if 'dias_ausentes' not in datos:
             dias_ausentes = obtener_dias_ausentes_auto(cursor, empleado_id, periodo_inicio, periodo_fin)
             
-        cursor.execute("SELECT * FROM Empleados WHERE ID = ? AND EstadoEmpleado = 'Activo'", int(empleado_id))
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerEmpleadoActivoCompleto',
+            (int(empleado_id),),
+            fallback_sql="SELECT * FROM Empleados WHERE ID = ? AND EstadoEmpleado = 'Activo'",
+        )
         emp = cursor.fetchone()
         if not emp:
             return jsonify({'error': 'Empleado no encontrado o inactivo'}), 404
@@ -367,24 +613,27 @@ def calcular_nomina():
         salario_base = float(emp.SalarioBase)
         salario_diario = salario_base / 30
 
-        cursor.execute("SELECT Clave, Valor FROM ConfiguracionSistema WHERE Clave IN ('inss_laboral', 'inss_patronal_menos50', 'inss_patronal_mas50', 'inatec', 'ir_tabla')")
+        execute_sp(
+            cursor,
+            'seguridad.sp_ObtenerTasasLaboralesConfig',
+            fallback_sql="SELECT Clave, Valor FROM ConfiguracionSistema WHERE Clave IN ('inss_laboral', 'inss_patronal_menos50', 'inss_patronal_mas50', 'inatec', 'ir_tabla')",
+        )
         config = {r.Clave: r.Valor for r in cursor.fetchall()}
 
         tasa_inss_laboral = float(config.get('inss_laboral', '7.00'))
 
-        cursor.execute("SELECT COUNT(*) FROM Empleados WHERE EstadoEmpleado = 'Activo'")
+        execute_sp(
+            cursor,
+            'rrhh.sp_ContarEmpleadosActivos',
+            fallback_sql="SELECT COUNT(*) FROM Empleados WHERE EstadoEmpleado = 'Activo'",
+        )
         total_empleados = cursor.fetchone()[0]
         tasa_inss_patronal = float(config.get('inss_patronal_mas50', '22.50')) if total_empleados >= 50 else float(config.get('inss_patronal_menos50', '21.50'))
         tasa_inatec = float(config.get('inatec', '2.00'))
 
         hora_ordinaria = salario_diario / 8
-        monto_horas_extras = horas_extras * hora_ordinaria * 2 # Recargo del 100% (Art. 62 Ley 185)
-        
-        # Feriados Trabajados (Art. 66 Ley 185)
+        monto_horas_extras = horas_extras * hora_ordinaria * 2
         monto_feriados = dias_feriados_trabajados * salario_diario
-
-        # Deducciones por ausencias (Incluye proporcional del 7mo día: Art. 64 Ley 185)
-        # Factor 1.1667 equivale a 1 día de falta + 1/6 del domingo
         monto_ausencias = dias_ausentes * salario_diario * 1.1667
         salario_base_efectivo = salario_base - monto_ausencias
 
@@ -406,18 +655,19 @@ def calcular_nomina():
 
         vales_descontados = 0
         if emp.UsuarioID:
-            cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM ValesEmpleados WHERE EmpleadoID = ? AND Descontado = 0", emp.UsuarioID)
+            execute_sp(
+                cursor,
+                'contabilidad.sp_ObtenerSumaValesPendientesUsuario',
+                (emp.UsuarioID,),
+                fallback_sql="SELECT ISNULL(SUM(Monto), 0) FROM ValesEmpleados WHERE EmpleadoID = ? AND Descontado = 0",
+            )
             vales_pendientes = float(cursor.fetchone()[0])
             vales_descontados = vales_pendientes
 
         salario_neto_pre = total_devengado - inss_laboral - ir_mensual
-        pension_alimenticia = 0
-        cursor.execute("SELECT PorcentajeSalarioNeto FROM DeduccionesJudiciales WHERE EmpleadoID = ? AND Activa = 1 AND TipoDeduccion = 'Pension Alimenticia'", int(empleado_id))
-        deducciones_judiciales = cursor.fetchall()
-        total_porcentaje_pension = sum(float(d.PorcentajeSalarioNeto) for d in deducciones_judiciales)
-        if total_porcentaje_pension > 60:
-            total_porcentaje_pension = 60
-        pension_alimenticia = salario_neto_pre * (total_porcentaje_pension / 100)
+        pension_alimenticia = calcular_deducciones_judiciales(
+            cursor, int(empleado_id), salario_neto_pre, periodo_fin
+        )
 
         total_deducciones = inss_laboral + ir_mensual + pension_alimenticia + vales_descontados
         salario_neto = total_devengado - total_deducciones
@@ -425,34 +675,54 @@ def calcular_nomina():
         inss_patronal = total_devengado * (tasa_inss_patronal / 100)
         inatec = total_devengado * (tasa_inatec / 100)
 
-        cursor.execute("""
+        salario_base_efectivo = float(amount(salario_base_efectivo, 'Salario efectivo'))
+        monto_horas_extras = float(amount(monto_horas_extras))
+        otros_ingresos = float(amount(otros_ingresos))
+        monto_feriados = float(amount(monto_feriados))
+        total_devengado = amount(salario_base_efectivo) + amount(monto_horas_extras) + amount(otros_ingresos) + amount(monto_feriados)
+        inss_laboral = amount(inss_laboral); ir_mensual = amount(ir_mensual)
+        pension_alimenticia = amount(pension_alimenticia); vales_descontados = amount(vales_descontados)
+        total_deducciones = inss_laboral + ir_mensual + pension_alimenticia + vales_descontados
+        salario_neto = amount(total_devengado - total_deducciones, 'Salario neto')
+        inss_patronal = amount(inss_patronal); inatec = amount(inatec)
+        if total_devengado <= 0:
+            raise ValueError('Revise las ausencias: no hay salario devengado para contabilizar.')
+
+        execute_sp(
+            cursor,
+            'rrhh.sp_InsertarNominaMensual',
+            (
+                int(empleado_id), periodo_inicio, periodo_fin, salario_base_efectivo,
+                horas_extras, monto_horas_extras, (otros_ingresos + monto_feriados), total_devengado,
+                inss_laboral, ir_mensual, pension_alimenticia, vales_descontados,
+                total_deducciones, salario_neto, inss_patronal, inatec, current_user.id
+            ),
+            fallback_sql="""
             INSERT INTO Nomina (EmpleadoID, PeriodoInicio, PeriodoFin, SalarioBruto,
                 HorasExtras, MontoHorasExtras, OtrosIngresos, TotalDevengado,
                 INSSLaboral, IRMensual, PensionAlimenticia, ValesDescontados,
                 TotalDeducciones, SalarioNeto, INSSPatronal, INATEC, Estado, GeneradoPor)
             OUTPUT INSERTED.ID
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Generada', ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Contabilizada', ?)
         """,
-            int(empleado_id), periodo_inicio, periodo_fin, salario_base_efectivo,
-            horas_extras, monto_horas_extras, (otros_ingresos + monto_feriados), total_devengado,
-            inss_laboral, ir_mensual, pension_alimenticia, vales_descontados,
-            total_deducciones, salario_neto, inss_patronal, inatec, current_user.id
         )
         nomina_id = cursor.fetchone()[0]
 
         if vales_descontados > 0 and emp.UsuarioID:
-            cursor.execute("UPDATE ValesEmpleados SET Descontado = 1 WHERE EmpleadoID = ? AND Descontado = 0", emp.UsuarioID)
+            execute_sp(
+                cursor,
+                'contabilidad.sp_MarcarValesDescontadosUsuario',
+                (emp.UsuarioID,),
+                fallback_sql="UPDATE ValesEmpleados SET Descontado = 1 WHERE EmpleadoID = ? AND Descontado = 0",
+            )
 
-        # ============================================================
-        # INTEGRACIÓN CONTABLE NIIF
-        # ============================================================
         from app.services.contabilidad_service import ContabilidadService
         ContabilidadService.contabilizar_nomina(
             cursor=cursor,
             usuario_id=current_user.id,
             nomina_id=nomina_id,
             empleado_nombre=emp.NombreCompleto,
-            salario_bruto=salario_base_efectivo + monto_horas_extras + otros_ingresos + monto_feriados,
+            salario_bruto=total_devengado,
             inss_laboral=inss_laboral,
             ir_retenido=ir_mensual,
             inss_patronal=inss_patronal,
@@ -461,9 +731,9 @@ def calcular_nomina():
             vales_descontados=vales_descontados,
             salario_neto=salario_neto,
             cargo=emp.Cargo,
-            ip=request.remote_addr
+            ip=request.remote_addr,
+            fecha=_fecha_contable_periodo(periodo_fin)
         )
-        # ============================================================
 
         conn.commit()
 
@@ -493,6 +763,9 @@ def calcular_nomina():
                 'total_empleados': total_empleados
             }
         })
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)), 400
     except Exception as e:
         conn.rollback()
         import logging
@@ -501,258 +774,91 @@ def calcular_nomina():
     finally:
         conn.close()
 
+def _obtener_liquidacion(cursor, empleado, fecha_egreso, motivo):
+    fecha_salida = as_date(fecha_egreso)
+    if fecha_salida < as_date(empleado.FechaIngreso):
+        raise ValueError('La fecha de egreso no puede ser anterior al ingreso.')
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerUltimos6SalariosNomina',
+        (empleado.ID,),
+        fallback_sql="SELECT TOP 6 SalarioBruto FROM Nomina WHERE EmpleadoID = ? ORDER BY PeriodoFin DESC",
+    )
+    salarios = [float(row.SalarioBruto) for row in cursor.fetchall()]
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerVacacionesEmpleadoRango',
+        (empleado.ID, fecha_salida, as_date(empleado.FechaIngreso)),
+        fallback_sql=(
+            "SELECT FechaInicio, FechaFin, TipoLicencia, DiasOtorgados FROM LicenciasEmpleados "
+            "WHERE EmpleadoID = ? AND TipoLicencia = 'Vacaciones' AND FechaInicio <= ? AND FechaFin >= ?"
+        ),
+    )
+    return liquidation(empleado, fecha_salida, motivo, salarios, cursor.fetchall())
+
+
 @admin_bp.route('/api/rrhh/liquidacion/calcular', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def calcular_liquidacion():
-    datos = request.json
-    empleado_id = datos.get('empleado_id')
-    fecha_egreso = datos.get('fecha_egreso')
+    datos = request.get_json(silent=True) or {}
+    if not isinstance(datos, dict):
+        return jsonify(error='Datos inválidos'), 400
+    empleado_id, fecha_egreso = datos.get('empleado_id'), datos.get('fecha_egreso')
     motivo = datos.get('motivo', 'Renuncia Voluntaria')
-
     if not all([empleado_id, fecha_egreso]):
-        return jsonify({'error': 'Faltan datos'}), 400
-
+        return jsonify(error='Faltan datos'), 400
     conn = get_db_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute("SELECT * FROM Empleados WHERE ID = ?", int(empleado_id))
-        emp = cursor.fetchone()
-        if not emp:
-            return jsonify({'error': 'Empleado no encontrado'}), 404
-
-        fecha_ingreso = emp.FechaIngreso
-        if type(fecha_ingreso) is str:
-            fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
-        elif hasattr(fecha_ingreso, 'date'):
-            fecha_ingreso = fecha_ingreso.date()
-            
-        fecha_salida = datetime.strptime(fecha_egreso, '%Y-%m-%d').date()
-        salario_base = float(emp.SalarioBase)
-        salario_diario = salario_base / 30
-
-        dias_trabajados = (fecha_salida - fecha_ingreso).days
-        anios_completos = dias_trabajados // 365
-        meses_fraccion = (dias_trabajados % 365) // 30
-        
-        dias_vacaciones_totales = dias_trabajados * (30 / 365)
-        dias_vacaciones_pendientes = dias_vacaciones_totales
-
-        cursor.execute("SELECT TOP 6 SalarioBruto FROM Nomina WHERE EmpleadoID = ? ORDER BY PeriodoFin DESC", int(empleado_id))
-        nominas_recientes = [float(r.SalarioBruto) for r in cursor.fetchall()]
-        salario_promedio_6m = sum(nominas_recientes) / len(nominas_recientes) if nominas_recientes else salario_base
-        salario_diario_vacaciones = salario_promedio_6m / 30
-
-        monto_vacaciones = dias_vacaciones_pendientes * salario_diario_vacaciones
-        inss_vacaciones = monto_vacaciones * 0.07
-
-        salarios_6m = nominas_recientes
-        salario_max_6m = max(salarios_6m) if salarios_6m else salario_base
-
-        # Ciclo de Aguinaldo: 1 de diciembre al 30 de noviembre.
-        if fecha_salida.month == 12:
-            inicio_aguinaldo = date(fecha_salida.year, 12, 1)
-        else:
-            inicio_aguinaldo = date(fecha_salida.year - 1, 12, 1)
-            
-        inicio_aguinaldo_real = max(inicio_aguinaldo, fecha_ingreso)
-        dias_aguinaldo = (fecha_salida - inicio_aguinaldo_real).days + 1
-        
-        aguinaldo_proporcional = salario_max_6m * (dias_aguinaldo / 365.0)
-
-        aplica_indemnizacion = motivo in ['Despido Injustificado', 'Renuncia Voluntaria']
-
-        dias_indemnizacion = 0
-        if aplica_indemnizacion:
-            anios_tramo1 = min(anios_completos, 3)
-            dias_tramo1 = anios_tramo1 * 30
-
-            anios_tramo2 = max(0, anios_completos - 3)
-            dias_tramo2 = anios_tramo2 * 20
-
-            dias_indemnizacion = dias_tramo1 + dias_tramo2
-
-            if anios_completos < 3:
-                dias_indemnizacion += meses_fraccion * 2.5
-            else:
-                dias_indemnizacion += meses_fraccion * 1.667
-
-            dias_indemnizacion = min(dias_indemnizacion, 150)
-
-        monto_indemnizacion = dias_indemnizacion * salario_diario
-        ir_indemnizacion = 0
-        if monto_indemnizacion > 500000:
-            ir_indemnizacion = (monto_indemnizacion - 500000) * 0.15
-
-        total_liquidacion = monto_vacaciones - inss_vacaciones + aguinaldo_proporcional + monto_indemnizacion - ir_indemnizacion
-
+        cursor = conn.cursor()
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerEmpleadoCompletoPorID',
+            (int(empleado_id),),
+            fallback_sql="SELECT * FROM Empleados WHERE ID = ?",
+        )
+        empleado = cursor.fetchone()
+        if not empleado:
+            return jsonify(error='Empleado no encontrado'), 404
+        return jsonify(status='success', liquidacion=_obtener_liquidacion(cursor, empleado, fecha_egreso, motivo))
+    except (ValueError, TypeError) as error:
+        return jsonify(error=str(error)), 400
+    except Exception:
+        current_app.logger.exception('Error al calcular liquidación')
+        return jsonify(error='Error interno del servidor al procesar la solicitud.'), 500
+    finally:
         conn.close()
-        return jsonify({
-            'status': 'success',
-            'liquidacion': {
-                'empleado': emp.NombreCompleto,
-                'fecha_ingreso': fecha_ingreso.strftime('%d/%m/%Y'),
-                'fecha_egreso': fecha_salida.strftime('%d/%m/%Y'),
-                'dias_trabajados': dias_trabajados,
-                'anios': anios_completos,
-                'meses_fraccion': meses_fraccion,
-                'salario_base': salario_base,
-                'salario_diario': round(salario_diario, 2),
-                'vacaciones': {
-                    'dias': round(dias_vacaciones_pendientes, 2),
-                    'salario_diario_usado': round(salario_diario_vacaciones, 2),
-                    'monto_bruto': round(monto_vacaciones, 2),
-                    'inss': round(inss_vacaciones, 2),
-                    'neto': round(monto_vacaciones - inss_vacaciones, 2)
-                },
-                'aguinaldo': {
-                    'salario_max_6m': salario_max_6m,
-                    'dias_ciclo': dias_aguinaldo,
-                    'monto': round(aguinaldo_proporcional, 2),
-                    'nota': 'Exento de INSS e IR'
-                },
-                'indemnizacion': {
-                    'aplica': aplica_indemnizacion,
-                    'motivo': motivo,
-                    'dias': round(dias_indemnizacion, 2),
-                    'monto_bruto': round(monto_indemnizacion, 2),
-                    'ir': round(ir_indemnizacion, 2),
-                    'neto': round(monto_indemnizacion - ir_indemnizacion, 2),
-                    'nota': 'Exento INSS. IR exento hasta C$500,000'
-                },
-                'total_liquidacion': round(total_liquidacion, 2)
-            }
-        })
-    except Exception as e:
-        import logging
-        logging.error(f"Internal server error: {e}")
-        return jsonify({'error': 'Error interno del servidor al procesar la solicitud.'}), 500
+
 
 @admin_bp.route('/rrhh/liquidacion/reporte', methods=['GET'])
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def reporte_liquidacion():
-    empleado_id = request.args.get('empleado_id')
-    fecha_egreso = request.args.get('fecha_egreso')
+    empleado_id, fecha_egreso = request.args.get('empleado_id'), request.args.get('fecha_egreso')
     motivo = request.args.get('motivo', 'Renuncia Voluntaria')
-
     if not all([empleado_id, fecha_egreso]):
         flash('Faltan datos para generar el reporte.', 'error')
         return redirect(url_for('admin.rrhh'))
-
     conn = get_db_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute("SELECT * FROM Empleados WHERE ID = ?", int(empleado_id))
-        emp = cursor.fetchone()
-        if not emp:
+        cursor = conn.cursor()
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerEmpleadoCompletoPorID',
+            (int(empleado_id),),
+            fallback_sql="SELECT * FROM Empleados WHERE ID = ?",
+        )
+        empleado = cursor.fetchone()
+        if not empleado:
             flash('Empleado no encontrado', 'error')
             return redirect(url_for('admin.rrhh'))
-
-        fecha_ingreso = emp.FechaIngreso
-        if type(fecha_ingreso) is str:
-            fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
-        elif hasattr(fecha_ingreso, 'date'):
-            fecha_ingreso = fecha_ingreso.date()
-            
-        fecha_salida = datetime.strptime(fecha_egreso, '%Y-%m-%d').date()
-        salario_base = float(emp.SalarioBase)
-        salario_diario = salario_base / 30
-
-        dias_trabajados = (fecha_salida - fecha_ingreso).days
-        anios_completos = dias_trabajados // 365
-        meses_fraccion = (dias_trabajados % 365) // 30
-        
-        dias_vacaciones_totales = dias_trabajados * (30 / 365)
-        dias_vacaciones_pendientes = dias_vacaciones_totales
-
-        cursor.execute("SELECT TOP 6 SalarioBruto FROM Nomina WHERE EmpleadoID = ? ORDER BY PeriodoFin DESC", int(empleado_id))
-        nominas_recientes = [float(r.SalarioBruto) for r in cursor.fetchall()]
-        salario_promedio_6m = sum(nominas_recientes) / len(nominas_recientes) if nominas_recientes else salario_base
-        salario_diario_vacaciones = salario_promedio_6m / 30
-
-        monto_vacaciones = dias_vacaciones_pendientes * salario_diario_vacaciones
-        inss_vacaciones = monto_vacaciones * 0.07
-
-        salarios_6m = nominas_recientes
-        salario_max_6m = max(salarios_6m) if salarios_6m else salario_base
-
-        if fecha_salida.month == 12:
-            inicio_aguinaldo = date(fecha_salida.year, 12, 1)
-        else:
-            inicio_aguinaldo = date(fecha_salida.year - 1, 12, 1)
-            
-        inicio_aguinaldo_real = max(inicio_aguinaldo, fecha_ingreso)
-        dias_aguinaldo = (fecha_salida - inicio_aguinaldo_real).days + 1
-        
-        aguinaldo_proporcional = salario_max_6m * (dias_aguinaldo / 365.0)
-
-        aplica_indemnizacion = motivo in ['Despido Injustificado', 'Renuncia Voluntaria']
-
-        dias_indemnizacion = 0
-        if aplica_indemnizacion:
-            anios_tramo1 = min(anios_completos, 3)
-            dias_tramo1 = anios_tramo1 * 30
-
-            anios_tramo2 = max(0, anios_completos - 3)
-            dias_tramo2 = anios_tramo2 * 20
-
-            dias_indemnizacion = dias_tramo1 + dias_tramo2
-
-            if anios_completos < 3:
-                dias_indemnizacion += meses_fraccion * 2.5
-            else:
-                dias_indemnizacion += meses_fraccion * 1.667
-
-            dias_indemnizacion = min(dias_indemnizacion, 150)
-
-        monto_indemnizacion = dias_indemnizacion * salario_diario
-        ir_indemnizacion = 0
-        if monto_indemnizacion > 500000:
-            ir_indemnizacion = (monto_indemnizacion - 500000) * 0.15
-
-        total_liquidacion = monto_vacaciones - inss_vacaciones + aguinaldo_proporcional + monto_indemnizacion - ir_indemnizacion
-
-        liquidacion_data = {
-            'empleado': emp.NombreCompleto,
-            'fecha_ingreso': fecha_ingreso.strftime('%d/%m/%Y'),
-            'fecha_egreso': fecha_salida.strftime('%d/%m/%Y'),
-            'dias_trabajados': dias_trabajados,
-            'anios': anios_completos,
-            'meses_fraccion': meses_fraccion,
-            'salario_base': salario_base,
-            'salario_diario': round(salario_diario, 2),
-            'vacaciones': {
-                'dias': round(dias_vacaciones_pendientes, 2),
-                'salario_diario_usado': round(salario_diario_vacaciones, 2),
-                'monto_bruto': round(monto_vacaciones, 2),
-                'inss': round(inss_vacaciones, 2),
-                'neto': round(monto_vacaciones - inss_vacaciones, 2)
-            },
-            'aguinaldo': {
-                'salario_max_6m': salario_max_6m,
-                'dias_ciclo': dias_aguinaldo,
-                'monto': round(aguinaldo_proporcional, 2),
-                'nota': 'Exento de INSS e IR'
-            },
-            'indemnizacion': {
-                'aplica': aplica_indemnizacion,
-                'motivo': motivo,
-                'dias': round(dias_indemnizacion, 2),
-                'monto_bruto': round(monto_indemnizacion, 2),
-                'ir': round(ir_indemnizacion, 2),
-                'neto': round(monto_indemnizacion - ir_indemnizacion, 2),
-                'nota': 'Exento INSS. IR exento hasta C$500,000'
-            },
-            'total_liquidacion': round(total_liquidacion, 2),
-            'motivo': motivo
-        }
-
-        return render_template('admin/colilla_liquidacion.html', liquidacion=liquidacion_data, emp=emp, datetime=datetime)
-    except Exception as e:
-        import logging
-        logging.error(f"Internal server error: {e}")
+        data = _obtener_liquidacion(cursor, empleado, fecha_egreso, motivo)
+        return render_template('admin/colilla_liquidacion.html', liquidacion=data, emp=empleado, datetime=datetime)
+    except (ValueError, TypeError) as error:
+        flash(str(error), 'error')
+        return redirect(url_for('admin.rrhh'))
+    except Exception:
+        current_app.logger.exception('Error al generar reporte de liquidación')
         flash('Error interno al generar el reporte.', 'error')
         return redirect(url_for('admin.rrhh'))
     finally:
@@ -760,7 +866,6 @@ def reporte_liquidacion():
 
 
 @admin_bp.route('/api/rrhh/nomina/calcular_batch', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def calcular_nomina_batch():
@@ -775,14 +880,22 @@ def calcular_nomina_batch():
     cursor = conn.cursor()
     
     try:
-        cursor.execute("SELECT Clave, Valor FROM ConfiguracionSistema WHERE Clave IN ('inss_laboral', 'inss_patronal_menos50', 'inss_patronal_mas50', 'inatec', 'ir_tabla')")
+        execute_sp(
+            cursor,
+            'seguridad.sp_ObtenerTasasLaboralesConfig',
+            fallback_sql="SELECT Clave, Valor FROM ConfiguracionSistema WHERE Clave IN ('inss_laboral', 'inss_patronal_menos50', 'inss_patronal_mas50', 'inatec', 'ir_tabla')",
+        )
         config = {r.Clave: r.Valor for r in cursor.fetchall()}
         
         tasa_inss_laboral = float(config.get('inss_laboral', '7.00'))
         tasa_inatec = float(config.get('inatec', '2.00'))
         tabla_ir = json.loads(config.get('ir_tabla', '[]'))
         
-        cursor.execute("SELECT * FROM Empleados WHERE EstadoEmpleado = 'Activo'")
+        execute_sp(
+            cursor,
+            'rrhh.sp_ListarEmpleadosActivosCompletos',
+            fallback_sql="SELECT * FROM Empleados WHERE EstadoEmpleado = 'Activo'",
+        )
         empleados = cursor.fetchall()
         total_empleados = len(empleados)
         
@@ -792,13 +905,30 @@ def calcular_nomina_batch():
         tasa_inss_patronal = float(config.get('inss_patronal_mas50', '22.50')) if total_empleados >= 50 else float(config.get('inss_patronal_menos50', '21.50'))
         
         nomina_ids = []
+        omitidos_contabilizados = 0
+        inicio_dt = date.fromisoformat(str(periodo_inicio))
+        fin_dt = date.fromisoformat(str(periodo_fin))
+        import calendar
+        if inicio_dt.day != 1 or fin_dt != date(inicio_dt.year, inicio_dt.month, calendar.monthrange(inicio_dt.year, inicio_dt.month)[1]):
+            raise ValueError('El cálculo mensual requiere el primer y último día del mismo mes.')
+        if fin_dt < inicio_dt:
+            raise ValueError('El período final no puede ser anterior al inicial.')
+
         for emp in empleados:
+            execute_sp(
+                cursor,
+                'rrhh.sp_VerificarNominaExistenteMensual',
+                (emp.ID, fin_dt, inicio_dt),
+                fallback_sql="SELECT ID, Estado FROM Nomina WHERE EmpleadoID=? AND PeriodoInicio<=? AND PeriodoFin>=? AND SalarioBruto > 0 AND Estado IN ('Contabilizada', 'Pagada')",
+            )
+            if cursor.fetchone():
+                omitidos_contabilizados += 1
+                continue
+            validar_periodo_nomina(cursor, emp.ID, periodo_inicio, periodo_fin)
             salario_base = float(emp.SalarioBase)
             salario_diario = salario_base / 30
             
-            # Cálculo automático de ausencias
             dias_ausentes = obtener_dias_ausentes_auto(cursor, emp.ID, periodo_inicio, periodo_fin)
-            # Factor 1.1667 equivale a 1 día de falta + 1/6 del domingo proporcional (Ley 185)
             monto_ausencias = dias_ausentes * salario_diario * 1.1667
             salario_base_efectivo = max(0, salario_base - monto_ausencias)
             
@@ -816,15 +946,18 @@ def calcular_nomina_batch():
             
             vales_descontados = 0
             if emp.UsuarioID:
-                cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM ValesEmpleados WHERE EmpleadoID = ? AND Descontado = 0", emp.UsuarioID)
+                execute_sp(
+                    cursor,
+                    'contabilidad.sp_ObtenerSumaValesPendientesUsuario',
+                    (emp.UsuarioID,),
+                    fallback_sql="SELECT ISNULL(SUM(Monto), 0) FROM ValesEmpleados WHERE EmpleadoID = ? AND Descontado = 0",
+                )
                 vales_descontados = float(cursor.fetchone()[0])
             
             salario_neto_pre = total_devengado - inss_laboral - ir_mensual
-            pension_alimenticia = 0
-            cursor.execute("SELECT PorcentajeSalarioNeto FROM DeduccionesJudiciales WHERE EmpleadoID = ? AND Activa = 1 AND TipoDeduccion = 'Pension Alimenticia'", emp.ID)
-            deducciones_judiciales = cursor.fetchall()
-            total_porcentaje_pension = min(sum(float(d.PorcentajeSalarioNeto) for d in deducciones_judiciales), 60)
-            pension_alimenticia = salario_neto_pre * (total_porcentaje_pension / 100)
+            pension_alimenticia = calcular_deducciones_judiciales(
+                cursor, emp.ID, salario_neto_pre, periodo_fin
+            )
             
             total_deducciones = inss_laboral + ir_mensual + pension_alimenticia + vales_descontados
             salario_neto = total_devengado - total_deducciones
@@ -832,27 +965,60 @@ def calcular_nomina_batch():
             inss_patronal = total_devengado * (tasa_inss_patronal / 100)
             inatec = total_devengado * (tasa_inatec / 100)
             
-            cursor.execute("""
+            salario_base_efectivo = amount(salario_base_efectivo)
+            total_devengado = salario_base_efectivo
+            inss_laboral = amount(inss_laboral); ir_mensual = amount(ir_mensual)
+            pension_alimenticia = amount(pension_alimenticia); vales_descontados = amount(vales_descontados)
+            total_deducciones = inss_laboral + ir_mensual + pension_alimenticia + vales_descontados
+            salario_neto = amount(total_devengado - total_deducciones, 'Salario neto')
+            inss_patronal = amount(inss_patronal); inatec = amount(inatec)
+            if total_devengado <= 0:
+                raise ValueError(f'Revise las ausencias de {emp.NombreCompleto}: no hay salario devengado.')
+
+            execute_sp(
+                cursor,
+                'rrhh.sp_InsertarNominaBatch',
+                (
+                    emp.ID, periodo_inicio, periodo_fin, salario_base_efectivo, total_devengado,
+                    inss_laboral, ir_mensual, pension_alimenticia, vales_descontados,
+                    total_deducciones, salario_neto, inss_patronal, inatec, current_user.id
+                ),
+                fallback_sql="""
                 INSERT INTO Nomina (EmpleadoID, PeriodoInicio, PeriodoFin, SalarioBruto,
                     HorasExtras, MontoHorasExtras, OtrosIngresos, TotalDevengado,
                     INSSLaboral, IRMensual, PensionAlimenticia, ValesDescontados,
                     TotalDeducciones, SalarioNeto, INSSPatronal, INATEC, Estado, GeneradoPor)
                 OUTPUT INSERTED.ID
-                VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Borrador', ?)
+                VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Contabilizada', ?)
             """,
-                emp.ID, periodo_inicio, periodo_fin, salario_base_efectivo, total_devengado,
-                inss_laboral, ir_mensual, pension_alimenticia, vales_descontados,
-                total_deducciones, salario_neto, inss_patronal, inatec, current_user.id
             )
             nomina_id = cursor.fetchone()[0]
             nomina_ids.append(nomina_id)
+            from app.services.contabilidad_service import ContabilidadService
+            ContabilidadService.contabilizar_nomina(cursor, current_user.id, nomina_id,
+                emp.NombreCompleto, total_devengado, inss_laboral, ir_mensual,
+                inss_patronal, inatec, pension_alimenticia, vales_descontados,
+                salario_neto, emp.Cargo, request.remote_addr, fecha=_fecha_contable_periodo(periodo_fin))
             
             if vales_descontados > 0 and emp.UsuarioID:
-                cursor.execute("UPDATE ValesEmpleados SET Descontado = 1 WHERE EmpleadoID = ? AND Descontado = 0", emp.UsuarioID)
+                execute_sp(
+                    cursor,
+                    'contabilidad.sp_MarcarValesDescontadosUsuario',
+                    (emp.UsuarioID,),
+                    fallback_sql="UPDATE ValesEmpleados SET Descontado = 1 WHERE EmpleadoID = ? AND Descontado = 0",
+                )
+
+        if not nomina_ids and omitidos_contabilizados > 0:
+            raise ValueError('Todos los empleados activos ya tienen su planilla generada y contabilizada para este período.')
 
         conn.commit()
-        return jsonify({'status': 'success', 'mensaje': f'Planilla generada para {total_empleados} empleados.'})
+        procesados = len(nomina_ids)
+        extra = f' ({omitidos_contabilizados} ya estaban contabilizados)' if omitidos_contabilizados else ''
+        return jsonify({'status': 'success', 'mensaje': f'Planilla generada y contabilizada para {procesados} empleados{extra}.'})
         
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)), 400
     except Exception as e:
         conn.rollback()
         import logging
@@ -862,7 +1028,6 @@ def calcular_nomina_batch():
         conn.close()
 
 @admin_bp.route('/api/rrhh/aguinaldo/calcular_batch', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def calcular_aguinaldo_batch():
@@ -873,7 +1038,11 @@ def calcular_aguinaldo_batch():
     cursor = conn.cursor()
     
     try:
-        cursor.execute("SELECT * FROM Empleados WHERE EstadoEmpleado = 'Activo'")
+        execute_sp(
+            cursor,
+            'rrhh.sp_ListarEmpleadosActivosCompletos',
+            fallback_sql="SELECT * FROM Empleados WHERE EstadoEmpleado = 'Activo'",
+        )
         empleados = cursor.fetchall()
         total_empleados = len(empleados)
         
@@ -882,45 +1051,173 @@ def calcular_aguinaldo_batch():
             
         fecha_fin_ciclo = date(anio, 11, 30)
         fecha_inicio_ciclo = date(anio - 1, 12, 1)
+        generados = 0
+        omitidos = 0
         
         for emp in empleados:
+            execute_sp(
+                cursor,
+                'rrhh.sp_VerificarNominaExistenteAguinaldo',
+                (emp.ID, fecha_fin_ciclo, fecha_inicio_ciclo),
+                fallback_sql="SELECT ID, Estado FROM Nomina WHERE EmpleadoID=? AND PeriodoInicio<=? AND PeriodoFin>=? AND SalarioBruto = 0 AND Estado IN ('Contabilizada', 'Pagada')",
+            )
+            if cursor.fetchone():
+                omitidos += 1
+                continue
+            validar_periodo_nomina(cursor, emp.ID, fecha_inicio_ciclo, fecha_fin_ciclo, aguinaldo=True)
             fecha_ingreso = emp.FechaIngreso
             if type(fecha_ingreso) is str:
                 fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
             elif hasattr(fecha_ingreso, 'date'):
                 fecha_ingreso = fecha_ingreso.date()
                 
-            cursor.execute("SELECT TOP 6 SalarioBruto FROM Nomina WHERE EmpleadoID = ? AND PeriodoFin <= ? ORDER BY PeriodoFin DESC", (emp.ID, fecha_fin_ciclo.strftime('%Y-%m-%d')))
+            execute_sp(
+                cursor,
+                'rrhh.sp_ObtenerUltimos6SalariosHastaFecha',
+                (emp.ID, fecha_fin_ciclo.strftime('%Y-%m-%d')),
+                fallback_sql="SELECT TOP 6 SalarioBruto FROM Nomina WHERE EmpleadoID = ? AND PeriodoFin <= ? ORDER BY PeriodoFin DESC",
+            )
             nominas_recientes = [float(r.SalarioBruto) for r in cursor.fetchall()]
             salario_base = float(emp.SalarioBase)
             salario_max_6m = max(nominas_recientes) if nominas_recientes else salario_base
             
             inicio_aguinaldo_real = max(fecha_inicio_ciclo, fecha_ingreso)
             
-            # Solo calcular si ingresó antes del 30 de noviembre del año actual
             if inicio_aguinaldo_real <= fecha_fin_ciclo:
                 dias_aguinaldo = (fecha_fin_ciclo - inicio_aguinaldo_real).days + 1
-                aguinaldo_proporcional = salario_max_6m * (dias_aguinaldo / 365.0)
+                aguinaldo_proporcional = float(amount(salario_max_6m * (dias_aguinaldo / 365.0)))
                 
-                cursor.execute("""
+                execute_sp(
+                    cursor,
+                    'rrhh.sp_InsertarAguinaldoBatch',
+                    (
+                        emp.ID, fecha_inicio_ciclo.strftime('%Y-%m-%d'), fecha_fin_ciclo.strftime('%Y-%m-%d'),
+                        aguinaldo_proporcional, aguinaldo_proporcional, aguinaldo_proporcional, current_user.id
+                    ),
+                    fallback_sql="""
                     INSERT INTO Nomina (EmpleadoID, PeriodoInicio, PeriodoFin, SalarioBruto,
                         HorasExtras, MontoHorasExtras, OtrosIngresos, TotalDevengado,
                         INSSLaboral, IRMensual, PensionAlimenticia, ValesDescontados,
                         TotalDeducciones, SalarioNeto, INSSPatronal, INATEC, Estado, GeneradoPor)
-                    VALUES (?, ?, ?, 0, 0, 0, ?, ?, 0, 0, 0, 0, 0, ?, 0, 0, 'Borrador', ?)
+                    OUTPUT INSERTED.ID
+                    VALUES (?, ?, ?, 0, 0, 0, ?, ?, 0, 0, 0, 0, 0, ?, 0, 0, 'Contabilizada', ?)
                 """,
-                    emp.ID, fecha_inicio_ciclo.strftime('%Y-%m-%d'), fecha_fin_ciclo.strftime('%Y-%m-%d'),
-                    aguinaldo_proporcional, aguinaldo_proporcional, aguinaldo_proporcional, current_user.id
                 )
+                row_ag = cursor.fetchone()
+                nomina_ag_id = row_ag[0] if row_ag else None
+                if nomina_ag_id:
+                    from app.services.contabilidad_service import ContabilidadService
+                    ContabilidadService.contabilizar_aguinaldo(
+                        cursor=cursor,
+                        usuario_id=current_user.id,
+                        nomina_id=nomina_ag_id,
+                        empleado_nombre=emp.NombreCompleto,
+                        monto_aguinaldo=aguinaldo_proporcional,
+                        cargo=emp.Cargo,
+                        ip=request.remote_addr,
+                        fecha=_fecha_contable_periodo(fecha_fin_ciclo)
+                    )
+                generados += 1
+
+        if generados == 0 and omitidos > 0:
+            raise ValueError('La planilla de Aguinaldo ya fue generada y contabilizada para este año fiscal.')
 
         conn.commit()
-        return jsonify({'status': 'success', 'mensaje': f'Planilla de Aguinaldo generada para {total_empleados} empleados.'})
+        return jsonify({'status': 'success', 'mensaje': f'Planilla de Aguinaldo generada y contabilizada para {generados} empleados.'})
         
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)), 400
     except Exception as e:
         conn.rollback()
         import logging
         logging.error(f"Internal server error in aguinaldo batch: {e}")
         return jsonify({'error': f'Error procesando aguinaldo: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/rrhh/nomina/<int:nomina_id>/contabilizar', methods=['POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def contabilizar_nomina_borrador(nomina_id):
+    """Contabiliza una nómina existente que quedó en estado Borrador."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerNominaPorIDParaContabilizar',
+            (nomina_id,),
+            fallback_sql="""
+            SELECT n.ID, n.EmpleadoID, e.NombreCompleto, e.Cargo, e.SalarioBase, e.UsuarioID,
+                   n.PeriodoInicio, n.PeriodoFin, n.SalarioBruto, n.HorasExtras, n.MontoHorasExtras,
+                   n.OtrosIngresos, n.TotalDevengado, n.INSSLaboral, n.IRMensual,
+                   n.PensionAlimenticia, n.ValesDescontados, n.TotalDeducciones,
+                   n.SalarioNeto, n.INSSPatronal, n.INATEC, n.Estado
+            FROM Nomina n WITH (UPDLOCK, HOLDLOCK)
+            JOIN Empleados e ON n.EmpleadoID = e.ID
+            WHERE n.ID = ?
+        """,
+        )
+        nom = cursor.fetchone()
+        if not nom:
+            return jsonify({'error': 'Nómina no encontrada.'}), 404
+        if nom.Estado in ('Contabilizada', 'Pagada'):
+            return jsonify({'error': 'Esta nómina ya está contabilizada.'}), 400
+
+        from app.services.contabilidad_service import ContabilidadService
+        es_aguinaldo = float(nom.SalarioBruto) == 0 and float(nom.OtrosIngresos) > 0
+        if es_aguinaldo:
+            asiento = ContabilidadService.contabilizar_aguinaldo(
+                cursor=cursor,
+                usuario_id=current_user.id,
+                nomina_id=nom.ID,
+                empleado_nombre=nom.NombreCompleto,
+                monto_aguinaldo=float(nom.TotalDevengado),
+                cargo=nom.Cargo,
+                ip=request.remote_addr,
+                fecha=_fecha_contable_periodo(nom.PeriodoFin),
+            )
+        else:
+            asiento = ContabilidadService.contabilizar_nomina(
+                cursor=cursor,
+                usuario_id=current_user.id,
+                nomina_id=nom.ID,
+                empleado_nombre=nom.NombreCompleto,
+                salario_bruto=float(nom.TotalDevengado),
+                inss_laboral=float(nom.INSSLaboral),
+                ir_retenido=float(nom.IRMensual),
+                inss_patronal=float(nom.INSSPatronal),
+                inatec=float(nom.INATEC),
+                pension_alimenticia=float(nom.PensionAlimenticia),
+                vales_descontados=float(nom.ValesDescontados),
+                salario_neto=float(nom.SalarioNeto),
+                cargo=nom.Cargo,
+                ip=request.remote_addr,
+                fecha=_fecha_contable_periodo(nom.PeriodoFin),
+            )
+        execute_sp(
+            cursor,
+            'rrhh.sp_MarcarNominaContabilizada',
+            (nom.ID,),
+            fallback_sql="UPDATE Nomina SET Estado = 'Contabilizada' WHERE ID = ?",
+        )
+        conn.commit()
+        return jsonify({
+            'status': 'success',
+            'mensaje': f"Nómina #{nom.ID} contabilizada ({asiento['numero_comprobante']}).",
+            'asiento_id': asiento['asiento_id'],
+            'numero_comprobante': asiento['numero_comprobante'],
+        })
+    except ValueError as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.error(f"Error contabilizando nómina #{nomina_id}: {e}")
+        return jsonify({'error': f'Error al contabilizar nómina: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -930,12 +1227,17 @@ def calcular_aguinaldo_batch():
 def colilla_pago(nomina_id):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerColillaNominaPorID',
+        (nomina_id,),
+        fallback_sql="""
         SELECT n.*, e.NombreCompleto, e.Cargo, e.Cedula, e.NumeroINSS, e.FechaIngreso
         FROM Nomina n
         JOIN Empleados e ON n.EmpleadoID = e.ID
         WHERE n.ID = ?
-    """, nomina_id)
+    """,
+    )
     nomina = cursor.fetchone()
     conn.close()
     
@@ -984,12 +1286,17 @@ def reporte_inss_patronal():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'rrhh.sp_ReporteINSSPatronalMesAnio',
+        (int(mes), int(anio)),
+        fallback_sql="""
         SELECT e.NombreCompleto, e.NumeroINSS, n.TotalDevengado, n.INSSLaboral, n.INSSPatronal, n.INATEC
         FROM Nomina n
         JOIN Empleados e ON n.EmpleadoID = e.ID
         WHERE MONTH(n.PeriodoInicio) = ? AND YEAR(n.PeriodoInicio) = ?
-    """, int(mes), int(anio))
+    """,
+    )
     registros = cursor.fetchall()
     
     total_laboral = sum(r.INSSLaboral for r in registros)
@@ -1016,13 +1323,18 @@ def reporte_aguinaldo():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'rrhh.sp_ReporteAguinaldoAnio',
+        (int(anio),),
+        fallback_sql="""
         SELECT e.NombreCompleto, e.Cedula, e.FechaIngreso, n.PeriodoFin, n.OtrosIngresos AS AguinaldoMonto
         FROM Nomina n
         JOIN Empleados e ON n.EmpleadoID = e.ID
         WHERE YEAR(n.PeriodoFin) = ? AND n.SalarioBruto = 0 AND n.OtrosIngresos > 0
         ORDER BY e.NombreCompleto
-    """, int(anio))
+    """,
+    )
     
     nominas_aguinaldo = cursor.fetchall()
     
@@ -1030,7 +1342,6 @@ def reporte_aguinaldo():
     total_aguinaldo = 0
     
     for n in nominas_aguinaldo:
-        # Reconstruct calculations
         fecha_ingreso = n.FechaIngreso
         if type(fecha_ingreso) is str:
             fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
@@ -1077,7 +1388,10 @@ def obtener_alertas():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'rrhh.sp_AlertasCumpleanosProximos',
+        fallback_sql="""
         SELECT NombreCompleto, FechaNacimiento
         FROM Empleados
         WHERE EstadoEmpleado = 'Activo' AND FechaNacimiento IS NOT NULL
@@ -1085,17 +1399,22 @@ def obtener_alertas():
               BETWEEN GETDATE() AND DATEADD(day, 15, GETDATE())
            OR DATEADD(year, DATEDIFF(year, FechaNacimiento, GETDATE()) + 1, FechaNacimiento) 
               BETWEEN GETDATE() AND DATEADD(day, 15, GETDATE())
-    """)
+    """,
+    )
     cumples = [{'nombre': r.NombreCompleto, 'fecha': r.FechaNacimiento.strftime('%d/%m')} for r in cursor.fetchall()]
     
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'rrhh.sp_AlertasContratosPorVencer',
+        fallback_sql="""
         SELECT NombreCompleto, FechaFinContrato, TipoContrato
         FROM Empleados
         WHERE EstadoEmpleado = 'Activo' 
           AND TipoContrato = 'Determinado'
           AND FechaFinContrato IS NOT NULL
           AND FechaFinContrato BETWEEN GETDATE() AND DATEADD(day, 30, GETDATE())
-    """)
+    """,
+    )
     contratos = [{'nombre': r.NombreCompleto, 'fecha': r.FechaFinContrato.strftime('%d/%m/%Y')} for r in cursor.fetchall()]
     
     conn.close()
@@ -1107,37 +1426,50 @@ def obtener_alertas():
 def get_empleados_referencias():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT ID, NombreCompleto, FotoPerfil FROM Empleados WHERE EstadoEmpleado = 'Activo' AND FotoPerfil IS NOT NULL")
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerEmpleadosReferenciasFoto',
+        fallback_sql="SELECT ID, NombreCompleto, FotoPerfil FROM Empleados WHERE EstadoEmpleado = 'Activo' AND FotoPerfil IS NOT NULL",
+    )
     empleados = [{'id': r.ID, 'nombre': r.NombreCompleto, 'foto': r.FotoPerfil} for r in cursor.fetchall()]
     conn.close()
     return jsonify(empleados)
 
 
-# La ruta del kiosco fue movida al blueprint app.kiosco (accesible en /kiosco/)
-
-
 @admin_bp.route('/api/rrhh/kiosco/marcar', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def kiosco_marcar():
-    datos = request.json
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        return jsonify(error='Datos inválidos'), 400
     cedula = datos.get('cedula')
     empleado_id = datos.get('empleado_id')
     tipo = datos.get('tipo')
-    fecha = datetime.now().strftime('%Y-%m-%d')
-    hora = datetime.now().strftime('%H:%M:%S')
+    ahora = business_now()
+    fecha = ahora.date().isoformat()
+    hora = ahora.strftime('%H:%M:%S')
     
-    if (not cedula and not empleado_id) or not tipo:
+    if (not cedula and not empleado_id) or tipo not in ('entrada', 'salida'):
         return jsonify({'error': 'Faltan datos'}), 400
         
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         if empleado_id:
-            cursor.execute("SELECT ID, NombreCompleto, HoraEntrada, HoraSalida FROM Empleados WHERE ID = ? AND EstadoEmpleado = 'Activo'", empleado_id)
+            execute_sp(
+                cursor,
+                'rrhh.sp_ObtenerEmpleadoKioscoPorIDBloqueo',
+                (empleado_id,),
+                fallback_sql="SELECT ID, NombreCompleto, HoraEntrada, HoraSalida FROM Empleados WITH (UPDLOCK, HOLDLOCK) WHERE ID = ? AND EstadoEmpleado = 'Activo'",
+            )
         else:
-            cursor.execute("SELECT ID, NombreCompleto, HoraEntrada, HoraSalida FROM Empleados WHERE Cedula = ? AND EstadoEmpleado = 'Activo'", cedula)
+            execute_sp(
+                cursor,
+                'rrhh.sp_ObtenerEmpleadoKioscoPorCedulaBloqueo',
+                (cedula,),
+                fallback_sql="SELECT ID, NombreCompleto, HoraEntrada, HoraSalida FROM Empleados WITH (UPDLOCK, HOLDLOCK) WHERE Cedula = ? AND EstadoEmpleado = 'Activo'",
+            )
             
         empleado = cursor.fetchone()
         if not empleado:
@@ -1146,43 +1478,62 @@ def kiosco_marcar():
         empleado_id = empleado.ID
         nombre = empleado.NombreCompleto
         
-        cursor.execute("SELECT TOP 1 ID, HoraEntrada, ToleranciaMinutos FROM TurnosLaborales WHERE Activo = 1")
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerTurnoLaboralActivoDefecto',
+            fallback_sql="SELECT TOP 1 ID, HoraEntrada, ToleranciaMinutos FROM TurnosLaborales WHERE Activo = 1",
+        )
         turno = cursor.fetchone()
         turno_id = turno.ID if turno else 1
         
-        cursor.execute("SELECT ID, HoraEntrada, HoraSalida FROM Asistencia WHERE EmpleadoID = ? AND Fecha = ?", empleado_id, fecha)
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerAsistenciaPorEmpleadoFechaBloqueo',
+            (empleado_id, fecha),
+            fallback_sql="SELECT ID, HoraEntrada, HoraSalida FROM Asistencia WITH (UPDLOCK, HOLDLOCK) WHERE EmpleadoID = ? AND Fecha = ?",
+        )
         asistencia = cursor.fetchone()
         
         if tipo == 'entrada':
             if asistencia and asistencia.HoraEntrada:
-                return jsonify({'error': f'Hola {nombre}, ya tienes entrada registrada hoy.'}), 400
+                return jsonify(status='success', tipo='entrada', repetido=True,
+                               mensaje=f'Hola {nombre}, ya tienes entrada registrada hoy.')
                 
             estado_entrada = 'A Tiempo'
             from datetime import datetime as dt, timedelta
             
-            # Determinar hora de entrada límite usando horario personalizado o general
             if empleado.HoraEntrada:
-                hora_limite = (dt.combine(dt.today(), empleado.HoraEntrada) + timedelta(minutes=15)).time() # 15 mins tolerancia por defecto para personalizados
+                hora_limite = (dt.combine(ahora.date(), empleado.HoraEntrada) + timedelta(minutes=15)).time()
             elif turno:
-                hora_limite = (dt.combine(dt.today(), turno.HoraEntrada) + timedelta(minutes=turno.ToleranciaMinutos)).time()
+                hora_limite = (dt.combine(ahora.date(), turno.HoraEntrada) + timedelta(minutes=turno.ToleranciaMinutos or 0)).time()
             else:
                 hora_limite = None
 
             if hora_limite:
-                hora_actual = dt.now().time()
+                hora_actual = ahora.time()
                 if hora_actual > hora_limite:
                     estado_entrada = 'Llegada Tardia'
             
             if not asistencia:
-                cursor.execute("""
+                execute_sp(
+                    cursor,
+                    'rrhh.sp_InsertarEntradaAsistenciaConUsuario',
+                    (empleado_id, turno_id, fecha, hora, estado_entrada, current_user.id),
+                    fallback_sql="""
                     INSERT INTO Asistencia (EmpleadoID, TurnoID, Fecha, HoraEntrada, EstadoEntrada, RegistradoPor)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, empleado_id, turno_id, fecha, hora, estado_entrada, current_user.id)
+                """,
+                )
             else:
-                cursor.execute("""
+                execute_sp(
+                    cursor,
+                    'rrhh.sp_ActualizarEntradaAsistenciaConUsuario',
+                    (hora, estado_entrada, turno_id, current_user.id, asistencia.ID),
+                    fallback_sql="""
                     UPDATE Asistencia SET HoraEntrada = ?, EstadoEntrada = ?, TurnoID = ?, RegistradoPor = ?
                     WHERE ID = ?
-                """, hora, estado_entrada, turno_id, current_user.id, asistencia.ID)
+                """,
+                )
                 
             msg = f"¡Bienvenido {nombre}! Entrada registrada."
             
@@ -1190,14 +1541,25 @@ def kiosco_marcar():
             if not asistencia or not asistencia.HoraEntrada:
                 return jsonify({'error': 'No puedes registrar salida sin haber marcado entrada.'}), 400
             if asistencia.HoraSalida:
-                return jsonify({'error': f'Adiós {nombre}, ya tenías tu salida registrada hoy.'}), 400
+                return jsonify(status='success', tipo='salida', repetido=True,
+                               mensaje=f'Adiós {nombre}, ya tenías tu salida registrada hoy.')
+            if not can_mark_exit(asistencia.HoraEntrada, ahora):
+                return jsonify(error='Espera al menos un minuto desde la entrada para marcar salida.'), 409
                 
-            cursor.execute("UPDATE Asistencia SET HoraSalida = ? WHERE ID = ?", hora, asistencia.ID)
+            execute_sp(
+                cursor,
+                'rrhh.sp_ActualizarSalidaAsistenciaPorID',
+                (hora, asistencia.ID),
+                fallback_sql="UPDATE Asistencia SET HoraSalida = ? WHERE ID = ?",
+            )
             msg = f"¡Adiós {nombre}! Salida registrada."
             
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': msg})
         
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)), 400
     except Exception as e:
         conn.rollback()
         import logging
@@ -1214,18 +1576,25 @@ def rrhh_asistencia():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Get active employees
-        cursor.execute("SELECT ID, NombreCompleto, Cargo FROM Empleados WHERE EstadoEmpleado = 'Activo'")
+        execute_sp(
+            cursor,
+            'rrhh.sp_ListarEmpleadosActivosBasico',
+            fallback_sql="SELECT ID, NombreCompleto, Cargo FROM Empleados WHERE EstadoEmpleado = 'Activo'",
+        )
         empleados = cursor.fetchall()
         total_esperados = len(empleados)
         
-        # Get attendance for the selected date
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerAsistenciaConTurnoPorFecha',
+            (fecha_str,),
+            fallback_sql="""
             SELECT a.EmpleadoID, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada, t.Nombre AS Turno
             FROM Asistencia a
             LEFT JOIN TurnosLaborales t ON a.TurnoID = t.ID
             WHERE a.Fecha = ?
-        """, (fecha_str,))
+        """,
+        )
         
         asistencia_raw = cursor.fetchall()
         asistencia_map = {row.EmpleadoID: row for row in asistencia_raw}
@@ -1245,14 +1614,13 @@ def rrhh_asistencia():
             if registro:
                 presentes += 1
                 estado = registro.EstadoEntrada or 'A Tiempo'
-                # Convertir obj a str si no es None
                 try:
                     entrada = registro.HoraEntrada.strftime('%H:%M:%S') if registro.HoraEntrada else '--:--'
-                except:
+                except Exception:
                     entrada = str(registro.HoraEntrada)
                 try:
                     salida = registro.HoraSalida.strftime('%H:%M:%S') if registro.HoraSalida else '--:--'
-                except:
+                except Exception:
                     salida = str(registro.HoraSalida) if registro.HoraSalida else '--:--'
                     
                 turno = registro.Turno or 'General'
@@ -1273,7 +1641,6 @@ def rrhh_asistencia():
             
         ausentes = total_esperados - presentes
         
-        # Ordenar (Ausentes arriba, luego Tardes, luego A Tiempo)
         def sort_key(x):
             order = {'Ausente': 0, 'Llegada Tardia': 1, 'A Tiempo': 2}
             return (order.get(x['estado'], 99), x['nombre'])
@@ -1303,16 +1670,25 @@ def rrhh_asistencia_detalle_json():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT ID, NombreCompleto, Cargo FROM Empleados WHERE EstadoEmpleado = 'Activo'")
+        execute_sp(
+            cursor,
+            'rrhh.sp_ListarEmpleadosActivosBasico',
+            fallback_sql="SELECT ID, NombreCompleto, Cargo FROM Empleados WHERE EstadoEmpleado = 'Activo'",
+        )
         empleados = cursor.fetchall()
         total_esperados = len(empleados)
         
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerAsistenciaConTurnoPorFecha',
+            (fecha_str,),
+            fallback_sql="""
             SELECT a.EmpleadoID, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada, t.Nombre AS Turno
             FROM Asistencia a
             LEFT JOIN TurnosLaborales t ON a.TurnoID = t.ID
             WHERE a.Fecha = ?
-        """, (fecha_str,))
+        """,
+        )
         
         asistencia_raw = cursor.fetchall()
         asistencia_map = {row.EmpleadoID: row for row in asistencia_raw}
@@ -1334,11 +1710,11 @@ def rrhh_asistencia_detalle_json():
                 estado = registro.EstadoEntrada or 'A Tiempo'
                 try:
                     entrada = registro.HoraEntrada.strftime('%H:%M:%S') if registro.HoraEntrada else '--:--'
-                except:
+                except Exception:
                     entrada = str(registro.HoraEntrada)
                 try:
                     salida = registro.HoraSalida.strftime('%H:%M:%S') if registro.HoraSalida else '--:--'
-                except:
+                except Exception:
                     salida = str(registro.HoraSalida) if registro.HoraSalida else '--:--'
                 turno = registro.Turno or 'General'
                 if estado == 'A Tiempo':

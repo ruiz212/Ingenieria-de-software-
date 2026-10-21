@@ -1,11 +1,14 @@
+from app.services.validation import amount, positive_int
+from app.services.currency import official_usd_rate
 # app/admin/routes_pos.py
 from flask import render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
 import json
 import traceback
+import pyodbc
 
 from app.admin import admin_bp
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime
@@ -19,7 +22,10 @@ def arqueos():
     cursor = conn.cursor()
 
     # Arqueos recientes con detalles
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'ventas.sp_ListarArqueosAdmin',
+        fallback_sql="""
         SELECT TOP 50 a.ID, a.TurnoID, u_cajero.NombreCompleto AS Cajero,
                ISNULL(u_verif.NombreCompleto, '—') AS Verificador,
                a.EfectivoContado, a.EfectivoSistema,
@@ -34,7 +40,8 @@ def arqueos():
         JOIN Usuarios u_cajero ON a.UsuarioID = u_cajero.ID
         LEFT JOIN Usuarios u_verif ON a.VerificadoPorID = u_verif.ID
         ORDER BY a.FechaArqueo DESC
-    """)
+    """,
+    )
     arqueos_list = []
     for r in cursor.fetchall():
         dif_total = float(r.DiferenciaEfectivo) + float(r.DiferenciaTransferencias)
@@ -61,21 +68,34 @@ def arqueos():
         })
 
     # Turnos abiertos (para poder iniciar arqueo desde aquí)
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'ventas.sp_DashboardTurnosActivos',
+        fallback_sql="""
         SELECT t.ID, u.NombreCompleto, t.FechaApertura
         FROM TurnosCaja t
         JOIN Usuarios u ON t.UsuarioID = u.ID
         WHERE t.Cerrado = 0
-    """)
+    """,
+    )
     turnos_abiertos = [{'id': r.ID, 'usuario': r.NombreCompleto, 'apertura': r.FechaApertura.strftime('%H:%M:%S')} for r in cursor.fetchall()]
 
     # Umbral de discrepancia
-    cursor.execute("SELECT Valor FROM ConfiguracionSistema WHERE Clave = 'umbral_discrepancia_cordobas'")
+    execute_sp(
+        cursor,
+        'seguridad.sp_ObtenerConfiguracionClave',
+        ('umbral_discrepancia_cordobas',),
+        fallback_sql="SELECT Valor FROM ConfiguracionSistema WHERE Clave = 'umbral_discrepancia_cordobas'",
+        fallback_params=(),
+    )
     row = cursor.fetchone()
     umbral = float(row.Valor) if row else 50.0
 
     # Estadísticas resumen
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'ventas.sp_EstadisticasResumenArqueos',
+        fallback_sql="""
         SELECT
             COUNT(*) AS Total,
             SUM(CASE WHEN ABS(DiferenciaEfectivo) + ABS(DiferenciaTransferencias) < 1 THEN 1 ELSE 0 END) AS Cuadrados,
@@ -84,7 +104,8 @@ def arqueos():
             ISNULL(AVG(ABS(DiferenciaEfectivo)), 0) AS PromDiferencia
         FROM ArqueoCaja
         WHERE FechaArqueo >= DATEADD(DAY, -30, GETDATE())
-    """)
+    """,
+    )
     stats_row = cursor.fetchone()
     estadisticas = {
         'total': stats_row.Total,
@@ -100,18 +121,15 @@ def arqueos():
         umbral=umbral, estadisticas=estadisticas)
 
 
-
 @admin_bp.route('/api/arqueo/etapa1-conteo', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Estandar', 'Admin', 'SuperAdmin')
 def arqueo_etapa1_conteo():
     """Etapa 1: Cajero envía conteo desglosado por denominación."""
     datos = request.json
-    efectivo_contado = float(datos.get('efectivo_contado', 0))
-    transferencias_contadas = float(datos.get('transferencias_contadas', 0))
-    dolares_contados = float(datos.get('dolares_contados', 0))
-    tipo_cambio = float(datos.get('tipo_cambio', 0))
+    efectivo_contado = amount(datos.get('efectivo_contado', 0))
+    transferencias_contadas = amount(datos.get('transferencias_contadas', 0))
+    dolares_contados = amount(datos.get('dolares_contados', 0))
     observaciones = datos.get('observaciones', '')
     denominaciones = datos.get('denominaciones', [])
 
@@ -119,81 +137,135 @@ def arqueo_etapa1_conteo():
     cursor = conn.cursor()
     try:
         # Buscar turno activo del usuario
-        cursor.execute("SELECT ID FROM TurnosCaja WHERE UsuarioID = ? AND Cerrado = 0", current_user.id)
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerTurnoActivoParaVenta',
+            (current_user.id,),
+            fallback_sql="SELECT ID FROM TurnosCaja WITH(UPDLOCK,HOLDLOCK) WHERE UsuarioID = ? AND Cerrado = 0",
+        )
         turno_row = cursor.fetchone()
         if not turno_row:
             return jsonify({'error': 'No tienes un turno activo para cerrar'}), 400
 
         turno_id = turno_row.ID
+        execute_sp(
+            cursor,
+            'ventas.sp_VerificarArqueoPendienteTurno',
+            (turno_id,),
+            fallback_sql="SELECT ID FROM ArqueoCaja WHERE TurnoID=? AND EstadoArqueo IN ('Pendiente','Verificado')",
+        )
+        if cursor.fetchone():
+            return jsonify(error='Ya existe un arqueo pendiente para este turno.'), 409
 
         # Calcular valores del sistema
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'ventas.sp_CalcularValoresSistemaTurno',
+            (turno_id,),
+            fallback_sql="""
             SELECT
-                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo' THEN p.Monto ELSE 0 END), 0) AS EfectivoCordobasSistema,
-                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo USD' THEN p.Monto ELSE 0 END), 0) AS EfectivoUSDSistema,
+                ISNULL(SUM(CASE WHEN (p.MetodoPago = 'Efectivo' OR (p.MetodoPago='Efectivo USD' AND p.MonedaRegistro='NIO')) THEN p.Monto ELSE 0 END), 0) AS EfectivoCordobasSistema,
+                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo USD' AND p.MonedaRegistro<>'NIO' THEN p.Monto ELSE 0 END), 0) AS EfectivoUSDSistema,
                 ISNULL(SUM(CASE WHEN p.MetodoPago = 'Transferencia' THEN p.Monto ELSE 0 END), 0) AS TransferenciasSistema
             FROM Pagos p
-            JOIN Facturas f ON p.FacturaID = f.ID
-            WHERE f.TurnoID = ?
-        """, turno_id)
+            WHERE p.TurnoReceptorID = ?
+        """,
+        )
         row = cursor.fetchone()
 
-        efectivo_cordobas = float(row.EfectivoCordobasSistema)
-        efectivo_usd_sistema = float(row.EfectivoUSDSistema)
-        transferencias_sistema = float(row.TransferenciasSistema)
+        efectivo_cordobas = amount(row.EfectivoCordobasSistema)
+        efectivo_usd_sistema = amount(row.EfectivoUSDSistema)
+        transferencias_sistema = amount(row.TransferenciasSistema)
+
+        tipo_cambio = official_usd_rate(cursor)
 
         # Convertir USD del sistema a córdobas
-        efectivo_sistema = efectivo_cordobas + (efectivo_usd_sistema * tipo_cambio if tipo_cambio > 0 else 0)
+        efectivo_sistema = amount(efectivo_cordobas + efectivo_usd_sistema * tipo_cambio)
 
         # Total contado incluyendo dólares convertidos
-        dolares_en_cordobas = dolares_contados * tipo_cambio if tipo_cambio > 0 else 0
-        efectivo_total_contado = efectivo_contado + dolares_en_cordobas
+        dolares_en_cordobas = amount(dolares_contados * tipo_cambio)
+        efectivo_total_contado = amount(efectivo_contado + dolares_en_cordobas)
 
         # Diferencias
         dif_efectivo = efectivo_total_contado - efectivo_sistema
         dif_transferencias = transferencias_contadas - transferencias_sistema
 
         # Determinar si requiere justificación
-        cursor.execute("SELECT Valor FROM ConfiguracionSistema WHERE Clave = 'umbral_discrepancia_cordobas'")
+        execute_sp(
+            cursor,
+            'seguridad.sp_ObtenerConfiguracionClave',
+            ('umbral_discrepancia_cordobas',),
+            fallback_sql="SELECT Valor FROM ConfiguracionSistema WHERE Clave = 'umbral_discrepancia_cordobas'",
+            fallback_params=(),
+        )
         umbral_row = cursor.fetchone()
-        umbral = float(umbral_row.Valor) if umbral_row else 50.0
+        umbral = amount(umbral_row.Valor if umbral_row else 50)
         requiere_justificacion = abs(dif_efectivo) >= umbral or abs(dif_transferencias) >= umbral
 
         # Total ventas del turno
-        cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE TurnoID = ?", turno_id)
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerTotalVentasEmitidasTurno',
+            (turno_id,),
+            fallback_sql="SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND TurnoID = ?",
+        )
         total_ventas = float(cursor.fetchone()[0])
 
         # Insertar arqueo en estado Pendiente
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'ventas.sp_InsertarArqueoEtapa1',
+            (
+                turno_id, current_user.id, efectivo_total_contado, transferencias_contadas,
+                dolares_contados, tipo_cambio if tipo_cambio > 0 else None,
+                efectivo_sistema, transferencias_sistema,
+                dif_efectivo, dif_transferencias, observaciones,
+                1 if requiere_justificacion else 0
+            ),
+            fallback_sql="""
             INSERT INTO ArqueoCaja (TurnoID, UsuarioID, EfectivoContado, TransferenciasContadas,
                 DolaresContados, TipoCambioUsado, EfectivoSistema, TransferenciasSistema,
                 DiferenciaEfectivo, DiferenciaTransferencias, Observaciones,
                 EstadoArqueo, RequiereJustificacion)
             OUTPUT INSERTED.ID
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?)
-        """, turno_id, current_user.id, efectivo_contado, transferencias_contadas,
-            dolares_contados, tipo_cambio if tipo_cambio > 0 else None,
-            efectivo_sistema, transferencias_sistema,
-            dif_efectivo, dif_transferencias, observaciones,
-            1 if requiere_justificacion else 0)
+        """,
+        )
 
         arqueo_id = cursor.fetchone()[0]
 
         # Insertar detalle por denominación
         for d in denominaciones:
             if int(d.get('cantidad', 0)) > 0:
-                cursor.execute("""
+                execute_sp(
+                    cursor,
+                    'ventas.sp_InsertarArqueoDenominacion',
+                    (arqueo_id, d.get('tipo', 'NIO'), float(d.get('denominacion', 0)), int(d.get('cantidad', 0))),
+                    fallback_sql="""
                     INSERT INTO ArqueoDetalleDenominacion (ArqueoID, TipoMoneda, Denominacion, Cantidad)
                     VALUES (?, ?, ?, ?)
-                """, arqueo_id, d.get('tipo', 'NIO'), float(d.get('denominacion', 0)), int(d.get('cantidad', 0)))
+                """,
+                )
 
         # Audit log
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'ventas.sp_InsertarArqueoAuditLog',
+            (
+                arqueo_id, current_user.id, 'CONTEO_REGISTRADO',
+                f'Efectivo contado: C${efectivo_total_contado:.2f} | Sistema: C${efectivo_sistema:.2f} | Dif: C${dif_efectivo:.2f}',
+                request.remote_addr
+            ),
+            fallback_sql="""
             INSERT INTO ArqueoAuditLog (ArqueoID, UsuarioID, Accion, Detalle, DireccionIP)
             VALUES (?, ?, 'CONTEO_REGISTRADO', ?, ?)
-        """, arqueo_id, current_user.id,
-            f'Efectivo contado: C${efectivo_total_contado:.2f} | Sistema: C${efectivo_sistema:.2f} | Dif: C${dif_efectivo:.2f}',
-            request.remote_addr)
+        """,
+            fallback_params=(
+                arqueo_id, current_user.id,
+                f'Efectivo contado: C${efectivo_total_contado:.2f} | Sistema: C${efectivo_sistema:.2f} | Dif: C${dif_efectivo:.2f}',
+                request.remote_addr
+            ),
+        )
 
         conn.commit()
         return jsonify({
@@ -201,16 +273,25 @@ def arqueo_etapa1_conteo():
             'mensaje': 'Conteo registrado. Pendiente de verificación de gerencia.',
             'arqueo_id': arqueo_id,
             'arqueo': {
-                'efectivo_sistema': efectivo_sistema,
-                'transferencias_sistema': transferencias_sistema,
-                'efectivo_contado': efectivo_total_contado,
-                'transferencias_contadas': transferencias_contadas,
-                'diferencia_efectivo': dif_efectivo,
-                'diferencia_transferencias': dif_transferencias,
+                'efectivo_sistema': float(efectivo_sistema),
+                'transferencias_sistema': float(transferencias_sistema),
+                'efectivo_contado': float(efectivo_total_contado),
+                'transferencias_contadas': float(transferencias_contadas),
+                'diferencia_efectivo': float(dif_efectivo),
+                'diferencia_transferencias': float(dif_transferencias),
+                'tipo_cambio_aplicado': float(tipo_cambio),
                 'total_ventas': total_ventas,
                 'requiere_justificacion': requiere_justificacion
             }
         })
+    except ValueError as error:
+        conn.rollback()
+        return jsonify(error=str(error)), 400
+    except pyodbc.Error as error:
+        conn.rollback()
+        if '51021' in str(error):
+            return jsonify(error='Existen movimientos históricos sin receptor de caja. Admin debe conciliar los recibos antes del arqueo.'), 409
+        raise
     except Exception as e:
         conn.rollback()
         import logging
@@ -220,9 +301,7 @@ def arqueo_etapa1_conteo():
         conn.close()
 
 
-
 @admin_bp.route('/api/arqueo/<int:arqueo_id>/verificar', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def arqueo_etapa2_verificar(arqueo_id):
@@ -234,7 +313,12 @@ def arqueo_etapa2_verificar(arqueo_id):
     cursor = conn.cursor()
     try:
         # Obtener el arqueo
-        cursor.execute("SELECT UsuarioID, RequiereJustificacion, EstadoArqueo FROM ArqueoCaja WHERE ID = ?", arqueo_id)
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerArqueoParaVerificarBloqueo',
+            (arqueo_id,),
+            fallback_sql="SELECT UsuarioID, RequiereJustificacion, EstadoArqueo FROM ArqueoCaja WITH(UPDLOCK,HOLDLOCK) WHERE ID = ?",
+        )
         arqueo = cursor.fetchone()
         if not arqueo:
             return jsonify({'error': 'Arqueo no encontrado'}), 404
@@ -251,43 +335,85 @@ def arqueo_etapa2_verificar(arqueo_id):
             return jsonify({'error': 'Este arqueo tiene discrepancias significativas. Las notas de justificación son obligatorias.'}), 400
 
         # Actualizar el arqueo
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'ventas.sp_MarcarArqueoVerificado',
+            (current_user.id, notas_discrepancia if notas_discrepancia.strip() else None, arqueo_id),
+            fallback_sql="""
             UPDATE ArqueoCaja SET
                 VerificadoPorID = ?,
                 FechaVerificacion = GETDATE(),
                 EstadoArqueo = 'Verificado',
                 NotasDiscrepancia = ?
             WHERE ID = ?
-        """, current_user.id, notas_discrepancia if notas_discrepancia.strip() else None, arqueo_id)
+        """,
+        )
 
         # Cerrar el turno
-        cursor.execute("SELECT TurnoID FROM ArqueoCaja WHERE ID = ?", arqueo_id)
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerTurnoIDArqueoBloqueo',
+            (arqueo_id,),
+            fallback_sql="SELECT TurnoID FROM ArqueoCaja WITH(UPDLOCK,HOLDLOCK) WHERE ID = ?",
+        )
         turno_id = cursor.fetchone().TurnoID
 
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerMontosSistemaArqueo',
+            (arqueo_id,),
+            fallback_sql="""
             SELECT EfectivoSistema, TransferenciasSistema FROM ArqueoCaja WHERE ID = ?
-        """, arqueo_id)
+        """,
+        )
         ar = cursor.fetchone()
 
-        cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE TurnoID = ?", turno_id)
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerTotalVentasEmitidasTurno',
+            (turno_id,),
+            fallback_sql="SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND TurnoID = ?",
+        )
         total_ventas = float(cursor.fetchone()[0])
 
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'ventas.sp_CerrarTurnoCajaEnArqueo',
+            (float(ar.EfectivoSistema), float(ar.TransferenciasSistema), total_ventas, turno_id),
+            fallback_sql="""
             UPDATE TurnosCaja SET Cerrado = 1, FechaCierre = GETDATE(),
                 EfectivoCalculado = ?, TransferenciasCalculadas = ?, TotalVentaNeta = ?
             WHERE ID = ?
-        """, float(ar.EfectivoSistema), float(ar.TransferenciasSistema), total_ventas, turno_id)
+        """,
+        )
 
         # Marcar como cerrado
-        cursor.execute("UPDATE ArqueoCaja SET EstadoArqueo = 'Cerrado' WHERE ID = ?", arqueo_id)
+        execute_sp(
+            cursor,
+            'ventas.sp_MarcarArqueoCerrado',
+            (arqueo_id,),
+            fallback_sql="UPDATE ArqueoCaja SET EstadoArqueo = 'Cerrado' WHERE ID = ?",
+        )
 
         # Audit log
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'ventas.sp_InsertarArqueoAuditLog',
+            (
+                arqueo_id, current_user.id, 'VERIFICADO_Y_CERRADO',
+                f'Verificado por {current_user.nombre_completo}. Turno {turno_id} cerrado.',
+                request.remote_addr
+            ),
+            fallback_sql="""
             INSERT INTO ArqueoAuditLog (ArqueoID, UsuarioID, Accion, Detalle, DireccionIP)
             VALUES (?, ?, 'VERIFICADO_Y_CERRADO', ?, ?)
-        """, arqueo_id, current_user.id,
-            f'Verificado por {current_user.nombre_completo}. Turno {turno_id} cerrado.',
-            request.remote_addr)
+        """,
+            fallback_params=(
+                arqueo_id, current_user.id,
+                f'Verificado por {current_user.nombre_completo}. Turno {turno_id} cerrado.',
+                request.remote_addr
+            ),
+        )
 
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Arqueo verificado y turno cerrado exitosamente.'})
@@ -300,7 +426,6 @@ def arqueo_etapa2_verificar(arqueo_id):
         conn.close()
 
 
-
 @admin_bp.route('/api/arqueo/<int:arqueo_id>/detalle', methods=['GET'])
 @login_required
 @roles_required('Admin', 'SuperAdmin')
@@ -310,22 +435,32 @@ def arqueo_detalle(arqueo_id):
     cursor = conn.cursor()
 
     # Denominaciones
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'ventas.sp_ObtenerDenominacionesArqueo',
+        (arqueo_id,),
+        fallback_sql="""
         SELECT TipoMoneda, Denominacion, Cantidad, Subtotal
         FROM ArqueoDetalleDenominacion WHERE ArqueoID = ?
         ORDER BY TipoMoneda, Denominacion DESC
-    """, arqueo_id)
+    """,
+    )
     denominaciones = [{'tipo': r.TipoMoneda, 'denominacion': float(r.Denominacion),
                        'cantidad': r.Cantidad, 'subtotal': float(r.Subtotal)} for r in cursor.fetchall()]
 
     # Audit log
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'ventas.sp_ObtenerAuditLogArqueo',
+        (arqueo_id,),
+        fallback_sql="""
         SELECT al.Accion, al.Detalle, u.NombreCompleto, al.FechaAccion
         FROM ArqueoAuditLog al
         JOIN Usuarios u ON al.UsuarioID = u.ID
         WHERE al.ArqueoID = ?
         ORDER BY al.FechaAccion
-    """, arqueo_id)
+    """,
+    )
     audit_log = [{'accion': r.Accion, 'detalle': r.Detalle, 'usuario': r.NombreCompleto,
                   'fecha': r.FechaAccion.strftime('%d/%m/%Y %H:%M:%S')} for r in cursor.fetchall()]
 
@@ -337,101 +472,10 @@ def arqueo_detalle(arqueo_id):
 
 
 @admin_bp.route('/api/turno/cerrar', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Estandar', 'Admin', 'SuperAdmin')
 def cerrar_turno():
-    """Cierre de turno con arqueo ciego de caja."""
-    datos = request.json
-    efectivo_contado = float(datos.get('efectivo_contado', 0))
-    transferencias_contadas = float(datos.get('transferencias_contadas', 0))
-    dolares_contados = float(datos.get('dolares_contados', 0))
-    tipo_cambio = float(datos.get('tipo_cambio', 0))
-    observaciones = datos.get('observaciones', '')
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # Buscar turno activo del usuario
-        cursor.execute("SELECT ID FROM TurnosCaja WHERE UsuarioID = ? AND Cerrado = 0", current_user.id)
-        turno_row = cursor.fetchone()
-        if not turno_row:
-            return jsonify({'error': 'No tienes un turno activo para cerrar'}), 400
-
-        turno_id = turno_row.ID
-
-        # Calcular valores del sistema
-        # Se suma el Efectivo en córdobas y el Efectivo USD convertido a córdobas según el tipo_cambio ingresado para el arqueo.
-        cursor.execute("""
-            SELECT 
-                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo' THEN p.Monto ELSE 0 END), 0) AS EfectivoCordobasSistema,
-                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo USD' THEN p.Monto ELSE 0 END), 0) AS EfectivoUSDSistema,
-                ISNULL(SUM(CASE WHEN p.MetodoPago = 'Transferencia' THEN p.Monto ELSE 0 END), 0) AS TransferenciasSistema
-            FROM Pagos p
-            JOIN Facturas f ON p.FacturaID = f.ID
-            WHERE f.TurnoID = ?
-        """, turno_id)
-        row = cursor.fetchone()
-        
-        efectivo_cordobas = float(row.EfectivoCordobasSistema)
-        efectivo_usd_sistema = float(row.EfectivoUSDSistema)
-        transferencias_sistema = float(row.TransferenciasSistema)
-
-        # Convertir los dólares registrados en sistema a córdobas
-        efectivo_sistema = efectivo_cordobas + (efectivo_usd_sistema * tipo_cambio if tipo_cambio > 0 else 0)
-
-        # Convertir dólares a córdobas
-        dolares_en_cordobas = dolares_contados * tipo_cambio if tipo_cambio > 0 else 0
-        efectivo_total_contado = efectivo_contado + dolares_en_cordobas
-
-        # Calcular diferencias
-        dif_efectivo = efectivo_total_contado - efectivo_sistema
-        dif_transferencias = transferencias_contadas - transferencias_sistema
-
-        # Total venta neta del turno
-        cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE TurnoID = ?", turno_id)
-        total_ventas = float(cursor.fetchone()[0])
-
-        # Insertar arqueo
-        cursor.execute("""
-            INSERT INTO ArqueoCaja (TurnoID, UsuarioID, EfectivoContado, TransferenciasContadas, 
-                DolaresContados, TipoCambioUsado, EfectivoSistema, TransferenciasSistema,
-                DiferenciaEfectivo, DiferenciaTransferencias, Observaciones)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, turno_id, current_user.id, efectivo_contado, transferencias_contadas,
-            dolares_contados, tipo_cambio if tipo_cambio > 0 else None,
-            efectivo_sistema, transferencias_sistema,
-            dif_efectivo, dif_transferencias, observaciones)
-
-        # Cerrar turno
-        cursor.execute("""
-            UPDATE TurnosCaja SET Cerrado = 1, FechaCierre = GETDATE(), 
-                EfectivoCalculado = ?, TransferenciasCalculadas = ?, TotalVentaNeta = ?
-            WHERE ID = ?
-        """, efectivo_sistema, transferencias_sistema, total_ventas, turno_id)
-
-        conn.commit()
-        return jsonify({
-            'status': 'success',
-            'mensaje': 'Turno cerrado y arqueo registrado',
-            'arqueo': {
-                'efectivo_sistema': efectivo_sistema,
-                'transferencias_sistema': transferencias_sistema,
-                'efectivo_contado': efectivo_total_contado,
-                'transferencias_contadas': transferencias_contadas,
-                'diferencia_efectivo': dif_efectivo,
-                'diferencia_transferencias': dif_transferencias,
-                'total_ventas': total_ventas
-            }
-        })
-    except Exception as e:
-        conn.rollback()
-        import logging
-        logging.error(f"Internal server error: {e}")
-        return jsonify({'error': 'Error interno del servidor al procesar la solicitud.'}), 500
-    finally:
-        conn.close()
-
+    return arqueo_etapa1_conteo()
 
 
 @admin_bp.route('/api/tipo_cambio', methods=['GET'])
@@ -440,7 +484,13 @@ def obtener_tipo_cambio():
     """Obtiene el tipo de cambio configurado."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT Valor FROM ConfiguracionSistema WHERE Clave = 'tipo_cambio_usd'")
+    execute_sp(
+        cursor,
+        'seguridad.sp_ObtenerConfiguracionClave',
+        ('tipo_cambio_usd',),
+        fallback_sql="SELECT Valor FROM ConfiguracionSistema WHERE Clave = 'tipo_cambio_usd'",
+        fallback_params=(),
+    )
     row = cursor.fetchone()
     conn.close()
     tc = float(row.Valor) if row else 36.6243
@@ -453,26 +503,29 @@ def obtener_tipo_cambio():
 
 
 @admin_bp.route('/api/mermas', methods=['POST'])
-@csrf.exempt
 @login_required
 @roles_required('Estandar', 'Admin', 'SuperAdmin')
 def registrar_merma():
     """Registra una merma de producto."""
     datos = request.json
-    producto_id = datos.get('producto_id')
-    cantidad = datos.get('cantidad')
+    producto_id = positive_int(datos.get('producto_id'), 'Producto')
+    cantidad = positive_int(datos.get('cantidad'), 'Cantidad')
     motivo = datos.get('motivo')
     observaciones = datos.get('observaciones', '')
 
+    if motivo not in ('Pan Frio', 'Defectuoso', 'Merma Horneado', 'Vencido', 'Otro'):
+        return jsonify(error='Seleccione un motivo de merma válido.'), 400
     if not all([producto_id, cantidad, motivo]):
         return jsonify({'error': 'Faltan datos requeridos'}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            "INSERT INTO Mermas (ProductoID, Cantidad, Motivo, Observaciones, UsuarioID) VALUES (?, ?, ?, ?, ?)",
-            int(producto_id), int(cantidad), motivo, observaciones, current_user.id
+        execute_sp(
+            cursor,
+            'produccion.sp_RegistrarMerma',
+            (int(producto_id), int(cantidad), motivo, observaciones, current_user.id),
+            fallback_sql="INSERT INTO Mermas (ProductoID, Cantidad, Motivo, Observaciones, UsuarioID) VALUES (?, ?, ?, ?, ?)",
         )
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Merma registrada'})
@@ -485,7 +538,6 @@ def registrar_merma():
         conn.close()
 
 
-
 @admin_bp.route('/api/mermas', methods=['GET'])
 @login_required
 @roles_required('Admin', 'SuperAdmin')
@@ -493,14 +545,18 @@ def obtener_mermas():
     """Obtiene el historial de mermas."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'produccion.sp_ListarMermasAdmin',
+        fallback_sql="""
         SELECT TOP 100 m.ID, p.Nombre AS Producto, m.Cantidad, m.Motivo, 
                m.Observaciones, u.NombreCompleto AS RegistradoPor, m.Fecha
         FROM Mermas m
         JOIN Productos p ON m.ProductoID = p.ID
         JOIN Usuarios u ON m.UsuarioID = u.ID
         ORDER BY m.Fecha DESC
-    """)
+    """,
+    )
     mermas = [{
         'id': r.ID, 'producto': r.Producto, 'cantidad': r.Cantidad,
         'motivo': r.Motivo, 'observaciones': r.Observaciones or '',
@@ -509,10 +565,3 @@ def obtener_mermas():
     } for r in cursor.fetchall()]
     conn.close()
     return jsonify(mermas)
-
-
-# ============================================================
-# MÓDULO DE ESTADÍSTICA Y REPORTES
-# ============================================================
-
-

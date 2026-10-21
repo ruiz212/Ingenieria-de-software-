@@ -237,7 +237,7 @@
     font-weight: 600;
     padding: 1rem 2.5rem;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: var(--transition-interactive, background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease);
 }
 
 .c-btn-glow:hover:not(:disabled) {

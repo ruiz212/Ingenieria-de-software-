@@ -1,4 +1,5 @@
 {% extends 'admin_base.html' %}
+{% block body_class %}page-fidelizacion{% endblock %}
 
 {% block title %}Fidelización de Clientes | Brajher's Cake{% endblock %}
 {% block page_title %}Fidelización de Clientes{% endblock %}
@@ -32,14 +33,14 @@
         </div>
     </div>
 
-    <div class="metric-card" style="background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark)); color: white; border-color: transparent;">
-        <div class="metric-icon" style="background: rgba(255,255,255,0.2); color: white;">
+    <div class="metric-card fidelizacion-metric-card">
+        <div class="metric-icon fidelizacion-metric-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         </div>
         <div class="metric-body">
-            <div class="metric-title" style="color: rgba(255,255,255,0.8);">Ticket Promedio VIP</div>
-            <div class="metric-value" style="color: white;">C${{ "%.2f"|format(metricas.promedios_nivel.get('VIP', 0)) }}</div>
-            <div class="metric-sub" style="color: rgba(255,255,255,0.9);">vs C${{ "%.2f"|format(metricas.promedios_nivel.get('Nuevo', 0)) }} de clientes Nuevos</div>
+            <div class="metric-title fidelizacion-metric-title">Ticket Promedio VIP</div>
+            <div class="metric-value fidelizacion-metric-value">C${{ "%.2f"|format(metricas.promedios_nivel.get('VIP', 0)) }}</div>
+            <div class="metric-sub fidelizacion-metric-sub">vs C${{ "%.2f"|format(metricas.promedios_nivel.get('Nuevo', 0)) }} de clientes Nuevos</div>
         </div>
     </div>
 </div>
@@ -51,12 +52,12 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             Directorio de Clientes
         </h3>
-        <div class="form-search" style="width: 300px;">
+        <div class="form-search fidelizacion-form-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="text" id="buscador-clientes" class="form-input" placeholder="Buscar por nombre o teléfono...">
         </div>
     </div>
-    
+
     <div class="panel-body panel-body-flush">
         <div class="table-responsive">
             <table class="data-table" id="tabla-clientes">
@@ -68,6 +69,7 @@
                         <th>Compras Realizadas</th>
                         <th>Última Compra</th>
                         <th>Total Gastado (Histórico)</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -87,10 +89,11 @@
                         <td class="fw-700">{{ c.total_compras }}</td>
                         <td class="cell-muted">{{ c.ultima_compra }}</td>
                         <td class="cell-money">C${{ "%.2f"|format(c.total_gastado) }}</td>
+                        <td><button type="button" class="btn btn-outline btn-sm btn-cliente-detalle" data-id="{{ c.id }}">Ver / editar</button></td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6">
+                        <td colspan="7">
                             <div class="empty-state">
                                 <div class="empty-state-icon">👥</div>
                                 <p>No hay clientes registrados con compras.</p>
@@ -101,6 +104,22 @@
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<div id="cliente-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cliente-modal-title">
+    <div class="modal-content cliente-modal-content">
+        <h2 id="cliente-modal-title">Editar cliente</h2>
+        <p class="subtitle">Actualiza los datos de contacto y consulta el historial de compras.</p>
+        <form id="cliente-form" class="cliente-form">
+            <input type="hidden" id="cliente-id">
+            <div class="form-group"><label class="form-label" for="cliente-nombre">Nombre</label><input id="cliente-nombre" class="form-input" required maxlength="100"></div>
+            <div class="form-group"><label class="form-label" for="cliente-apellidos">Apellidos</label><input id="cliente-apellidos" class="form-input" maxlength="100"></div>
+            <div class="form-group"><label class="form-label" for="cliente-telefono">Teléfono</label><input id="cliente-telefono" class="form-input" required maxlength="30"></div>
+            <div class="form-group"><label class="form-label" for="cliente-nivel">Nivel</label><select id="cliente-nivel" class="form-select"><option value="1">Nuevo</option><option value="2">Frecuente</option><option value="3">VIP</option></select></div>
+            <div id="cliente-historial" class="cliente-history"></div>
+            <div class="modal-actions"><button type="button" class="btn btn-outline" id="cliente-cerrar">Cancelar</button><button type="submit" class="btn btn-primary">Guardar cambios</button></div>
+        </form>
     </div>
 </div>
 {% endblock %}
@@ -123,5 +142,44 @@
             }
         });
     });
+
+    const modal = document.getElementById('cliente-modal');
+    const historyBox = document.getElementById('cliente-historial');
+    document.querySelectorAll('.btn-cliente-detalle').forEach(button => {
+        button.addEventListener('click', async () => {
+            const response = await fetch(`/admin/api/fidelizacion/clientes/${button.dataset.id}`);
+            if (!response.ok) return;
+            const data = (await response.json()).cliente;
+            document.getElementById('cliente-id').value = data.id;
+            document.getElementById('cliente-nombre').value = data.nombre || '';
+            document.getElementById('cliente-apellidos').value = data.apellidos || '';
+            document.getElementById('cliente-telefono').value = data.telefono || '';
+            document.getElementById('cliente-nivel').value = data.nivel_id;
+            historyBox.innerHTML = '<strong>Historial</strong><br>' + (data.historial.length
+                ? data.historial.map(item => `${item.numero || item.id}: C$${Number(item.total).toFixed(2)} (${item.estado})`).join('<br>')
+                : 'Sin compras registradas.');
+            modal.classList.remove('hidden');
+        });
+    });
+    document.getElementById('cliente-cerrar').addEventListener('click', () => modal.classList.add('hidden'));
+    document.getElementById('cliente-form').addEventListener('submit', async event => {
+        event.preventDefault();
+        const id = document.getElementById('cliente-id').value;
+        const payload = {
+            nombre: document.getElementById('cliente-nombre').value,
+            apellidos: document.getElementById('cliente-apellidos').value,
+            telefono: document.getElementById('cliente-telefono').value,
+            nivel_id: Number(document.getElementById('cliente-nivel').value)
+        };
+        const response = await fetch(`/admin/api/fidelizacion/clientes/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content},
+            body: JSON.stringify(payload)
+        });
+        if (response.ok) window.location.reload();
+        else if (typeof showToast === 'function') showToast((await response.json()).error || 'No se pudo actualizar.', true);
+    });
 </script>
 {% endblock %}
+
+{% block page_styles %}{{ super() }}<link rel="stylesheet" href="{{ css_url('pages/admin/fidelizacion') }}">{% endblock %}

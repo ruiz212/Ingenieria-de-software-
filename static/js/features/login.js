@@ -21,6 +21,9 @@ export const LoginController = (() => {
             DOM.passwordInput.type = 'password';
             DOM.eyeIcon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
         }
+        const visible = DOM.passwordInput.type === 'text';
+        DOM.toggleBtn.setAttribute('aria-label', visible ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        DOM.toggleBtn.setAttribute('aria-pressed', String(visible));
     };
 
     // 3. Setup de Eventos

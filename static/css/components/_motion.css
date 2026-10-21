@@ -1,0 +1,177 @@
+/* ==========================================================================
+   SISTEMA DE MOVIMIENTO E INTERACCIÓN — Brajher's Cake / Panadería Amada
+   1. Keyframes de entrada orquestada (ui-enter, ui-fade, ui-scale-in)
+   2. Coreografía de entrada única por vista (.dashboard-intro, .ui-enter)
+   3. Micro-interacciones táctiles (botones, tarjetas, drawers, modales)
+   4. Supresión integral para prefers-reduced-motion: reduce
+   ========================================================================== */
+
+/* ── 1. Keyframes Base ── */
+@keyframes ui-enter {
+    from {
+        opacity: 0;
+        transform: translate3d(0, var(--motion-distance-md, 12px), 0);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes ui-fade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes ui-scale-in {
+    from {
+        opacity: 0;
+        transform: translate3d(0, var(--motion-distance-sm, 6px), 0) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* ── 2. Entradas Orquestadas de Vista ── */
+.dashboard-intro,
+.login-page .c-login-container,
+.admin-layout > .page-header:first-child,
+.tienda-body .showcase-copy,
+.ui-enter {
+    animation: ui-enter var(--motion-enter, 260ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) backwards;
+}
+
+.ui-fade-in {
+    animation: ui-fade var(--motion-base, 220ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+.ui-stagger-1 {
+    animation-delay: calc(var(--motion-stagger, 45ms) * 1);
+}
+.ui-stagger-2 {
+    animation-delay: calc(var(--motion-stagger, 45ms) * 2);
+}
+.ui-stagger-3 {
+    animation-delay: calc(var(--motion-stagger, 45ms) * 3);
+}
+.ui-stagger-4 {
+    animation-delay: calc(var(--motion-stagger, 45ms) * 4);
+}
+
+/* ── 3. Micro-interacciones Táctiles en Controles y Superficies ── */
+.btn-primary,
+.btn-secondary,
+.btn-outline,
+.btn-action,
+.hero-action,
+.category-btn,
+.tienda-nav-btn,
+.tienda-cart-trigger {
+    transition: var(--transition-interactive);
+}
+
+.btn-primary:hover:not(:disabled),
+.hero-action-primary:hover:not(:disabled),
+.tienda-cart-trigger:hover:not(:disabled) {
+    transform: translate3d(0, -1px, 0);
+}
+
+.btn-primary:active:not(:disabled),
+.btn-secondary:active:not(:disabled),
+.btn-outline:active:not(:disabled),
+.btn-action:active:not(:disabled),
+.hero-action:active:not(:disabled),
+.category-btn:active:not(:disabled),
+.tienda-nav-btn:active:not(:disabled),
+.tienda-cart-trigger:active:not(:disabled) {
+    transform: translate3d(0, 0, 0) scale(0.99);
+    transition-duration: var(--motion-instant, 90ms);
+}
+
+/* Tarjetas interactivas y paneles */
+.action-card,
+.stat-card,
+.metric-card,
+.dashboard-panel,
+.section-card,
+.store-product-card {
+    transition: var(--transition-surface);
+}
+
+.action-card:hover {
+    transform: translate3d(0, -2px, 0);
+}
+
+/* Modales y Diálogos */
+.modal-overlay:not(.hidden) {
+    animation: ui-fade var(--motion-fast, 160ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+.modal-overlay:not(.hidden) .modal-content,
+dialog.confirm-overlay[open] .confirm-dialog {
+    animation: ui-scale-in var(--motion-base, 220ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+/* Drawers laterales (Carrito Tienda y Paneles Deslizantes) */
+.tienda-body .cart-drawer {
+    right: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translate3d(100%, 0, 0);
+    transition:
+        transform var(--motion-exit) var(--ease-exit),
+        visibility 0ms linear var(--motion-exit);
+}
+
+.tienda-body .cart-drawer.open {
+    visibility: visible;
+    pointer-events: auto;
+    transform: translate3d(0, 0, 0);
+    transition:
+        transform var(--motion-drawer, 280ms) var(--ease-drawer, cubic-bezier(0.32, 0.72, 0, 1)),
+        visibility 0ms linear 0ms;
+}
+
+@media screen and (max-width: 900px) {
+    .has-navigation-js .glass-dock {
+        transition: transform var(--motion-exit) var(--ease-exit),
+                    visibility 0ms linear var(--motion-exit);
+    }
+    .has-navigation-js .glass-dock.mobile-open {
+        transition: transform var(--motion-enter) var(--ease-out), visibility 0ms;
+    }
+}
+
+/* ── 4. Accesibilidad: Reducción de Movimiento ── */
+@media (prefers-reduced-motion: reduce), print {
+    *,
+    *::before,
+    *::after,
+    .dashboard-intro,
+    .ui-enter,
+    .ui-fade-in,
+    .modal-overlay:not(.hidden),
+    .modal-overlay:not(.hidden) .modal-content {
+        animation: none !important;
+        animation-name: none !important;
+        animation-duration: 0s !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0s !important;
+        transition-delay: 0s !important;
+        scroll-behavior: auto !important;
+    }
+
+    .cart-drawer {
+        transition: none !important;
+    }
+
+    .cart-drawer.open {
+        transition: none !important;
+    }
+}

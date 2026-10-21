@@ -4,41 +4,49 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Brajher's Cake — Sistema de Gestión | Panadería y Repostería">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@6.0.0-alpha.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-B/GM4XqrwHnWXNOWMbloTmrYXZg10cakYGmpfsR/bbzQ6JAJI4ihuyADKLnBgrCe" crossorigin="anonymous">
+<script type="module" src="https://cdn.jsdelivr.net/npm/bootstrap@6.0.0-alpha.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-1a/pXj49ZQ1aHEmrJ+gMw1otqoVsYwlEnlD8mIfY2TV03r20Y0CN7uqx1tQogjPL" crossorigin="anonymous"></script>
     <title>{% block title %}Brajher's Cake{% endblock %}</title>
     <!-- Preload Fonts to improve LCP -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Bundled CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle.css', v=3) }}">
+    <link rel="stylesheet" href="{{ css_url('app') }}">
     <!-- Theme System Initialization — Light mode is default (warm bakery) -->
     <script>
-        const savedTheme = localStorage.getItem('theme') || 'light';
+        let savedTheme = 'light';
+        try { savedTheme = localStorage.getItem('theme') || 'light'; } catch (_) {}
         if (savedTheme === 'dark') {
             document.documentElement.classList.add('dark-theme');
         }
     </script>
     {% block extra_head %}{% endblock %}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="{{ url_for('static', filename='js/common.js', v='web-2') }}" defer></script>
+    <link rel="stylesheet" href="{{ css_url('accessibility') }}">
+    <link rel="stylesheet" href="{{ css_url('theme') }}">
+    {% block page_styles %}{% endblock %}
+    <link rel="stylesheet" href="{{ css_url('motion') }}">
 </head>
-<body class="app-container">
+<body class="app-container {% block body_class %}{% endblock %}">
+    <a class="skip-link" href="#main-content">Ir al contenido</a>
+    <button class="nav-backdrop" type="button" aria-label="Cerrar menú" tabindex="-1" hidden></button>
     <!-- Global Loading Bar -->
     <div class="global-loading-bar" id="global-loading-bar"></div>
-
-    <div class="ambient-bg">
-        <div class="ambient-shape shape-1"></div>
-        <div class="ambient-shape shape-2"></div>
-    </div>
 
     {% include 'admin/sidebar.html' %}
 
     <div class="main-content">
         <header class="topbar">
+            <button class="mobile-menu-toggle" type="button" aria-controls="glass-dock" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Menú</span></button>
             <div class="topbar-left">
+                <span class="topbar-brand">Brajher's Cake</span>
                 <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
             </div>
-            <div class="topbar-right" style="display: flex; align-items: center; gap: 1.25rem;">
-                <button id="theme-toggle" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--text-main); transition: transform 0.2s; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; background: var(--surface-sunken);">
-                    <span id="theme-icon">☀️</span>
+            <div class="topbar-right">
+                <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Activar tema oscuro" aria-pressed="false">
+                    <svg id="theme-icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13z"/></svg>
                 </button>
                 <div class="user-profile">
                     <span class="user-name">{{ current_user.nombre_completo }}</span>
@@ -47,7 +55,8 @@
             </div>
         </header>
 
-        <main class="admin-layout">
+        <main class="admin-layout" id="main-content" tabindex="-1">
+            {% for category, message in get_flashed_messages(with_categories=true) %}<div class="flash-message" role="status">{{ message }}</div>{% endfor %}
             {% block content %}{% endblock %}
         </main>
     </div>
@@ -56,17 +65,17 @@
     <div id="toast-container" class="toast-container"></div>
 
     <!-- Global Confirmation Dialog -->
-    <div id="confirm-dialog-overlay" class="confirm-overlay hidden">
+    <dialog id="confirm-dialog-overlay" class="confirm-overlay" aria-labelledby="confirm-title" aria-describedby="confirm-message">
         <div class="confirm-dialog">
             <div id="confirm-icon" class="confirm-icon warning">⚠️</div>
-            <h3 id="confirm-title" class="confirm-title">¿Estás seguro?</h3>
+            <h2 id="confirm-title" class="confirm-title">¿Estás seguro?</h2>
             <p id="confirm-message" class="confirm-message">Esta acción no se puede deshacer.</p>
             <div class="confirm-actions">
-                <button class="btn btn-outline" id="confirm-cancel-btn">Cancelar</button>
-                <button class="btn btn-danger" id="confirm-ok-btn">Confirmar</button>
+                <button type="button" class="btn btn-outline" id="confirm-cancel-btn" autofocus>Cancelar</button>
+                <button type="button" class="btn btn-danger" id="confirm-ok-btn">Confirmar</button>
             </div>
         </div>
-    </div>
+    </dialog>
 
     <script>
         /* ── Toast System ── */
@@ -80,7 +89,8 @@
                         ? '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'
                         : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
                 </svg>
-                <span>${msg}</span>`;
+                <span></span>`;
+            t.querySelector("span").textContent = msg;
             container.appendChild(t);
             setTimeout(() => {
                 t.style.opacity = '0';
@@ -99,8 +109,19 @@
 
         /* ── Confirmation Dialog ── */
         let confirmResolve = null;
+        let confirmTrigger = null;
+        const confirmation = document.getElementById('confirm-dialog-overlay');
+        function finishConfirmation(value) {
+            if (confirmation.open) confirmation.close();
+            const resolve = confirmResolve;
+            confirmResolve = null;
+            if (confirmTrigger?.isConnected) confirmTrigger.focus();
+            if (resolve) resolve(value);
+        }
 
         function showConfirm({ title = '¿Estás seguro?', message = 'Esta acción no se puede deshacer.', type = 'warning', confirmText = 'Confirmar', icon = '⚠️' } = {}) {
+            if (confirmResolve) finishConfirmation(false);
+            confirmTrigger = document.activeElement;
             return new Promise((resolve) => {
                 confirmResolve = resolve;
                 const overlay = document.getElementById('confirm-dialog-overlay');
@@ -114,24 +135,28 @@
                 const okBtn = document.getElementById('confirm-ok-btn');
                 okBtn.className = type === 'danger' ? 'btn btn-danger' : type === 'success' ? 'btn btn-success' : 'btn btn-primary';
 
-                overlay.classList.remove('hidden');
+                overlay.showModal();
+                document.getElementById('confirm-cancel-btn').focus();
             });
         }
 
         document.getElementById('confirm-ok-btn').addEventListener('click', () => {
-            document.getElementById('confirm-dialog-overlay').classList.add('hidden');
-            if (confirmResolve) confirmResolve(true);
+            finishConfirmation(true);
         });
 
         document.getElementById('confirm-cancel-btn').addEventListener('click', () => {
-            document.getElementById('confirm-dialog-overlay').classList.add('hidden');
-            if (confirmResolve) confirmResolve(false);
+            finishConfirmation(false);
+        });
+        confirmation.addEventListener('cancel', event => {
+            event.preventDefault();
+            finishConfirmation(false);
         });
 
         /* ── Global Form Protection (Double Submit) ── */
         document.addEventListener('submit', (e) => {
             const form = e.target;
-            const submitBtn = form.querySelector('button[type="submit"]');
+            if (e.defaultPrevented || form.hasAttribute('data-download') || form.method.toLowerCase() !== 'post' || form.target === '_blank' || e.submitter?.formTarget === '_blank' || /\.xlsx(?:$|\?)/i.test(form.action)) return;
+            const submitBtn = e.submitter || form.querySelector('button[type="submit"]');
             if (submitBtn) {
                 if (submitBtn.dataset.submitting === 'true') {
                     e.preventDefault();
@@ -141,18 +166,18 @@
                 submitBtn.dataset.submitting = 'true';
                 const originalText = submitBtn.innerHTML;
                 submitBtn.dataset.originalText = originalText;
-                submitBtn.innerHTML = '<span style="opacity: 0.8;">⏳ Procesando...</span>';
+                submitBtn.textContent = 'Procesando…';
+                submitBtn.setAttribute('aria-busy', 'true');
                 submitBtn.style.pointerEvents = 'none';
-                
-                // Fallback unlock after 5s in case of unhandled error
-                setTimeout(() => {
-                    if(submitBtn.dataset.submitting === 'true') {
-                        submitBtn.dataset.submitting = 'false';
-                        submitBtn.innerHTML = originalText;
-                        submitBtn.style.pointerEvents = 'auto';
-                    }
-                }, 5000);
             }
+        });
+        window.addEventListener('pageshow', () => {
+            document.querySelectorAll('[data-submitting="true"]').forEach(button => {
+                button.dataset.submitting = 'false';
+                button.innerHTML = button.dataset.originalText;
+                button.removeAttribute('aria-busy');
+                button.style.pointerEvents = '';
+            });
         });
 
         /* ── Fetch Helper with Timeout ── */
@@ -176,7 +201,14 @@
 
             // Sync initial state (light is default)
             const isDark = document.documentElement.classList.contains('dark-theme');
-            themeIcon.textContent = isDark ? '🌙' : '☀️';
+            const syncTheme = dark => {
+                themeToggleBtn.setAttribute('aria-label', dark ? 'Activar tema claro' : 'Activar tema oscuro');
+                themeToggleBtn.setAttribute('aria-pressed', String(dark));
+                themeIcon.innerHTML = dark
+                    ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/>'
+                    : '<path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13z"/>';
+            };
+            syncTheme(isDark);
             if (isDark) document.body.classList.add('dark-theme');
 
             themeToggleBtn.addEventListener('click', () => {
@@ -184,12 +216,8 @@
                 document.body.classList.toggle('dark-theme');
 
                 const nowDark = document.documentElement.classList.contains('dark-theme');
-                localStorage.setItem('theme', nowDark ? 'dark' : 'light');
-                themeIcon.textContent = nowDark ? '🌙' : '☀️';
-
-                // Mini animation
-                themeIcon.style.transform = 'scale(0.5) rotate(180deg)';
-                setTimeout(() => themeIcon.style.transform = 'scale(1) rotate(0)', 200);
+                try { localStorage.setItem('theme', nowDark ? 'dark' : 'light'); } catch (_) {}
+                syncTheme(nowDark);
             });
         });
     </script>

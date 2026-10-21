@@ -1,50 +1,51 @@
 {% extends 'admin_base.html' %}
+{% block body_class %}page-asistencia{% endblock %}
 
 {% block title %}Monitor de Asistencia | Brajher's Cake{% endblock %}
 {% block page_title %}Monitor de Asistencia{% endblock %}
 
 {% block content %}
-<div class="page-header" style="flex-direction: row; justify-content: space-between; align-items: center;">
+<div class="page-header asistencia-page-header">
     <div>
         <p>Monitoreo detallado de llegadas y asistencia del personal.</p>
     </div>
-    <div style="display: flex; gap: 0.75rem; align-items: center;">
-        <label for="fecha" class="fw-600" style="color: var(--text-light);">Filtrar Fecha:</label>
+    <div class="asistencia-row">
+        <label for="fecha" class="fw-600 asistencia-fw-600">Filtrar Fecha:</label>
         <form id="filtro-fecha" method="GET" action="{{ url_for('admin.rrhh_asistencia') }}">
-            <input type="date" name="fecha" id="fecha" value="{{ fecha }}" class="form-input" style="width: 200px; cursor: pointer;" onchange="document.getElementById('filtro-fecha').submit();">
+            <input type="date" name="fecha" id="fecha" value="{{ fecha }}" class="form-input asistencia-fecha" onchange="document.getElementById('filtro-fecha').submit();">
         </form>
-        <a href="{{ url_for('kiosco.kiosco_vista') }}" target="_blank" class="btn btn-outline" style="border-color: #9b59b6; color: #9b59b6; text-decoration: none; padding: 0.5rem 1rem;">
+        <a href="{{ url_for('kiosco.kiosco_vista') }}" target="_blank" class="btn btn-outline asistencia-btn-outline">
             ⏱️ Kiosco
         </a>
     </div>
 </div>
 
 <!-- KPIs -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+<div class="asistencia-grid">
     <!-- Esperados -->
-    <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--primary); transition: transform 0.2s;">
-        <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Esperados</h3>
-        <div id="stat-esperados" style="font-size: 2.5rem; font-weight: 800; color: var(--text-light);">{{ stats.esperados }}</div>
+    <div class="card asistencia-card">
+        <h3 class="asistencia-h3-text">Esperados</h3>
+        <div id="stat-esperados" class="asistencia-stat-esperados">{{ stats.esperados }}</div>
     </div>
     <!-- Presentes -->
-    <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--success); transition: transform 0.2s;">
-        <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Presentes</h3>
-        <div id="stat-presentes" style="font-size: 2.5rem; font-weight: 800; color: var(--success);">{{ stats.presentes }}</div>
+    <div class="card asistencia-card-2">
+        <h3 class="asistencia-h3-text">Presentes</h3>
+        <div id="stat-presentes" class="asistencia-stat-presentes">{{ stats.presentes }}</div>
     </div>
     <!-- A Tiempo -->
-    <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid #3498db; transition: transform 0.2s;">
-        <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">A Tiempo</h3>
-        <div id="stat-atiempo" style="font-size: 2.5rem; font-weight: 800; color: #3498db;">{{ stats.a_tiempo }}</div>
+    <div class="card asistencia-card-3">
+        <h3 class="asistencia-h3-text">A Tiempo</h3>
+        <div id="stat-atiempo" class="asistencia-stat-atiempo">{{ stats.a_tiempo }}</div>
     </div>
     <!-- Tardes -->
-    <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--warning); transition: transform 0.2s;">
-        <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Llegadas Tardías</h3>
-        <div id="stat-tardes" style="font-size: 2.5rem; font-weight: 800; color: var(--warning);">{{ stats.tardes }}</div>
+    <div class="card asistencia-card-4">
+        <h3 class="asistencia-h3-text">Llegadas Tardías</h3>
+        <div id="stat-tardes" class="asistencia-stat-tardes">{{ stats.tardes }}</div>
     </div>
     <!-- Ausentes -->
-    <div class="card" style="padding: 1.5rem; text-align: center; border-left: 4px solid var(--error); transition: transform 0.2s;">
-        <h3 style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">Ausentes</h3>
-        <div id="stat-ausentes" style="font-size: 2.5rem; font-weight: 800; color: var(--error);">{{ stats.ausentes }}</div>
+    <div class="card asistencia-card-5">
+        <h3 class="asistencia-h3-text">Ausentes</h3>
+        <div id="stat-ausentes" class="asistencia-stat-ausentes">{{ stats.ausentes }}</div>
     </div>
 </div>
 
@@ -57,7 +58,7 @@
         </h3>
     </div>
     <div class="panel-body panel-body-flush">
-        <div class="table-responsive" id="asistencia-table-container" style="{% if not detalle %}display: none;{% endif %}">
+        <div class="table-responsive {% if not detalle %}asistencia-initially-hidden{% endif %}" id="asistencia-table-container">
             <table class="data-table">
                 <thead>
                     <tr>
@@ -66,19 +67,19 @@
                         <th>Turno Asignado</th>
                         <th>Hora Entrada</th>
                         <th>Hora Salida</th>
-                        <th style="text-align: center;">Estado</th>
+                        <th class="asistencia-th-spacing">Estado</th>
                     </tr>
                 </thead>
                 <tbody id="asistencia-tbody">
                     {% for d in detalle %}
-                    <tr style="{% if d.estado == 'Ausente' %}opacity: 0.6;{% endif %} transition: opacity 0.3s;">
+                    <tr class="asistencia-record {% if d.estado == 'Ausente' %}asistencia-record-absent{% endif %}">
                         <td class="cell-bold">{{ d.nombre }}</td>
                         <td class="cell-muted">{{ d.cargo }}</td>
                         <td>{{ d.turno }}</td>
                         <td class="fw-600 {% if d.entrada == '--:--' %}text-muted{% endif %}">{{ d.entrada }}</td>
                         <td class="fw-600 {% if d.salida == '--:--' %}text-muted{% endif %}">{{ d.salida }}</td>
-                        <td style="text-align: center;">
-                            <span class="badge 
+                        <td class="asistencia-th-spacing">
+                            <span class="badge
                                 {% if d.estado == 'A Tiempo' %}badge-success
                                 {% elif d.estado == 'Llegada Tardia' %}badge-warning
                                 {% else %}badge-danger{% endif %}">
@@ -90,7 +91,7 @@
                 </tbody>
             </table>
         </div>
-        <div class="empty-state" id="asistencia-empty-state" style="{% if detalle %}display: none;{% endif %}">
+        <div class="empty-state {% if detalle %}asistencia-initially-hidden{% endif %}" id="asistencia-empty-state">
             <div class="empty-state-icon">👥</div>
             <p>No hay empleados registrados en el sistema.</p>
         </div>
@@ -133,18 +134,18 @@
                             if(d.estado === 'A Tiempo') badgeClass = 'badge-success';
                             else if(d.estado === 'Llegada Tardia') badgeClass = 'badge-warning';
 
-                            let opacity = d.estado === 'Ausente' ? 'opacity: 0.6;' : '';
+                            const absenceClass = d.estado === 'Ausente' ? 'asistencia-record-absent' : '';
                             let inClass = d.entrada === '--:--' ? 'text-muted' : '';
                             let outClass = d.salida === '--:--' ? 'text-muted' : '';
 
                             html += `
-                            <tr style="${opacity} transition: opacity 0.3s;">
+                            <tr class="asistencia-record ${absenceClass}">
                                 <td class="cell-bold">${d.nombre}</td>
                                 <td class="cell-muted">${d.cargo}</td>
                                 <td>${d.turno}</td>
                                 <td class="fw-600 ${inClass}">${d.entrada}</td>
                                 <td class="fw-600 ${outClass}">${d.salida}</td>
-                                <td style="text-align: center;">
+                                <td class="asistencia-th-spacing">
                                     <span class="badge ${badgeClass}">${d.estado}</span>
                                 </td>
                             </tr>`;
@@ -164,3 +165,5 @@
     }
 </script>
 {% endblock %}
+
+{% block page_styles %}{{ super() }}<link rel="stylesheet" href="{{ css_url('pages/admin/asistencia') }}">{% endblock %}

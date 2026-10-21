@@ -1,0 +1,20 @@
+# Default deny: local secrets, test data and future unrelated files stay outside.
+**
+!app/
+!app/**
+!templates/
+!templates/**
+!static/
+!static/**
+!run.py
+!config.py
+!requirements.txt
+!requirements.lock
+
+# User content is persistent runtime data, never part of an image layer.
+static/uploads/
+app/static/uploads/
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*

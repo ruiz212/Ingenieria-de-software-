@@ -1,7 +1,8 @@
 {% extends 'admin_base.html' %}
+{% block body_class %}page-balance-general{% endblock %}
 
 {% block content %}
-<main class="c-report">
+<section class="c-report" aria-label="Balance general">
     <header class="c-report__header">
         <h1 class="c-report__title">Balance General</h1>
         <p class="c-report__subtitle">Al {{ fecha_corte }} | Expresado en Córdobas (C$)</p>
@@ -21,7 +22,7 @@
                     </tr>
                     {% else %}
                     <tr class="c-table__row">
-                        <td colspan="3" class="c-table__cell" style="text-align: center; color: var(--text-muted)">No hay movimientos registrados.</td>
+                        <td colspan="3" class="c-table__cell balance-general-c-table-cell">No hay movimientos registrados.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -48,7 +49,7 @@
                         </tr>
                         {% else %}
                         <tr class="c-table__row">
-                            <td colspan="3" class="c-table__cell" style="text-align: center; color: var(--text-muted)">No hay movimientos registrados.</td>
+                            <td colspan="3" class="c-table__cell balance-general-c-table-cell">No hay movimientos registrados.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -74,7 +75,7 @@
                         </tr>
                         {% else %}
                         <tr class="c-table__row">
-                            <td colspan="3" class="c-table__cell" style="text-align: center; color: var(--text-muted)">No hay movimientos registrados.</td>
+                            <td colspan="3" class="c-table__cell balance-general-c-table-cell">No hay movimientos registrados.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -108,8 +109,8 @@
         {% endif %}
     </div>
 
-    <footer class="c-report__actions" style="gap: 15px;">
-        <a href="?print=1" target="_blank" class="btn btn-outline" style="border-radius: var(--radius-full); padding: 1rem 2rem; display: flex; align-items: center; gap: 8px;">
+    <footer class="c-report__actions balance-general-c-report-actions">
+        <a href="?print=1" target="_blank" class="btn btn-outline balance-general-btn-outline">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
             Imprimir Reporte
         </a>
@@ -120,5 +121,7 @@
             </button>
         </form>
     </footer>
-</main>
+</section>
 {% endblock %}
+
+{% block page_styles %}{{ super() }}<link rel="stylesheet" href="{{ css_url('pages/admin/balance_general') }}">{% endblock %}

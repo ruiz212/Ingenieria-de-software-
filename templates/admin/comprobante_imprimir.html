@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Comprobante Contable {{ entry.NumeroComprobante or entry.ID }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ css_url('print/comprobante_imprimir') }}">
+    <link rel="stylesheet" href="{{ css_url('motion') }}">
+</head>
+<body class="page-comprobante-imprimir">
+    <div class="tools">
+        <label class="copy-toggle">
+            <input type="checkbox" id="toggle-copia" onchange="alternarCopiaImpresion(this.checked)">
+            Incluir hoja de COPIA
+        </label>
+        <button class="btn-print" onclick="window.print()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Imprimir comprobante
+        </button>
+    </div>
+
+    {% for copy in ['ORIGINAL', 'COPIA'] %}
+    <article class="voucher-card {% if copy == 'COPIA' %}voucher-copy-sheet hidden{% endif %}">
+        <header class="voucher-header">
+            <div class="brand-section">
+                <div class="logo-badge">BC</div>
+                <div class="company-info">
+                    <h1>{{ emisor.get('fiscal_razon_social') or "Brajher's Cake" }}</h1>
+                    <p class="subtitle-doc">Comprobante de Diario NIIF — {{ entry.TipoDocumento or 'Contable' }}</p>
+                    <p class="fiscal-meta">
+                        {% if emisor.get('fiscal_ruc') %}
+                            RUC: {{ emisor.get('fiscal_ruc') }}
+                            {% if emisor.get('fiscal_direccion') %} · {{ emisor.get('fiscal_direccion') }}{% endif %}
+                            {% if emisor.get('fiscal_telefono') %} · Tel: {{ emisor.get('fiscal_telefono') }}{% endif %}
+                        {% else %}
+                            Sucursal: {{ emisor.get('fiscal_sucursal') or 'Casa Matriz' }} · Régimen: {{ emisor.get('fiscal_regimen') or 'Contabilidad Interna' }}
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            <div class="voucher-meta">
+                <div class="voucher-number">{{ entry.NumeroComprobante or entry.ID }} · {{ copy }}</div>
+                <div class="voucher-date">{{ entry.Fecha.strftime('%d/%m/%Y %H:%M') if entry.Fecha and entry.Fecha.strftime is defined else entry.Fecha }}</div>
+                <div class="voucher-badges">
+                    <span class="v-badge v-currency">Córdobas (C$)</span>
+                    <span class="v-badge {% if entry.Estado == 'Anulado' %}v-danger{% else %}v-success{% endif %}">{{ entry.Estado }}</span>
+                </div>
+            </div>
+        </header>
+
+        {% if entry.Estado == 'Anulado' %}
+        <div class="notice notice-danger">ANULADO — Se conserva el comprobante original y su asiento de reversión por auditoría NIIF.</div>
+        {% elif not emisor or emisor.get('fiscal_regimen', 'Pendiente') == 'Pendiente' %}
+        <div class="notice notice-info">Comprobante contable interno de partida doble (NIIF para PYMES). Respaldo de operación registrada en el Libro Diario.</div>
+        {% endif %}
+
+        <section class="concept-box">
+            <div class="concept-item">
+                <span class="concept-label">Concepto / Glosa Contable</span>
+                <span class="concept-value">{{ entry.Descripcion }}</span>
+            </div>
+            <div class="concept-item">
+                <span class="concept-label">Documento Relacionado</span>
+                <span class="concept-value">{{ entry.ReferenciaExterna or 'Sin referencia' }}</span>
+            </div>
+        </section>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código y Cuenta Contable</th>
+                        <th>Detalle de Línea</th>
+                        <th class="num">Debe (C$)</th>
+                        <th class="num">Haber (C$)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in details %}
+                    <tr>
+                        <td><strong>{{ d.Codigo }}</strong> — {{ d.Nombre }}</td>
+                        <td>{{ d.Descripcion or '' }}</td>
+                        <td class="num">{% if d.Debe > 0 %}{{ "{:,.2f}".format(d.Debe) }}{% else %}0.00{% endif %}</td>
+                        <td class="num">{% if d.Haber > 0 %}{{ "{:,.2f}".format(d.Haber) }}{% else %}0.00{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2">Totales Iguales (Partida Doble Verificada)</th>
+                        <th class="num">C${{ "{:,.2f}".format(debe) }}</th>
+                        <th class="num">C${{ "{:,.2f}".format(haber) }}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <footer class="signatures">
+            <div class="sig-block">
+                <div class="sig-line"></div>
+                <div class="sig-title">Elaborado por</div>
+                <div class="sig-sub">{{ user_name or entry.UsuarioID }}</div>
+            </div>
+            <div class="sig-block">
+                <div class="sig-line"></div>
+                <div class="sig-title">Revisado por Contabilidad</div>
+                <div class="sig-sub">Firma y Sello</div>
+            </div>
+            <div class="sig-block">
+                <div class="sig-line"></div>
+                <div class="sig-title">Autorizado por Gerencia</div>
+                <div class="sig-sub">Brajher's Cake</div>
+            </div>
+        </footer>
+    </article>
+    {% endfor %}
+
+    <script>
+        function alternarCopiaImpresion(incluirCopia) {
+            const hojaCopia = document.querySelector('.voucher-copy-sheet');
+            if (hojaCopia) {
+                hojaCopia.classList.toggle('hidden', !incluirCopia);
+            }
+            document.body.classList.toggle('include-copy', Boolean(incluirCopia));
+        }
+    </script>
+</body>
+</html>

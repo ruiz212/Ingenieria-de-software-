@@ -1,152 +1,147 @@
 {% extends 'admin_base.html' %}
-
-{% block title %}Dashboard | Brajher's Cake{% endblock %}
-{% block page_title %}Dashboard Financiero{% endblock %}
-
-{% block content %}
-<div class="page-header">
-    <p>Métricas en tiempo real y estado de las cajas.</p>
-</div>
-
-<!-- Metrics Grid -->
-<div class="metrics-grid">
-    <div class="metric-card">
-        <div class="metric-icon revenue">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-        </div>
-        <div class="metric-body">
-            <div class="metric-title">Ingresos Brutos</div>
-            <div class="metric-value">C${{ "%.2f"|format(metricas.ventas_hoy) }}</div>
-            <div class="metric-sub">Ventas del día</div>
-        </div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-icon average">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        </div>
-        <div class="metric-body">
-            <div class="metric-title">Ticket Promedio</div>
-            <div class="metric-value">C${{ "%.2f"|format(metricas.ticket_promedio) }}</div>
-            <div class="metric-sub">Por factura emitida</div>
-        </div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-icon rate">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        </div>
-        <div class="metric-body">
-            <div class="metric-title">Tasa de Completitud</div>
-            <div class="metric-value text-success">{{ metricas.tasa_completitud }}%</div>
-            <div class="metric-sub">{{ metricas.encargos_pendientes }} encargo{{ 's' if metricas.encargos_pendientes != 1 }} pendiente{{ 's' if metricas.encargos_pendientes != 1 }}</div>
-        </div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-icon active">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-        </div>
-        <div class="metric-body">
-            <div class="metric-title">Cajas Activas</div>
-            <div class="metric-value">{{ metricas.turnos_activos|length }}</div>
-            <div class="metric-sub">Turnos abiertos</div>
-        </div>
-    </div>
-</div>
-
-<!-- Panels — Asymmetric Layout -->
-<div class="panels-grid-asymmetric">
-    <div class="panel panel-accent-primary">
-        <div class="panel-header">
-            <h3>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-                Productos Más Vendidos
-            </h3>
-            <span class="badge badge-primary">Hoy</span>
-        </div>
-        <div class="panel-body">
-            {% if metricas.top_productos %}
-                {% for p in metricas.top_productos %}
-                <div class="list-row">
-                    <span class="list-row-label">
-                        <span class="rank">{{ loop.index }}</span>
-                        {{ p.nombre }}
-                    </span>
-                    <span class="list-row-value">{{ p.cantidad }} uds.</span>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty-state">
-                    <div class="empty-state-icon">📊</div>
-                    <p>No hay ventas registradas hoy aún.</p>
-                </div>
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="panel panel-accent-success">
-        <div class="panel-header">
-            <h3>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                Ventas por Categoría
-            </h3>
-        </div>
-        <div class="panel-body">
-            {% if metricas.ventas_categoria %}
-                {% for c in metricas.ventas_categoria %}
-                <div class="list-row">
-                    <span class="list-row-label">{{ c.categoria }}</span>
-                    <span class="list-row-value cell-money">C${{ "%.2f"|format(c.total) }}</span>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty-state">
-                    <div class="empty-state-icon">📂</div>
-                    <p>No hay datos de categorías.</p>
-                </div>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
-<!-- Turnos Panel — Full Width -->
-<div style="margin-top: 1.25rem;">
-    <div class="panel panel-full panel-accent-cafe">
-        <div class="panel-header">
-            <h3>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                Arqueos y Turnos de Caja
-            </h3>
-            {% if metricas.turnos_activos %}
-            <span class="badge badge-success badge-live">{{ metricas.turnos_activos|length }} activo{{ 's' if metricas.turnos_activos|length != 1 }}</span>
-            {% endif %}
-        </div>
-        <div class="panel-body">
-            {% if metricas.turnos_activos %}
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;">
-                    {% for t in metricas.turnos_activos %}
-                    <div class="turno-card">
-                        <div class="turno-info">
-                            <h4>{{ t.usuario }}</h4>
-                            <span>Abierto a las {{ t.apertura }}</span>
-                        </div>
-                        <span class="badge badge-success badge-live">Abierta</span>
-                    </div>
-                    {% endfor %}
-                </div>
-                <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 1rem;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                    Los arqueos se generan automáticamente al cerrar turno desde el Punto de Venta.
-                </p>
-            {% else %}
-                <div class="empty-state">
-                    <div class="empty-state-icon">🔒</div>
-                    <p>No hay cajas abiertas en este momento.</p>
-                </div>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
+{% block title %}Resumen del día | Brajher's Cake{% endblock %}
+{% block page_title %}Resumen del día{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{{ css_url('pages/admin/dashboard') }}">
 {% endblock %}
+{% block content %}
+<div class="dashboard-workspace">
+    <div class="dashboard-intro">
+        <div>
+            <h2>Tu panadería, de un vistazo.</h2>
+            <p>Consulta las ventas de hoy y continúa con las tareas de tu equipo.</p>
+        </div>
+        <div class="dashboard-actions">
+            <a class="btn btn-primary" href="/pos">Ir al punto de venta <span aria-hidden="true">→</span></a>
+            <a class="btn btn-outline" href="/monitor">Ver encargos</a>
+        </div>
+    </div>
 
-{% block extra_scripts %}
+    <dl class="dashboard-metrics" aria-label="Ventas del día y estado operativo actual">
+        <div class="dashboard-metric">
+            <dt>Ventas de hoy</dt>
+            <dd class="dashboard-metric-value{{ ' dashboard-value-compact' if metricas.ventas_hoy|abs >= 1000000 }}">C${{ "%.2f"|format(metricas.ventas_hoy) }}</dd>
+            <dd class="dashboard-metric-detail">Facturas emitidas hoy</dd>
+        </div>
+        <div class="dashboard-metric">
+            <dt>Venta promedio</dt>
+            <dd class="dashboard-metric-value{{ ' dashboard-value-compact' if metricas.ticket_promedio|abs >= 1000000 }}">C${{ "%.2f"|format(metricas.ticket_promedio) }}</dd>
+            <dd class="dashboard-metric-detail">Por factura emitida</dd>
+        </div>
+        <div class="dashboard-metric">
+            <dt>Encargos por entregar</dt>
+            <dd class="dashboard-metric-value{{ ' dashboard-positive' if metricas.encargos_pendientes == 0 }}">{{ metricas.encargos_pendientes }}</dd>
+            <dd class="dashboard-metric-detail">{{ metricas.encargos_listos }} listo{{ 's' if metricas.encargos_listos != 1 }} · {{ metricas.encargos_atrasados }} atrasado{{ 's' if metricas.encargos_atrasados != 1 }}</dd>
+            <dd class="dashboard-metric-detail">Todos los días · <a href="{{ url_for('monitor.monitor_pedidos') }}">Ver monitor</a></dd>
+        </div>
+        <div class="dashboard-metric">
+            <dt>Cajas abiertas</dt>
+            <dd class="dashboard-metric-value">{{ metricas.turnos_activos|length }}</dd>
+            <dd class="dashboard-metric-detail">Turnos abiertos</dd>
+        </div>
+    </dl>
+
+    <div class="dashboard-columns">
+        <section class="dashboard-panel dashboard-sales" aria-labelledby="dashboard-sales-title">
+            <div class="dashboard-panel-heading">
+                <div>
+                    <h3 id="dashboard-sales-title">Detalle de ventas</h3>
+                    <p>Productos y categorías del día.</p>
+                </div>
+                <span class="dashboard-period">Hoy</span>
+            </div>
+            <div class="dashboard-sales-sections">
+                <section aria-labelledby="dashboard-products-title">
+                    <h4 id="dashboard-products-title">Productos más vendidos</h4>
+                    {% if metricas.top_productos %}
+                    <div class="table-responsive dashboard-table-wrapper">
+                    <table class="dashboard-table" aria-labelledby="dashboard-products-title">
+                        <thead><tr><th scope="col">Producto</th><th scope="col">Unidades</th></tr></thead>
+                        <tbody>
+                        {% for p in metricas.top_productos %}
+                            <tr>
+                                <td><span class="dashboard-product"><span class="dashboard-rank" aria-hidden="true">{{ loop.index }}</span><span>{{ p.nombre }}</span></span></td>
+                                <td>{{ p.cantidad }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    </div>
+                    {% else %}
+                    <div class="dashboard-empty">
+                        <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16M7 16v-4M12 16V4M17 16V8"/></svg>
+                        <p class="dashboard-empty-title">Aún no hay ventas de hoy.</p>
+                        <p>Los productos aparecerán al emitir una factura.</p>
+                        <a href="/pos">Registrar una venta <span aria-hidden="true">→</span></a>
+                    </div>
+                    {% endif %}
+                </section>
+                <section aria-labelledby="dashboard-categories-title">
+                    <h4 id="dashboard-categories-title">Ventas por categoría</h4>
+                    {% if metricas.ventas_categoria %}
+                    <div class="table-responsive dashboard-table-wrapper">
+                    <table class="dashboard-table dashboard-category-table" aria-labelledby="dashboard-categories-title">
+                        <thead><tr><th scope="col">Categoría</th><th scope="col">Importe</th></tr></thead>
+                        <tbody>
+                        {% for c in metricas.ventas_categoria %}
+                            <tr><td>{{ c.categoria }}</td><td>C${{ "%.2f"|format(c.total) }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    </div>
+                    {% else %}
+                    <div class="dashboard-empty">
+                        <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6l2 3h8v12H4z"/></svg>
+                        <p class="dashboard-empty-title">Sin ventas por categoría.</p>
+                        <p>Las categorías aparecerán con las ventas del día.</p>
+                    </div>
+                    {% endif %}
+                </section>
+            </div>
+        </section>
+
+        <section class="dashboard-panel dashboard-registers" aria-labelledby="dashboard-registers-title">
+            <div class="dashboard-panel-heading">
+                <div>
+                    <h3 id="dashboard-registers-title">Arqueos y turnos de caja</h3>
+                    <p>Estado actual de las cajas.</p>
+                </div>
+                {% if metricas.turnos_activos %}
+                <span class="dashboard-status">{{ metricas.turnos_activos|length }} activo{{ 's' if metricas.turnos_activos|length != 1 }}</span>
+                {% endif %}
+            </div>
+            {% if metricas.turnos_activos %}
+            <ul class="dashboard-register-list">
+                {% for t in metricas.turnos_activos %}
+                <li>
+                    <div><h4>{{ t.usuario }}</h4><p>Abierto a las <time>{{ t.apertura }}</time></p></div>
+                    <span class="dashboard-status">Abierta</span>
+                </li>
+                {% endfor %}
+            </ul>
+            <p class="dashboard-note">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 11v5M12 7h.01"/></svg>
+                <span>Los arqueos se generan automáticamente al cerrar turno desde el Punto de Venta.</span>
+            </p>
+            {% else %}
+            <div class="dashboard-empty dashboard-empty-registers">
+                <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+                <p class="dashboard-empty-title">No hay cajas abiertas.</p>
+                <p>Abre un turno desde el punto de venta para comenzar a cobrar.</p>
+                <a href="/pos">Abrir el punto de venta <span aria-hidden="true">→</span></a>
+            </div>
+            {% endif %}
+        </section>
+    </div>
+
+    <nav class="dashboard-management" aria-label="Tareas de gestión">
+        <h3>Continúa con la gestión</h3>
+        <div>
+            <a href="/admin/inventario">Consultar inventario <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 17 17 7M7 7h10v10"/></svg></a>
+            <a href="{{ url_for('admin.dgi_dashboard') }}">Revisar DGI <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 17 17 7M7 7h10v10"/></svg></a>
+            <a href="/admin/contabilidad">Abrir contabilidad <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 17 17 7M7 7h10v10"/></svg></a>
+            <a href="/admin/estadistica">Ver estadísticas <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 17 17 7M7 7h10v10"/></svg></a>
+        </div>
+    </nav>
+</div>
 {% endblock %}

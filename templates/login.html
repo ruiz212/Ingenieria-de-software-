@@ -4,17 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Brajher's Cake | Iniciar Sesión</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle.css') }}">
-    <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <link rel="stylesheet" href="{{ css_url('app') }}">
+    <link rel="stylesheet" href="{{ css_url('pages/auth/access') }}">
+    <script type="module" src="{{ url_for('static', filename='js/app.js', v='web-2') }}"></script>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ css_url('accessibility') }}">
+    <link rel="stylesheet" href="{{ css_url('theme') }}">
+    <link rel="stylesheet" href="{{ css_url('motion') }}">
 </head>
-<body>
+<body class="login-page">
     <main class="l-split">
         <!-- Left: Brand Showcase -->
-        <section class="l-split__left">
+        <section class="l-split__left" aria-label="Brajher's Cake">
             <div class="l-split__content-left">
                 <div class="c-brand">
-                    <div class="c-brand__logo">BC</div>
+                    <div class="c-brand__logo" aria-hidden="true">BC</div>
                     <div class="c-brand__info">
                         <h1>Brajher's Cake</h1>
                         <p>Panadería y Repostería</p>
@@ -23,45 +31,52 @@
             </div>
 
             <article class="c-welcome">
-                <h2>El arte de hornear con amor.</h2>
-                <p>Sistema integral de gestión para controlar ventas, inventario, producción y tu equipo en un solo lugar.</p>
+                <h2>Todo listo para<br>un buen día.</h2>
+                <p>Ventas, inventario, producción y tu equipo. La gestión de tu panadería, en un solo lugar.</p>
             </article>
 
             <footer class="l-split__footer">
                 &copy; 2026 Brajher's Cake — Todos los derechos reservados
             </footer>
 
-            <div class="c-deco-wheat">🌾</div>
         </section>
 
         <!-- Right: Login Form -->
-        <section class="l-split__right">
+        <section class="l-split__right" aria-labelledby="login-title">
             <div class="c-login-container">
+                <div class="c-access-brand-mobile">
+                    <div class="c-login-header__logo-mobile" aria-hidden="true">BC</div>
+                    <div><p class="c-access-brand-mobile__name">Brajher's Cake</p><p class="c-access-brand-mobile__description">Panadería y repostería</p></div>
+                </div>
                 <header class="c-login-header">
-                    <div class="c-login-header__logo-mobile">BC</div>
-                    <h2>Bienvenido de vuelta</h2>
-                    <p>Inicia sesión para continuar</p>
+                    <h2 id="login-title">Bienvenido de vuelta</h2>
+                    <p>Entra a tu espacio de trabajo.</p>
                 </header>
 
                 <div class="c-card c-login-card">
                     {% if error %}
-                    <div id="js-server-error" data-message="{{ error }}" hidden></div>
+                    <div id="js-server-error" class="login-alert" data-message="{{ error }}" role="alert">{{ error }}</div>
                     {% endif %}
+
+                    {% for category, message in get_flashed_messages(with_categories=true) %}
+                    <div class="login-alert" role="alert">{{ message }}</div>
+                    {% endfor %}
 
                     <form method="POST" action="/login" autocomplete="on">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                         <div class="form-group">
-                            <label class="form-label" for="username">Usuario</label>
+                            <label class="form-label" for="username">Usuario o teléfono</label>
                             <input
                                 class="form-input"
                                 type="text"
                                 id="username"
                                 name="identificador"
-                                placeholder="Ingresa tu usuario"
+                                placeholder="Usuario o teléfono"
                                 required
-                                autofocus
                                 autocomplete="username"
+                                autocapitalize="none"
+                                spellcheck="false"
                             >
                         </div>
 
@@ -77,19 +92,17 @@
                                     required
                                     autocomplete="current-password"
                                 >
-                                <button type="button" class="c-password-toggle" id="js-password-toggle" aria-label="Mostrar u ocultar contraseña">
-                                    <svg id="js-eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <button type="button" class="c-password-toggle" id="js-password-toggle" aria-label="Mostrar contraseña" aria-pressed="false" aria-controls="password">
+                                    <svg id="js-eye-icon" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                 </button>
                             </div>
                         </div>
 
-                        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">Iniciar Sesión</button>
+                        <button type="submit" class="btn btn-primary login-submit">Iniciar sesión <span aria-hidden="true">→</span></button>
                     </form>
 
-                    <div class="c-divider">o</div>
-
                     <div class="c-portal-link">
-                        <a href="/cliente/bienvenida">Ver Menú y Hacer Pedidos →</a>
+                        <a href="{{ url_for('auth.cliente_bienvenida') }}"><span><span class="c-portal-link__intro">¿Vienes por algo rico?</span><span class="c-portal-link__action">Ver el menú y hacer un pedido</span></span><span class="c-portal-link__arrow" aria-hidden="true">→</span></a>
                     </div>
                 </div>
             </div>

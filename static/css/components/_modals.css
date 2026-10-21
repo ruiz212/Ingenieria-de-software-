@@ -3,7 +3,9 @@
    UI/UX Pro Max: premium entrances, toast progress, depth
    ============================================================ */
 
-.hidden { display: none !important; }
+.hidden {
+    display: none !important;
+}
 
 /* ══════════════════════════════════════════════════════════
    MODAL OVERLAY
@@ -65,7 +67,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    transition: var(--transition-interactive, background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease);
     font-size: 1rem;
     line-height: 1;
 }
@@ -94,9 +96,15 @@
 }
 
 /* ── Size variants ── */
-.modal-content.modal-sm  { max-width: 380px; }
-.modal-content.modal-wide { max-width: 640px; }
-.modal-content.modal-xl  { max-width: 840px; }
+.modal-content.modal-sm {
+    max-width: 380px;
+}
+.modal-content.modal-wide {
+    max-width: 640px;
+}
+.modal-content.modal-xl {
+    max-width: 840px;
+}
 
 /* ── Modal Actions ── */
 .modal-actions {
@@ -109,14 +117,77 @@
     flex-wrap: wrap;
 }
 
+/* CRM client editor */
+.cliente-modal-content {
+    max-width: 560px;
+}
+
+.cliente-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1rem;
+}
+
+.cliente-form .form-group:nth-of-type(3),
+.cliente-form .form-group:nth-of-type(4),
+.cliente-form .cliente-history,
+.cliente-form .modal-actions {
+    grid-column: 1 / -1;
+}
+
+.cliente-history {
+    margin-top: 0.25rem;
+    padding: 1rem;
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    background: var(--surface-sunken);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.75;
+}
+
+.cliente-history strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--text-main);
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+}
+
+@media (max-width: 560px) {
+    .cliente-modal-content {
+        padding: 1.25rem;
+    }
+    .cliente-form {
+        grid-template-columns: 1fr;
+    }
+    .cliente-form .form-group,
+    .cliente-form .cliente-history,
+    .cliente-form .modal-actions {
+        grid-column: 1;
+    }
+}
+
 /* ── Animations ── */
 @keyframes modalFadeIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 @keyframes modalSlideUp {
-    from { transform: scale(0.95) translateY(16px); opacity: 0; }
-    to   { transform: scale(1) translateY(0); opacity: 1; }
+    from {
+        transform: scale(0.95) translateY(16px);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+    }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -165,15 +236,23 @@
     animation-duration: var(--toast-duration, 4s);
 }
 @keyframes toast-progress {
-    from { width: 100%; }
-    to   { width: 0%; }
+    from {
+        width: 100%;
+    }
+    to {
+        width: 0%;
+    }
 }
 
 .toast.toast-exit {
     animation: toastSlideOut 0.3s var(--ease-smooth) forwards;
 }
 
-.toast svg { width: 18px; height: 18px; flex-shrink: 0; }
+.toast svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
 
 /* ── Toast Semantic Variants ── */
 .toast.error {
@@ -195,12 +274,27 @@
 }
 
 @keyframes toastSlideIn {
-    from { opacity: 0; transform: translateX(24px) scale(0.92); }
-    to   { opacity: 1; transform: translateX(0)    scale(1); }
+    from {
+        opacity: 0;
+        transform: translateX(24px) scale(0.92);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0)    scale(1);
+    }
 }
 @keyframes toastSlideOut {
-    from { opacity: 1; transform: translateX(0); }
-    to   { opacity: 0; transform: translateX(24px); max-height: 0; margin: 0; padding: 0; }
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(24px);
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+    }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -266,11 +360,10 @@
     border-radius: 50%;
     color: var(--brand-dorado);
     box-shadow: 0 0 0 8px rgba(212, 149, 43, 0.05);
-    animation: empty-float 4s ease-in-out infinite;
+    transition: transform var(--motion-base, 220ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
 }
-@keyframes empty-float {
-    0%, 100% { transform: translateY(0); }
-    50%       { transform: translateY(-6px); }
+.empty-state:hover .empty-state-icon {
+    transform: translateY(-3px);
 }
 
 .empty-state h4 {

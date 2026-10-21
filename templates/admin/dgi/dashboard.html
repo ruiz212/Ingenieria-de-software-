@@ -1,0 +1,73 @@
+{% extends 'admin/dgi/layout.html' %}
+{% block dgi_content %}
+<section class="dgi-heading">
+  <div><p class="dgi-eyebrow">ANÁLISIS INTERNO · {{ profile.fiscal_razon_social or "Brajher's Cake" }}</p>
+    <h2>Revise el período y decida el siguiente paso</h2>
+    <p>Compruebe los registros del negocio aunque los datos fiscales estén pendientes. Los documentos originales se conservan.</p>
+  </div>
+</section>
+<div class="dgi-columns">
+  <section class="dgi-card">
+    <h3>1. Seleccionar período</h3>
+    <form class="dgi-form" method="post" action="{{ url_for('admin.dgi_create_period') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Mes a analizar<input type="month" name="mes" value="{{ month }}" min="2000-01" max="2100-12" required></label>
+      <button class="btn btn-primary" type="submit">Abrir o seleccionar mes</button>
+    </form>
+    {% if periods %}
+    <form class="dgi-form" method="get">
+      <label>Períodos guardados<select name="periodo">{% for p in periods %}<option value="{{ p.ID }}" {% if selected and selected.ID==p.ID %}selected{% endif %}>{{ p.Desde.strftime('%m/%Y') }} · {{ p.Estado }}</option>{% endfor %}</select></label>
+      <button class="btn btn-outline" type="submit">Consultar período</button>
+    </form>
+    {% endif %}
+    {% if selected %}
+    <p><span class="dgi-badge">{{ selected.Estado }}</span> {{ selected.Desde.strftime('%d/%m/%Y') }} al {{ selected.Hasta.strftime('%d/%m/%Y') }}</p>
+    <form class="dgi-form" method="post" action="{{ url_for('admin.dgi_create_review') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="periodo_id" value="{{ selected.ID }}">
+      <label>Propósito<select name="obligacion" required><option>Diagnóstico interno</option>{% for obligation in profile.dgi_obligaciones.splitlines() if obligation!='Diagnóstico interno' %}<option>{{ obligation }}</option>{% endfor %}</select></label>
+      <button class="btn btn-primary" type="submit" {% if selected.Estado=='Cerrado' %}disabled{% endif %}>Analizar período</button>
+    </form>
+    <p class="dgi-muted">El análisis utiliza ventas, compras y asientos existentes. Si no cambiaron, recupera la misma revisión.</p>
+    <details><summary>Estado de la preparación</summary>
+      <form method="post" action="{{ url_for('admin.dgi_period_state',period_id=selected.ID) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="estado" value="{{ 'Cerrado' if selected.Estado=='Abierto' else 'Abierto' }}">
+        <button type="submit" class="btn btn-outline">{{ 'Cerrar preparación' if selected.Estado=='Abierto' else 'Reabrir preparación' }}</button>
+      </form><p class="dgi-muted">El cierre requiere las últimas revisiones validadas. No cierra la contabilidad ni presenta declaraciones.</p>
+    </details>
+    {% else %}<p class="dgi-empty">Seleccione un mes para comenzar. No se necesita un RUC ficticio para revisar sus datos.</p>{% endif %}
+  </section>
+  <section class="dgi-card" id="perfil">
+    <h3>Datos fiscales y responsable</h3>
+    <p><strong>{{ profile.fiscal_razon_social or 'Datos fiscales pendientes' }}</strong><br>Régimen: {{ profile.fiscal_regimen or 'Pendiente' }}<br>Responsable configurado: {{ profile.dgi_responsable or 'Pendiente' }}</p>
+    <p class="dgi-muted">Estos pendientes no son errores de ventas o contabilidad. Puede analizar, descargar un diagnóstico y validar una revisión interna sin inventar datos tributarios.</p>
+    <details {% if request.args.get('editar')=='1' %}open{% endif %}><summary>Completar o guardar avance del perfil</summary>
+      <p class="dgi-muted">Razón social, RUC y régimen se comparten con Facturación. Mantenga el régimen Pendiente mientras no haya información verificada. Un cambio a régimen activo conserva los requisitos del POS.</p>
+      <form method="post" action="{{ url_for('admin.dgi_profile') }}" class="dgi-fields">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% if selected %}<input type="hidden" name="periodo_id" value="{{ selected.ID }}">{% endif %}
+        {% for key,label in [('fiscal_razon_social','Razón social'),('fiscal_ruc','RUC según inscripción'),('dgi_responsable','Responsable de revisión')] %}
+        <label>{{ label }} (puede quedar pendiente)<input name="{{ key }}" value="{{ profile[key] }}" maxlength="{{ 255 if key.startswith('fiscal_') else 200 }}"></label>
+        {% endfor %}
+        <label>Régimen declarado<select name="fiscal_regimen">{% for regime in ['Pendiente','Cuota fija','General'] %}<option {% if profile.fiscal_regimen==regime %}selected{% endif %}>{{ regime }}</option>{% endfor %}</select></label>
+        <label>Obligaciones confirmadas, una por línea<textarea name="dgi_obligaciones" maxlength="2000" rows="3" placeholder="Deje pendiente si aún no se han verificado">{{ profile.dgi_obligaciones }}</textarea></label>
+        <div class="dgi-columns"><label>Vigente desde (opcional)<input type="date" name="dgi_vigente_desde" value="{{ profile.dgi_vigente_desde }}"></label><label>Vigente hasta (opcional)<input type="date" name="dgi_vigente_hasta" value="{{ profile.dgi_vigente_hasta }}"></label></div>
+        <button type="submit" class="btn btn-primary">Guardar avance del perfil</button>
+      </form>
+    </details>
+  </section>
+</div>
+<section class="dgi-card">
+  <div class="dgi-heading"><h3>Revisiones{% if selected %} · {{ selected.Desde.strftime('%m/%Y') }}{% endif %}</h3>
+    {% if selected %}<a href="{{ url_for('admin.dgi_dashboard',periodo=selected.ID,historial='0' if show_history else '1') }}">{{ 'Ver solo las últimas revisiones' if show_history else 'Mostrar también versiones anteriores' }}</a>{% endif %}
+  </div>
+  <div class="dgi-table"><table><thead><tr><th>Revisión</th><th>Propósito</th><th>Estado interno</th><th>Resultado</th><th>Fecha (Nicaragua)</th><th>Responsables</th></tr></thead><tbody>
+  {% for r in reviews %}<tr>
+    <td><a href="{{ url_for('admin.dgi_review',review_id=r.ID) }}">#{{ r.ID }} · versión {{ r.Version }}</a></td><td>{{ r.Obligacion }}</td><td><span class="dgi-badge">{{ r.Estado }}</span></td>
+    <td>{% if not r.actual %}Reglas anteriores; abra y revalide{% elif r.errores %}{{ r.errores }} {{ 'error' if r.errores==1 else 'errores' }} en los datos{% else %}Sin errores bloqueantes{% if r.pendientes %}<br><small>Configuración fiscal pendiente</small>{% endif %}{% endif %}</td>
+    <td>{{ r.CreadoEn|dgi_time }}</td><td>Elaboró #{{ r.CreadoPor }}{% if r.AprobadoPor %}<br>Validó #{{ r.AprobadoPor }}{% endif %}</td>
+  </tr>{% else %}<tr><td colspan="6">Aún no hay un diagnóstico en este mes. Use Analizar período.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+<details class="dgi-card"><summary>Actividad reciente</summary><p class="dgi-muted">Últimos 30 eventos; hora de Nicaragua.</p>
+<div class="dgi-table"><table><thead><tr><th>Fecha</th><th>Acción</th><th>Usuario</th><th>Referencia</th></tr></thead><tbody>{% for e in events %}<tr><td>{{ e.Fecha|dgi_time }}</td><td>{{ e.Accion }}</td><td>#{{ e.UsuarioID }}</td><td>{{ e.EntidadID or 'Perfil' }}</td></tr>{% else %}<tr><td colspan="4">Sin actividad DGI todavía.</td></tr>{% endfor %}</tbody></table></div>
+</details>
+{% endblock %}

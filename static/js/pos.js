@@ -8,6 +8,28 @@ function escapeHTML(str) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
+window.escapeHTML = escapeHTML;
+
+// Mirror the server allowlist, including historical references returned by the API.
+function referenceImageURL(value) {
+    if (typeof value !== 'string' || value.length > 2048 || /[\u0000-\u0020\u007f]/.test(value)) return '';
+    if (/^https:\/\/i\.ibb\.co\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:jpg|jpeg|png|webp)$/i.test(value)) return value;
+    const relative = value.replace(/^\/?static\//, '');
+    return /^uploads\/referencias\/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:jpg|jpeg|png|webp)$/i.test(relative)
+        ? '/static/' + relative : '';
+}
+
+function referenceImageLink(value, className, text) {
+    const url = referenceImageURL(value);
+    if (!url) return null;
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.className = className;
+    link.textContent = text;
+    return link;
+}
 
 let carrito = [];
 
@@ -24,7 +46,8 @@ setInterval(() => API.obtenerTipoCambio().then(tc => window.tipoCambioOficial = 
 document.addEventListener('DOMContentLoaded', () => {
     // Escuchar clics en productos (event delegation)
     const catalogPanel = document.querySelector('.catalog-panel');
-    catalogPanel.addEventListener('click', (e) => {
+    // With a closed shift the template shows its opening action instead of a catalog.
+    catalogPanel?.addEventListener('click', (e) => {
         const card = e.target.closest('.product-card');
         if (card) {
             // Ignorar los clics en las bases de encargo en esta vista principal
@@ -37,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const descuento = parseFloat(card.dataset.descuento) || 0;
 
             if (descuento > 0) {
-                precio = precio - (precio * descuento / 100);
+                precio = Math.round((precio * (1 - descuento / 100) + Number.EPSILON) * 100) / 100;
             }
 
             if (categoria === 'Reposteria') {
@@ -58,12 +81,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Remover 'active' de todos y poner al actual
             categoryBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            
+
             const filter = btn.dataset.filter;
             if (currentCategoryTitle) {
                 currentCategoryTitle.textContent = `Mostrador - ${filter}`;
             }
-            
+
             filterableProducts.forEach(product => {
                 if (filter === 'Todos' || product.dataset.categoria === filter) {
                     product.classList.remove('hidden');
@@ -91,27 +114,28 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Lógica del Botón "Solicitudes Web" (Cotizaciones pendientes)
+    // Lógica del Botón "Solicitudes Web" (Cotizaciones pendientes y cotizadas)
     const btnVerPedidosClientes = document.getElementById('btn-ver-pedidos-clientes');
     const pedidosClientesModal = document.getElementById('pedidos-clientes-modal');
     const btnCerrarPedidosClientes = document.getElementById('btn-cerrar-pedidos-clientes');
     const badgePedidos = document.getElementById('badge-pedidos');
 
-    if (btnVerPedidosClientes) {
+    if (btnVerPedidosClientes && !window.esClienteOnline) {
         btnVerPedidosClientes.addEventListener('click', async () => {
             const listContainer = document.getElementById('cotizaciones-pendientes-list');
-            listContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Cargando...</p>';
+            listContainer.innerHTML = '<p class="sales-ui-message">Cargando...</p>';
             pedidosClientesModal.classList.remove('hidden');
 
             try {
                 const cotizaciones = await API.obtenerCotizacionesPendientes();
+                    const pendientesCount = cotizaciones.filter(c => (c.estado || 'Pendiente') === 'Pendiente').length;
                     if (badgePedidos) {
-                        badgePedidos.textContent = cotizaciones.length;
-                        badgePedidos.style.display = cotizaciones.length > 0 ? 'flex' : 'none';
+                        badgePedidos.textContent = pendientesCount;
+                        badgePedidos.style.display = pendientesCount > 0 ? 'flex' : 'none';
                     }
 
                     if (cotizaciones.length === 0) {
-                        listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);"><span style="font-size: 2rem; display: block; margin-bottom: 0.5rem;">🎉</span>No hay solicitudes web pendientes.</div>';
+                        listContainer.innerHTML = '<div class="sales-ui-message-2"><span class="sales-ui-text">🎉</span>No hay solicitudes web pendientes.</div>';
                         return;
                     }
 
@@ -119,38 +143,80 @@ document.addEventListener('DOMContentLoaded', () => {
                     cotizaciones.forEach(c => {
                         const div = document.createElement('div');
                         div.className = 'modal-section';
-                        
+                        const estadoCot = c.estado || 'Pendiente';
+                        const precioVal = c.precio_cotizado !== null && c.precio_cotizado !== undefined ? parseFloat(c.precio_cotizado).toFixed(2) : '';
+
                         div.innerHTML = `
                             <div class="modal-section-header">
                                 <div>
                                     <h4>Solicitud #${c.id}</h4>
                                     <div class="modal-section-meta">
-                                        <strong>Cliente:</strong> ${c.cliente} <br>
-                                        <strong>Teléfono:</strong> ${c.telefono || 'No proporcionado'} <br>
-                                        <strong>Para:</strong> ${c.fecha_entrega}
+                                        <strong>Cliente:</strong> ${escapeHTML(c.cliente)} <br>
+                                        <strong>Teléfono:</strong> ${escapeHTML(c.telefono || 'No proporcionado')} <br>
+                                        <strong>Para:</strong> ${escapeHTML(c.fecha_entrega)}
+                                        ${precioVal ? `<br><strong>Precio cotizado:</strong> C$${precioVal}` : ''}
                                     </div>
                                 </div>
-                                <span class="modal-badge modal-badge--pending">Pendiente</span>
+                                <span class="modal-badge modal-badge--pending">${escapeHTML(estadoCot)}</span>
                             </div>
                             <div class="modal-specs-box">
                                 <strong>Especificaciones:</strong>
-                                ${c.especificaciones}
+                                ${escapeHTML(c.especificaciones)}
                             </div>
-                            ${c.ruta_imagen ? `<a href="${c.ruta_imagen.startsWith('http') ? c.ruta_imagen : '/static/' + c.ruta_imagen}" target="_blank" style="font-size: 0.85rem; color: var(--primary-color); text-decoration: underline;">Ver Foto de Referencia</a>` : ''}
-                            
+
                             <div class="modal-action-row">
-                                <input type="number" id="precio-cotizacion-${c.id}" class="form-control" placeholder="Precio (C$)" min="0" step="0.01">
-                                <button type="button" class="modal-btn modal-btn--primary" onclick="cotizarPedido(${c.id})">Cotizar</button>
+                                <input type="number" id="precio-cotizacion-${c.id}" class="form-control" placeholder="Precio (C$)" min="0" step="0.01" value="${precioVal}">
+                                <button type="button" class="modal-btn modal-btn--primary" onclick="cotizarPedido(${c.id})">${precioVal ? 'Actualizar Precio' : 'Cotizar'}</button>
+                                ${precioVal ? `<button type="button" class="modal-btn modal-btn--info btn-facturar-cotizacion" data-cot='${escapeHTML(JSON.stringify(c))}'>Pasar a Caja</button>` : ''}
                                 <button type="button" class="modal-btn modal-btn--danger-outline" onclick="rechazarPedido(${c.id})">Rechazar</button>
                             </div>
                         `;
+                        const referenceLink = referenceImageLink(c.ruta_imagen, 'sales-ui-text-2', 'Ver Foto de Referencia');
+                        if (referenceLink) div.insertBefore(referenceLink, div.querySelector('.modal-action-row'));
+                        const btnPasarCaja = div.querySelector('.btn-facturar-cotizacion');
+                        if (btnPasarCaja) {
+                            btnPasarCaja.addEventListener('click', () => {
+                                const precioNum = parseFloat(c.precio_cotizado);
+                                const itemPersonalizado = {
+                                    id: 'custom_' + c.id,
+                                    nombre: 'Pastel Personalizado (#COT-' + String(c.id).padStart(4, '0') + ')',
+                                    precio: precioNum,
+                                    categoria: 'Reposteria',
+                                    cantidad: 1,
+                                    subtotal: precioNum,
+                                    detalle_ingredientes: { ingredientes: [], notas_especiales: c.especificaciones || '' },
+                                    encargo_detalles: {
+                                        fecha_entrega: c.fecha_entrega || '',
+                                        especificaciones: c.especificaciones || '',
+                                        ruta_imagen_referencia: c.ruta_imagen || null,
+                                        telefono: c.telefono || '',
+                                        nombre_cliente: c.cliente !== 'Invitado' ? c.cliente : ''
+                                    },
+                                    es_custom: true
+                                };
+                                const existingIdx = carrito.findIndex(i => i.id === itemPersonalizado.id);
+                                if (existingIdx === -1) {
+                                    carrito.push(itemPersonalizado);
+                                } else {
+                                    carrito[existingIdx].cantidad += 1;
+                                    carrito[existingIdx].subtotal = Math.round((carrito[existingIdx].cantidad * precioNum + Number.EPSILON) * 100) / 100;
+                                }
+                                renderizarCarrito();
+                                pedidosClientesModal.classList.add('hidden');
+                                const inputNombre = document.getElementById('modal-nombre-cliente');
+                                const inputTel = document.getElementById('modal-telefono-cliente');
+                                if (inputNombre && c.cliente && c.cliente !== 'Invitado') inputNombre.value = c.cliente;
+                                if (inputTel && c.telefono) inputTel.value = c.telefono;
+                                showToast('Cotización cargada en el carrito para facturar.');
+                            });
+                        }
                         listContainer.appendChild(div);
                     });
             } catch (error) {
-                listContainer.innerHTML = '<p style="text-align: center; color: var(--danger);">Error de conexión.</p>';
+                listContainer.innerHTML = '<p class="sales-ui-message-3">Error de conexión.</p>';
             }
         });
-        
+
         // Polling para actualizar el badge de notificaciones cada minuto
         // Polling inteligente: pausa cuando la pestaña está oculta, backoff si no hay datos
         let _pollTimer;
@@ -169,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         document.addEventListener('visibilitychange', () => { if (!document.hidden) _pollCotizaciones(); });
         _pollTimer = setTimeout(_pollCotizaciones, 60000);
-        
+
         // Lanzar una vez al inicio
         setTimeout(() => {
             if (badgePedidos) {
@@ -188,6 +254,28 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function confirmarAccionPOS({title, message, confirmText = 'Confirmar', danger = false}) {
+        return new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.className = 'pos-confirm-overlay';
+            overlay.innerHTML = `
+                <div class="pos-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-confirm-title">
+                    <div class="pos-confirm-icon ${danger ? 'danger' : ''}">${danger ? '!' : '?'}</div>
+                    <h3 id="pos-confirm-title">${title}</h3>
+                    <p>${message}</p>
+                    <div class="pos-confirm-actions">
+                        <button type="button" class="btn btn-outline" data-action="cancel">Cancelar</button>
+                        <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-action="confirm">${confirmText}</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            const close = result => { overlay.remove(); resolve(result); };
+            overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => close(false));
+            overlay.querySelector('[data-action="confirm"]').addEventListener('click', () => close(true));
+            overlay.addEventListener('click', event => { if (event.target === overlay) close(false); });
+        });
+    }
+
     // Funciones globales para cotizar o rechazar
     window.cotizarPedido = async function(id) {
         const input = document.getElementById(`precio-cotizacion-${id}`);
@@ -196,8 +284,12 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Ingresa un precio válido', true);
             return;
         }
-        
-        if (confirm(`¿Asignar precio de C$${precio.toFixed(2)} a esta solicitud?`)) {
+
+        if (await confirmarAccionPOS({
+            title: 'Asignar precio',
+            message: `¿Asignar precio de C$${precio.toFixed(2)} a esta solicitud?`,
+            confirmText: 'Asignar precio'
+        })) {
             try {
                 const res = await fetch(`/api/cotizaciones/${id}/cotizar`, {
                     method: 'POST',
@@ -217,7 +309,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.rechazarPedido = async function(id) {
-        if (confirm('¿Estás seguro de que deseas rechazar esta solicitud?')) {
+        if (await confirmarAccionPOS({
+            title: 'Rechazar solicitud',
+            message: '¿Estás seguro de que deseas rechazar esta solicitud?',
+            confirmText: 'Rechazar',
+            danger: true
+        })) {
             try {
                 const res = await fetch(`/api/cotizaciones/${id}/rechazar`, {
                     method: 'POST'
@@ -255,7 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (formPastel) {
         formPastel.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const btnSubmit = formPastel.querySelector('button[type="submit"]');
             btnSubmit.disabled = true;
             btnSubmit.textContent = 'Procesando...';
@@ -265,7 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const fotoInput = document.getElementById('pastel-foto');
             const telefonoInput = document.getElementById('pastel-telefono');
             const nombreInput = document.getElementById('pastel-nombre');
-            
+
             let rutaImagen = null;
 
             // Si hay foto, subirla primero
@@ -301,9 +398,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 pastelPersonalizadoModal.classList.add('hidden');
                 formPastel.reset();
             } catch (error) {
-                showToast('Error de conexión.', true);
+                showToast(error.message || 'No se pudo enviar la cotización.', true);
             }
-            
+
             btnSubmit.disabled = false;
             btnSubmit.textContent = 'Enviar Solicitud';
         });
@@ -320,7 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const descuento = parseFloat(option.dataset.descuento) || 0;
 
             if (descuento > 0) {
-                precio = precio - (precio * descuento / 100);
+                precio = Math.round((precio * (1 - descuento / 100) + Number.EPSILON) * 100) / 100;
             }
 
             abrirModalIngredientes(id, nombre, precio, categoria);
@@ -337,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.abrirModalIngredientes = function(id, nombre, precio, categoria) {
         itemPendienteParaCarrito = { id, nombre, precioBase: precio, categoria };
-        
+
         // Resetear checkboxes y eliminar los personalizados para la próxima vez
         document.querySelectorAll('.ingrediente-cb').forEach(cb => {
             if (cb.closest('.custom-added')) {
@@ -346,11 +443,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 cb.checked = false;
             }
         });
-        document.getElementById('custom-ing-nombre').value = '';
-        document.getElementById('custom-ing-precio').value = '';
+        const customIngNombre = document.getElementById('custom-ing-nombre');
+        const customIngPrecio = document.getElementById('custom-ing-precio');
+        if (customIngNombre) customIngNombre.value = '';
+        if (customIngPrecio) customIngPrecio.value = '';
 
         actualizarTotalIngredientes();
-        
+
         document.getElementById('modal-ingredientes-title').textContent = `Personalizar ${nombre}`;
         ingredientesModal.classList.remove('hidden');
     }
@@ -390,10 +489,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span>${nombre}</span>
                 <span class="ing-precio">+C$${precio.toFixed(2)}</span>
             `;
-            
+
             label.querySelector('.ingrediente-cb').addEventListener('change', actualizarTotalIngredientes);
             document.getElementById('ingredientes-list-container').appendChild(label);
-            
+
             nombreInput.value = '';
             precioInput.value = '';
             actualizarTotalIngredientes();
@@ -410,10 +509,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnConfirmarIngredientes) {
         btnConfirmarIngredientes.addEventListener('click', () => {
             if (!itemPendienteParaCarrito) return;
-            
+
             let ingredientesSeleccionados = [];
             let total = itemPendienteParaCarrito.precioBase;
-            
+
             document.querySelectorAll('.ingrediente-cb').forEach(cb => {
                 if (cb.checked) {
                     const precioIng = parseFloat(cb.value);
@@ -440,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 precio_base: itemPendienteParaCarrito.precioBase,
                 ingredientes: ingredientesSeleccionados
             });
-            
+
             ingredientesModal.classList.add('hidden');
             itemPendienteParaCarrito = null;
         });
@@ -460,13 +559,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const { total } = calcularTotales();
         document.getElementById('modal-total').value = `C$${total.toFixed(2)}`;
         document.getElementById('modal-adelanto').value = esClienteOnline ? 0 : (total / 2).toFixed(2);
-        
+
         // Si es cliente online, ocultar adelanto requerido y efectivo
         const adelantoContainer = document.getElementById('modal-adelanto').closest('.form-group');
         if (adelantoContainer) {
             adelantoContainer.style.display = esClienteOnline ? 'none' : 'block';
         }
-        
+
         const efectivoContainer = document.getElementById('encargo-efectivo-container');
         if (efectivoContainer) {
             efectivoContainer.style.display = esClienteOnline ? 'none' : 'block';
@@ -477,10 +576,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (metodoPago && esClienteOnline) {
             // Opcionalmente se puede bloquear o ajustar
         }
-        
+
         const dateInput = document.getElementById('modal-fecha');
         if (dateInput) {
-            const tzOffset = (new Date()).getTimezoneOffset() * 60000; 
+            const tzOffset = (new Date()).getTimezoneOffset() * 60000;
             const today = (new Date(Date.now() - tzOffset)).toISOString().split('T')[0];
             dateInput.min = today;
             dateInput.value = today;
@@ -500,11 +599,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('El carrito está vacío', true);
                 return;
             }
-            
-            const hayEncargos = carrito.some(item => 
+
+            const hayEncargos = carrito.some(item =>
                 item.categoria === 'Reposteria' || item.es_custom
             );
-            
+
             if (hayEncargos) {
                 abrirModalEncargo();
             } else {
@@ -515,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('pago-transferencia').value = '';
                 document.getElementById('pago-cambio').value = '';
                 document.getElementById('desglose-cambio-normal').innerHTML = '';
-                
+
                 // Fetch tipo de cambio real
                 API.obtenerTipoCambio().then(tc => {
                         window.tipoCambioOficial = tc;
@@ -523,7 +622,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }).catch(err => {
                         window.tipoCambioOficial = 36.6243;
                     });
-                
+
                 document.getElementById('pago-modal').classList.remove('hidden');
                 setTimeout(() => document.getElementById('pago-efectivo').focus(), 100);
             }
@@ -539,7 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             // Para clientes, todo el pedido es un encargo (delivery/pickup)
-            abrirModalEncargo(true); 
+            abrirModalEncargo(true);
         });
     }
 
@@ -547,13 +646,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (metodoPagoSelect) {
         metodoPagoSelect.addEventListener('change', (e) => {
             const efectivoContainer = document.getElementById('encargo-efectivo-container');
-            if (e.target.value === 'Efectivo') {
+            const refTiendaGroup = document.getElementById('grupo-referencia-tienda');
+            if (refTiendaGroup) {
+                refTiendaGroup.style.display = e.target.value === 'Transferencia' ? 'block' : 'none';
+            }
+            if (e.target.value === 'Efectivo' && !window.esClienteOnline) {
                 efectivoContainer.style.display = 'block';
             } else {
-                efectivoContainer.style.display = 'none';
-                document.getElementById('modal-efectivo-encargo').value = '';
-                document.getElementById('modal-cambio-encargo').value = '';
-                document.getElementById('desglose-cambio-encargo').innerHTML = '';
+                if (efectivoContainer) efectivoContainer.style.display = 'none';
+                const efInput = document.getElementById('modal-efectivo-encargo');
+                const camInput = document.getElementById('modal-cambio-encargo');
+                const desgEl = document.getElementById('desglose-cambio-encargo');
+                if (efInput) efInput.value = '';
+                if (camInput) camInput.value = '';
+                if (desgEl) desgEl.innerHTML = '';
             }
         });
     }
@@ -562,7 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const adelanto = parseFloat(inputAdelanto.value) || 0;
         const efectivo = parseFloat(document.getElementById('modal-efectivo-encargo').value) || 0;
         const cambio = efectivo - adelanto;
-        
+
         if (efectivo >= adelanto && adelanto > 0) {
             document.getElementById('modal-cambio-encargo').value = `C$${cambio.toFixed(2)}`;
             document.getElementById('desglose-cambio-encargo').innerHTML = calcularDesgloseCambio(cambio);
@@ -584,24 +690,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnConfirmarEncargo.addEventListener('click', () => {
         if (btnConfirmarEncargo.disabled) return;
-        btnConfirmarEncargo.disabled = true;
-        btnConfirmarEncargo.textContent = 'Procesando...';
         const adelanto = parseFloat(inputAdelanto.value);
         const fecha = document.getElementById('modal-fecha').value;
         const nombreCliente = document.getElementById('modal-nombre-cliente').value.trim();
         const telefonoCliente = document.getElementById('modal-telefono-cliente').value.trim();
         const { total } = calcularTotales();
         const metodoPago = document.getElementById('modal-metodo-pago') ? document.getElementById('modal-metodo-pago').value : 'Efectivo';
-        
-        // Verificar si es cliente online (adelanto oculto)
+
+        // Verificar si es cliente online (adelanto oculto o flag global)
         const adelantoContainer = document.getElementById('modal-adelanto').closest('.form-group');
-        const esClienteOnline = adelantoContainer && adelantoContainer.style.display === 'none';
-        
+        const esClienteOnline = Boolean(window.esClienteOnline) || (adelantoContainer && adelantoContainer.style.display === 'none');
+
+        let especificaciones = null;
+        let ruta_imagen = null;
+        let telefonoCustom = null;
+        let fechaCustom = null;
+        let nombreCustom = null;
+
+        const customItem = carrito.find(item => item.es_custom);
+        if (customItem && customItem.encargo_detalles) {
+            especificaciones = customItem.encargo_detalles.especificaciones;
+            ruta_imagen = customItem.encargo_detalles.ruta_imagen_referencia;
+            telefonoCustom = customItem.encargo_detalles.telefono;
+            fechaCustom = customItem.encargo_detalles.fecha_entrega;
+            nombreCustom = customItem.encargo_detalles.nombre_cliente;
+        }
+
+        const nombreFinal = nombreCliente || nombreCustom || '';
+        const telefonoFinal = telefonoCliente || telefonoCustom || '';
+        const fechaFinal = fecha || fechaCustom || '';
+
+        if (!nombreFinal || !telefonoFinal) {
+            showToast('Por favor, ingrese el nombre y teléfono del cliente', true);
+            return;
+        }
+
         let adelantoReal = adelanto;
+        let efectivoRecibido = null;
         if (esClienteOnline) {
             adelantoReal = 0; // Clientes online no pagan adelanto físico en el POS
         } else {
-            if (isNaN(adelantoReal) || !fecha) {
+            if (isNaN(adelantoReal) || !fechaFinal) {
                 showToast('Por favor, revisa el adelanto y la fecha de entrega', true);
                 return;
             }
@@ -611,38 +740,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     showToast('El efectivo recibido es menor al adelanto', true);
                     return;
                 }
+                efectivoRecibido = efectivo;
             }
         }
-        
-        if (!fecha) {
+
+        if (!fechaFinal) {
             showToast('Por favor, selecciona una fecha de entrega', true);
             return;
         }
-        
-        let especificaciones = null;
-        let ruta_imagen = null;
-        let telefonoCustom = null;
-        let fechaCustom = null;
-        
-        const customItem = carrito.find(item => item.es_custom);
-        if (customItem) {
-            especificaciones = customItem.encargo_detalles.especificaciones;
-            ruta_imagen = customItem.encargo_detalles.ruta_imagen_referencia;
-            telefonoCustom = customItem.encargo_detalles.telefono;
-            fechaCustom = customItem.encargo_detalles.fecha_entrega;
-        }
-        
-        cerrarModal();
-        procesarFactura(true, {
+
+        const encargoDetalles = {
             adelanto: adelantoReal,
-            saldo: total - adelantoReal,
+            saldo: Math.round((total - adelantoReal + Number.EPSILON) * 100) / 100,
             metodo_adelanto: metodoPago,
-            fecha_entrega: fechaCustom ? fechaCustom : fecha,
-            nombre_cliente: nombreCliente,
-            telefono: telefonoCustom ? telefonoCustom : telefonoCliente,
+            monto_recibido: efectivoRecibido,
+            referencia: document.getElementById('modal-referencia-encargo')?.value.trim() || '',
+            fecha_entrega: fechaFinal,
+            nombre_cliente: nombreFinal,
+            telefono: telefonoFinal,
             especificaciones: especificaciones,
             ruta_imagen_referencia: ruta_imagen
-        }).finally(() => {
+        };
+
+        btnConfirmarEncargo.disabled = true;
+        btnConfirmarEncargo.textContent = 'Procesando...';
+        cerrarModal();
+        procesarFactura(true, { encargo_detalles: encargoDetalles }).finally(() => {
             btnConfirmarEncargo.disabled = false;
             btnConfirmarEncargo.textContent = 'Confirmar Encargo';
         });
@@ -656,7 +779,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectPagoMetodo = document.getElementById('pago-metodo');
     const toggleRUC = document.getElementById('factura-ruc-toggle');
     const containerRUC = document.getElementById('factura-ruc-container');
-    
+
     toggleRUC.addEventListener('change', (e) => {
         containerRUC.style.display = e.target.checked ? 'block' : 'none';
         containerRUC.classList.toggle('hidden', !e.target.checked);
@@ -665,7 +788,7 @@ document.addEventListener('DOMContentLoaded', () => {
     selectPagoMetodo.addEventListener('change', (e) => {
         const efContainer = document.getElementById('pago-efectivo-container');
         const trContainer = document.getElementById('pago-transferencia-container');
-        
+
         inputPagoEfectivo.value = '';
         inputPagoDolares.value = '';
         inputPagoTransferencia.value = '';
@@ -691,11 +814,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function calcularCambioNormal() {
         const metodo = selectPagoMetodo.value;
         const { total } = calcularTotales();
-        
+
         let efCordobas = parseFloat(inputPagoEfectivo.value) || 0;
         let efDolares = parseFloat(inputPagoDolares.value) || 0;
         let trMonto = parseFloat(inputPagoTransferencia.value) || 0;
-        
+
         let tc = window.tipoCambioOficial || 36.6243;
         let totalRecibido = 0;
 
@@ -706,9 +829,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (metodo === 'Mixto') {
             totalRecibido = efCordobas + (efDolares * tc) + trMonto;
         }
-        
+
         const cambio = totalRecibido - total;
-        
+
         if (totalRecibido >= total) {
             document.getElementById('pago-cambio').value = `C$${cambio.toFixed(2)}`;
             document.getElementById('desglose-cambio-normal').innerHTML = calcularDesgloseCambio(cambio);
@@ -725,16 +848,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConfirmarPago = document.getElementById('btn-confirmar-pago');
     btnConfirmarPago.addEventListener('click', () => {
         if (btnConfirmarPago.disabled) return;
-        btnConfirmarPago.disabled = true;
-        btnConfirmarPago.textContent = 'Procesando...';
         const metodo = selectPagoMetodo.value;
         const { total } = calcularTotales();
-        
+
         let efCordobas = parseFloat(inputPagoEfectivo.value) || 0;
         let efDolares = parseFloat(inputPagoDolares.value) || 0;
         let trMonto = parseFloat(inputPagoTransferencia.value) || 0;
         let tc = window.tipoCambioOficial || 36.6243;
-        
+
         let totalRecibido = 0;
         let pagosArray = [];
 
@@ -751,12 +872,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (efDolares > 0) pagosArray.push({ metodo: 'Efectivo USD', monto: efDolares, monto_cordobas: (efDolares * tc) });
             if (trMonto > 0) pagosArray.push({ metodo: 'Transferencia', monto: trMonto, referencia: document.getElementById('pago-referencia').value });
         }
-        
+
         if (totalRecibido < total) {
             showToast('El monto recibido es menor al total a pagar', true);
             return;
         }
-        
+
         let datosFactura = {
             pagos_multiples: pagosArray,
             cambio: totalRecibido - total
@@ -772,6 +893,8 @@ document.addEventListener('DOMContentLoaded', () => {
             datosFactura.ruc = { razon_social: rz, numero: num };
         }
 
+        btnConfirmarPago.disabled = true;
+        btnConfirmarPago.textContent = 'Procesando...';
         pagoModal.classList.add('hidden');
         procesarFactura(false, datosFactura).finally(() => {
             btnConfirmarPago.disabled = false;
@@ -804,7 +927,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const ef = document.getElementById('arqueo-efectivo').value;
             const dol = document.getElementById('arqueo-dolares').value;
             const tr = document.getElementById('arqueo-transferencias').value;
-            
+
             if (!ef || !dol || !tr) {
                 showToast('Por favor ingrese todos los montos contados', true);
                 return;
@@ -818,7 +941,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         efectivo_contado: parseFloat(ef),
                         dolares_contados: parseFloat(dol),
                         transferencias_contadas: parseFloat(tr),
-                        tipo_cambio: window.tipoCambioOficial || 36.6243,
                         observaciones: document.getElementById('arqueo-observaciones').value
                     });
                 showToast('Turno cerrado exitosamente');
@@ -844,7 +966,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnImprimirTicket) {
         btnImprimirTicket.addEventListener('click', () => {
-            window.print();
+            // La copia para imprimir se obtiene del servidor.
         });
     }
 });
@@ -857,25 +979,26 @@ window.modificarCantidad = function(id, delta) {
         if (item.cantidad <= 0) {
             carrito = carrito.filter(i => i.id !== id);
         } else {
-            item.subtotal = item.cantidad * item.precio;
+            item.subtotal = Math.round((item.cantidad * item.precio + Number.EPSILON) * 100) / 100;
         }
         renderizarCarrito();
     }
 };
 
 function agregarAlCarrito(id, nombre, precio, categoria, detalleIngredientes = null) {
+    const precioRedondeado = Math.round((precio + Number.EPSILON) * 100) / 100;
     const itemExistente = carrito.find(item => item.id === id);
     if (itemExistente) {
         itemExistente.cantidad++;
-        itemExistente.subtotal = itemExistente.cantidad * itemExistente.precio;
+        itemExistente.subtotal = Math.round((itemExistente.cantidad * itemExistente.precio + Number.EPSILON) * 100) / 100;
     } else {
         carrito.push({
             id: id,
             nombre: nombre,
-            precio: precio,
+            precio: precioRedondeado,
             categoria: categoria,
             cantidad: 1,
-            subtotal: precio,
+            subtotal: precioRedondeado,
             detalle_ingredientes: detalleIngredientes
         });
     }
@@ -897,6 +1020,7 @@ function renderizarCarrito() {
         totalDisplay.textContent = 'C$0.00';
         if (btnFacturar) btnFacturar.disabled = true;
         if (btnRealizarPedido) btnRealizarPedido.disabled = true;
+        window.dispatchEvent(new CustomEvent('carritoActualizado', { detail: { carrito, subtotal: 0, iva: 0, total: 0 } }));
         return;
     }
 
@@ -909,15 +1033,15 @@ function renderizarCarrito() {
         itemEl.className = 'cart-item fade-in-item';
         itemEl.innerHTML = `
             <div class="cart-item-info">
-                <div class="cart-item-name" style="color: var(--text-main);">${item.nombre}</div>
-                <div class="cart-item-price" style="color: var(--text-muted); font-size: 0.85rem;">C$${item.precio.toFixed(2)} x ${item.cantidad}</div>
+                <div class="cart-item-name sales-ui-cart-item-name">${item.nombre}</div>
+                <div class="cart-item-price sales-ui-cart-item-price">C$${item.precio.toFixed(2)} x ${item.cantidad}</div>
             </div>
             <div class="cart-item-actions">
                 <button type="button" class="btn-qty" onclick="modificarCantidad('${item.id}', -1)">-</button>
-                <span style="min-width: 20px; text-align: center;">${item.cantidad}</span>
+                <span class="sales-ui-message-4">${item.cantidad}</span>
                 <button type="button" class="btn-qty" onclick="modificarCantidad('${item.id}', 1)">+</button>
             </div>
-            <div style="font-weight: 600; color: var(--primary-color);">C$${item.subtotal.toFixed(2)}</div>
+            <div class="sales-ui-text-3">C$${item.subtotal.toFixed(2)}</div>
         `;
         fragment.appendChild(itemEl);
     });
@@ -933,6 +1057,7 @@ function renderizarCarrito() {
     totalDisplay.textContent = `C$${total.toFixed(2)}`;
     if (btnFacturar) btnFacturar.disabled = false;
     if (btnRealizarPedido) btnRealizarPedido.disabled = false;
+    window.dispatchEvent(new CustomEvent('carritoActualizado', { detail: { carrito, subtotal: subVal, iva, total } }));
 }
 
 function calcularSubtotal() {
@@ -940,18 +1065,18 @@ function calcularSubtotal() {
 }
 
 function calcularTotales() {
-    let subtotal = 0;
-    carrito.forEach(item => subtotal += item.subtotal);
-    
-    let ivaPorcentaje = 0.15;
-    if (window.configuracionGlobal && window.configuracionGlobal.iva_porcentaje !== undefined) {
-        ivaPorcentaje = parseFloat(window.configuracionGlobal.iva_porcentaje) / 100;
-    }
-    
-    const iva = subtotal * ivaPorcentaje;
-    return { subtotal, iva, total: subtotal + iva };
+    const round = value => Math.round((value + Number.EPSILON) * 100) / 100;
+    const subtotal = round(carrito.reduce((sum,item)=>sum+round(item.subtotal),0));
+    const config=window.configuracionGlobal || {};
+    const rates=window.tasasProductos || {};
+    const defaultRate = Object.values(rates).find(r => r !== null && r !== undefined) ?? 0;
+    const iva=config.fiscal_regimen === 'General' ? round(carrito.reduce((sum,item)=>{
+        const baseKey = String(item.id).split('_')[0];
+        const rate = baseKey === 'custom' ? Number(defaultRate) : (Number(rates[baseKey]) || 0);
+        return sum + round(round(item.subtotal) * rate / 100);
+    },0)) : 0;
+    return {subtotal,iva,total:round(subtotal+iva)};
 }
-
 function calcularTotal() {
     const { total } = calcularTotales();
     return total;
@@ -972,7 +1097,11 @@ async function procesarFactura(esEncargo = false, datosExtra = null) {
         };
 
         if (datosExtra) {
-            Object.assign(payload, datosExtra);
+            if (esEncargo && !datosExtra.encargo_detalles) {
+                payload.encargo_detalles = datosExtra;
+            } else {
+                Object.assign(payload, datosExtra);
+            }
         } else {
             if (!esEncargo) {
                 const metodo = document.getElementById('pago-metodo') ? document.getElementById('pago-metodo').value : 'Efectivo';
@@ -980,17 +1109,45 @@ async function procesarFactura(esEncargo = false, datosExtra = null) {
             }
         }
 
+        if (window.esClienteOnline) {
+            const details=payload.encargo_detalles || {};
+            const notasInput = document.getElementById('modal-notas-encargo');
+            const notasExtra = notasInput && notasInput.value ? ` | Notas: ${notasInput.value.trim()}` : '';
+            const refExtra = details.referencia ? ` | Ref. Transferencia: ${details.referencia}` : '';
+            const resCot = await API.solicitarCotizacion({
+                nombre:details.nombre_cliente, telefono:details.telefono,
+                fecha_entrega:details.fecha_entrega,
+                especificaciones:'Solicitud de pedido: '+carrito.map(i=>`${i.cantidad} × ${i.nombre}`).join('; ')+' '+(details.especificaciones || '')+refExtra+notasExtra,
+                ruta_imagen_referencia:details.ruta_imagen_referencia
+            });
+            const resumenItems = carrito.map(i => ({ ...i }));
+            carrito=[];renderizarCarrito();
+            document.getElementById('encargo-modal').classList.add('hidden');
+            showToast('Solicitud enviada. La panadería confirmará disponibilidad, precio y pago.');
+            if (typeof window.mostrarConfirmacionPedidoTienda === 'function') {
+                window.mostrarConfirmacionPedidoTienda({
+                    numero_cotizacion: (resCot && resCot.numero_cotizacion) || 'PENDIENTE',
+                    cliente: details.nombre_cliente,
+                    telefono: details.telefono,
+                    fecha_entrega: details.fecha_entrega,
+                    metodo_pago: details.metodo_adelanto || 'Efectivo',
+                    total: total,
+                    items: resumenItems
+                });
+            }
+            return;
+        }
         const data = await API.procesarFactura(payload);
-        
+
         // Mostrar el ticket de factura
         mostrarTicket(data.factura);
-        
+
         showToast('¡Factura registrada exitosamente!');
-        carrito = []; 
+        carrito = [];
         renderizarCarrito();
     } catch (error) {
         console.error(error);
-        showToast('❌ Error de conexión con el servidor', true);
+        showToast(error.message || 'No se pudo registrar la operación. Revise la conexión.', true);
     } finally {
         showLoading(false);
     }
@@ -1000,7 +1157,7 @@ async function procesarFactura(esEncargo = false, datosExtra = null) {
 function calcularDesgloseCambio(montoCambio) {
     if (montoCambio < 0) return "Monto insuficiente.";
     if (montoCambio === 0) return "✅ Pago exacto, no hay cambio.";
-    
+
     const denominaciones = [
         { valor: 1000, tipo: 'billete' },
         { valor: 500, tipo: 'billete' },
@@ -1015,42 +1172,46 @@ function calcularDesgloseCambio(montoCambio) {
         { valor: 0.25, tipo: 'moneda' },
         { valor: 0.10, tipo: 'moneda' }
     ];
-    
+
     let restante = Math.round(montoCambio * 100);
     let resultado = [];
-    
+
     for (let denom of denominaciones) {
         let valorCentavos = Math.round(denom.valor * 100);
         if (restante >= valorCentavos) {
             let cantidad = Math.floor(restante / valorCentavos);
             restante -= cantidad * valorCentavos;
-            
+
             let denominacionStr = denom.valor < 1 ? `${denom.valor * 100} centavos` : `C$${denom.valor}`;
             resultado.push(`<strong>${cantidad}</strong> ${denom.tipo}(s) de ${denominacionStr}`);
         }
     }
-    
+
     if (resultado.length === 0) return "✅ Pago exacto, no hay cambio.";
-    
+
     return "<strong>Entregar:</strong><br>" + resultado.join('<br>');
 }
 function mostrarTicket(factura) {
+    document.getElementById('btn-imprimir-ticket').onclick=()=>window.open(factura.url_impresion, '_blank', 'noopener');
+    let notice=document.getElementById('ticket-aviso-fiscal');
+    if(!notice){notice=document.createElement('p');notice.id='ticket-aviso-fiscal';document.getElementById('ticket-printable').prepend(notice);}
+    notice.textContent=factura.aviso || '';
     // Llenar datos del ticket
     document.getElementById('ticket-numero').textContent = factura.numero_factura;
     document.getElementById('ticket-fecha').textContent = factura.fecha;
     document.getElementById('ticket-hora').textContent = factura.hora;
-    
+
     // Productos
     const productosContainer = document.getElementById('ticket-productos');
     productosContainer.innerHTML = '';
     factura.productos.forEach(item => {
         const row = document.createElement('div');
         row.className = 'ticket-product-row';
-        
+
         // Nombre sin los ingredientes en paréntesis
         const nombreBase = item.nombre.split(' (')[0];
         row.innerHTML = `
-            <span class="ticket-product-name">${nombreBase}</span>
+            <span class="ticket-product-name">${escapeHTML(nombreBase)}</span>
             <span class="ticket-product-qty">x${item.cantidad}</span>
             <span class="ticket-product-price">C$${item.subtotal.toFixed(2)}</span>
         `;
@@ -1060,14 +1221,14 @@ function mostrarTicket(factura) {
         if (item.detalle_ingredientes && item.detalle_ingredientes.ingredientes && item.detalle_ingredientes.ingredientes.length > 0) {
             // Precio base
             const baseRow = document.createElement('div');
-            baseRow.style.cssText = 'font-size: 0.75rem; color: #6b7280; padding-left: 0.75rem; padding-top: 0.1rem;';
-            baseRow.textContent = `  Base: C$${item.detalle_ingredientes.precio_base.toFixed(2)}`;
+            baseRow.className = 'ticket-base-description';
+            baseRow.textContent = `  Base: C$${(item.detalle_ingredientes.precio_base ?? item.precio).toFixed(2)}`;
             productosContainer.appendChild(baseRow);
 
             item.detalle_ingredientes.ingredientes.forEach(ing => {
                 const ingRow = document.createElement('div');
-                ingRow.style.cssText = 'display: flex; justify-content: space-between; font-size: 0.75rem; color: #10b981; padding-left: 0.75rem;';
-                ingRow.innerHTML = `<span>  + ${ing.nombre}</span><span>+C$${ing.precio.toFixed(2)}</span>`;
+                ingRow.className = 'ticket-ingredient-description';
+                ingRow.innerHTML = `<span>  + ${escapeHTML(ing.nombre)}</span><span>+C$${ing.precio.toFixed(2)}</span>`;
                 productosContainer.appendChild(ingRow);
             });
         }
@@ -1108,7 +1269,7 @@ function showToast(message, isError = false) {
     const toast = document.createElement('div');
     toast.className = `toast ${isError ? 'error' : ''}`;
     toast.textContent = message;
-    
+
     container.appendChild(toast);
     setTimeout(() => {
         toast.style.opacity = '0';
@@ -1127,102 +1288,238 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCerrarMisCot = document.getElementById('btn-cerrar-mis-cotizaciones');
     const listaMisCot = document.getElementById('cotizaciones-cliente-list');
 
-    if (btnMisCotizaciones) {
-        btnMisCotizaciones.addEventListener('click', async () => {
+    if (btnMisCotizaciones && modalMisCotizaciones) {
+        btnMisCotizaciones.addEventListener('click', async (e) => {
+            e.preventDefault();
             modalMisCotizaciones.classList.remove('hidden');
             await cargarMisCotizaciones();
         });
 
-        btnCerrarMisCot.addEventListener('click', () => {
-            modalMisCotizaciones.classList.add('hidden');
+        if (btnCerrarMisCot) {
+            btnCerrarMisCot.addEventListener('click', () => {
+                modalMisCotizaciones.classList.add('hidden');
+            });
+        }
+
+        modalMisCotizaciones.addEventListener('click', (e) => {
+            if (e.target === modalMisCotizaciones) {
+                modalMisCotizaciones.classList.add('hidden');
+            }
         });
     }
 
     async function cargarMisCotizaciones() {
-        listaMisCot.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Cargando...</p>';
+        if (!listaMisCot) return;
+        listaMisCot.innerHTML = '<p class="sales-ui-message-5">Cargando tus cotizaciones...</p>';
         try {
             const data = await API.obtenerCotizacionesCliente();
-            
-            if (data.length === 0) {
-                listaMisCot.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No tienes cotizaciones activas.</p>';
+
+            if (!Array.isArray(data) || data.length === 0) {
+                listaMisCot.innerHTML = `
+                    <div class="sales-ui-message-6">
+                        <span class="sales-ui-text-4">🎂</span>
+                        <p class="sales-ui-text-5">No tienes cotizaciones activas</p>
+                        <p class="sales-ui-text-6">Cuando solicites un pastel personalizado, podrás ver aquí el estado y el precio asignado.</p>
+                    </div>`;
                 return;
             }
 
-            listaMisCot.innerHTML = data.map(cot => `
-                <div style="background: var(--background); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 1rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <strong>Para: ${escapeHTML(cot.fecha_entrega)}</strong>
-                        <span class="badge" style="background: ${cot.estado === 'Cotizada' ? 'var(--success)' : (cot.estado === 'Rechazada' ? 'var(--danger)' : 'var(--warning)')}; color: white; padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.8rem;">
-                            ${escapeHTML(cot.estado)}
+            listaMisCot.innerHTML = data.map((cot, index) => {
+                const precioNum = (cot.precio_cotizado !== null && cot.precio_cotizado !== undefined) ? parseFloat(cot.precio_cotizado) : null;
+                const tienePrecio = precioNum !== null && !isNaN(precioNum);
+                const precioFormatted = tienePrecio ? precioNum.toFixed(2) : '';
+
+                let badgeClass = 'quote-status-pending';
+                let badgeText = 'Pendiente';
+                if (cot.estado === 'Cotizada') {
+                    badgeClass = 'quote-status-priced';
+                    badgeText = 'Cotizada';
+                } else if (cot.estado === 'Aceptada') {
+                    badgeClass = 'quote-status-accepted';
+                    badgeText = 'Aceptada';
+                } else if (cot.estado === 'Rechazada') {
+                    badgeClass = 'quote-status-rejected';
+                    badgeText = 'Rechazada';
+                }
+
+                const specsEscaped = escapeHTML(cot.especificaciones || 'Sin detalles adicionales');
+                const fechaEntrega = escapeHTML(cot.fecha_entrega || 'Por coordinar');
+
+                return `
+                <div class="sales-ui-text-7">
+                    <div class="sales-ui-row">
+                        <div>
+                            <strong class="sales-ui-text-8">
+                                Cotización #COT-${String(cot.id).padStart(4, '0')}
+                            </strong>
+                            <span class="sales-ui-text-9">
+                                📅 Entrega estimada: <strong>${fechaEntrega}</strong>
+                            </span>
+                        </div>
+                        <span class="quote-status ${badgeClass}">
+                            ${badgeText}
                         </span>
                     </div>
-                    <p style="font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--text-main);">${escapeHTML(cot.especificaciones).replace(/\n/g, '<br>')}</p>
-                    ${cot.ruta_imagen ? `<a href="${escapeHTML(cot.ruta_imagen.startsWith('http') ? cot.ruta_imagen : '/static/' + cot.ruta_imagen)}" target="_blank" style="font-size: 0.85rem; color: var(--primary);">Ver foto de referencia</a>` : ''}
-                    
-                    ${cot.estado === 'Cotizada' ? `
-                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                                <span>Precio Asignado:</span>
-                                <strong style="font-size: 1.2rem; color: var(--success);">C$${cot.precio_cotizado.toFixed(2)}</strong>
+
+                    <p class="sales-ui-text-10">
+                        ${specsEscaped}
+                    </p>
+
+                    <div class="sales-ui-text-11" data-reference-index="${index}"></div>
+
+                    ${cot.estado === 'Cotizada' && tienePrecio ? `
+                        <div class="sales-ui-text-13">
+                            <div class="sales-ui-row-2">
+                                <span class="sales-ui-text-14">Precio asignado por panadería:</span>
+                                <strong class="sales-ui-text-15">C$ ${precioFormatted}</strong>
                             </div>
-                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                                <button class="btn btn-primary btn-aceptar-cot" data-id="${cot.id}" data-precio="${cot.precio_cotizado}" data-specs="${escapeHTML(cot.especificaciones)}" data-img="${escapeHTML(cot.ruta_imagen || '')}" data-fecha="${escapeHTML(cot.fecha_entrega)}" style="flex: 1;">Aceptar y Pagar Adelanto</button>
-                                <button class="btn btn-outline btn-rechazar-cot" data-id="${cot.id}" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3);">Rechazar</button>
-                                <a href="https://wa.me/50588888888?text=Hola, tengo una duda sobre la cotización de mi pastel para el ${escapeHTML(cot.fecha_entrega)}" target="_blank" class="btn btn-outline" style="border-color: #25D366; color: #25D366;">WhatsApp</a>
+                            <div class="sales-ui-row-3">
+                                <button type="button" class="btn btn-primary btn-aceptar-cot sales-ui-btn"
+                                    data-id="${cot.id}"
+                                    data-precio="${precioFormatted}"
+                                    data-specs="${escapeHTML(cot.especificaciones || '')}"
+                                    data-img="${escapeHTML(cot.ruta_imagen || '')}"
+                                    data-fecha="${fechaEntrega}"
+                                   >
+                                    ✓ Aceptar y agregar al carrito
+                                </button>
+                                <button type="button" class="btn btn-outline btn-rechazar-cot sales-ui-btn-2"
+                                    data-id="${cot.id}"
+                                   >
+                                    Rechazar
+                                </button>
+                                <a href="https://wa.me/50588888888?text=${encodeURIComponent('Hola, tengo una consulta sobre mi cotización #COT-' + String(cot.id).padStart(4, '0') + ' para el ' + (cot.fecha_entrega || ''))}"
+                                   target="_blank" rel="noopener noreferrer" class="btn btn-outline sales-ui-btn-3">
+                                    WhatsApp
+                                </a>
                             </div>
                         </div>
                     ` : ''}
-                </div>
-            `).join('');
 
-            // Event listeners para los botones de aceptar/rechazar
-            document.querySelectorAll('.btn-aceptar-cot').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const id = e.target.dataset.id;
-                    const precio = parseFloat(e.target.dataset.precio);
-                    const specs = e.target.dataset.specs;
-                    const img = e.target.dataset.img;
-                    const fecha = e.target.dataset.fecha;
-                    
-                    // Agregar al carrito
-                    const itemPersonalizado = {
-                        id: 'custom_' + id,
-                        nombre: 'Pastel Personalizado',
-                        precio: precio,
-                        categoria: 'Reposteria',
-                        cantidad: 1,
-                        subtotal: precio,
-                        detalle_ingredientes: { ingredientes: [], notas_especiales: '' },
-                        encargo_detalles: {
-                            fecha_entrega: fecha,
-                            especificaciones: specs,
-                            ruta_imagen_referencia: img || null,
-                            telefono: null
-                        },
-                        es_custom: true
-                    };
-                    carrito.push(itemPersonalizado);
-                    renderizarCarrito();
-                    modalMisCotizaciones.classList.add('hidden');
-                    showToast('Pastel agregado al carrito. Procede a facturar el pago del 50% mínimo.');
+                    ${cot.estado === 'Aceptada' && tienePrecio ? `
+                        <div class="sales-ui-row-4">
+                            <span>✓ Cotización aceptada (C$ ${precioFormatted})</span>
+                            <button type="button" class="btn btn-outline btn-aceptar-cot sales-ui-btn-4"
+                                data-id="${cot.id}"
+                                data-precio="${precioFormatted}"
+                                data-specs="${escapeHTML(cot.especificaciones || '')}"
+                                data-img="${escapeHTML(cot.ruta_imagen || '')}"
+                                data-fecha="${fechaEntrega}"
+                               >
+                                Agregar de nuevo al carrito
+                            </button>
+                        </div>
+                    ` : ''}
+
+                    ${cot.estado === 'Pendiente' ? `
+                        <div class="sales-ui-row-5">
+                            <span>Estamos valorando tu diseño. En breve recibirás el precio.</span>
+                            <button type="button" class="btn btn-outline btn-rechazar-cot sales-ui-btn-5" data-id="${cot.id}">Cancelar</button>
+                        </div>
+                    ` : ''}
+                </div>
+                `;
+            }).join('');
+
+            listaMisCot.querySelectorAll('[data-reference-index]').forEach(container => {
+                const link = referenceImageLink(data[Number(container.dataset.referenceIndex)].ruta_imagen,
+                    'sales-ui-text-12', '📷 Ver imagen de referencia adjunta');
+                if (link) container.append(link);
+                else container.remove();
+            });
+
+            // Event listeners para los botones de aceptar cotización
+            listaMisCot.querySelectorAll('.btn-aceptar-cot').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const targetBtn = e.currentTarget;
+                    const id = targetBtn.dataset.id;
+                    const precio = parseFloat(targetBtn.dataset.precio || '0');
+                    const specs = targetBtn.dataset.specs || '';
+                    const img = targetBtn.dataset.img || '';
+                    const fecha = targetBtn.dataset.fecha || '';
+
+                    const originalText = targetBtn.textContent;
+                    targetBtn.disabled = true;
+                    targetBtn.textContent = 'Procesando...';
+
+                    try {
+                        // Notificar aceptación al servidor si aún no estaba aceptada
+                        await API.aceptarCotizacion(id);
+
+                        // Agregar al carrito
+                        const itemPersonalizado = {
+                            id: 'custom_' + id,
+                            nombre: 'Pastel Personalizado (#COT-' + String(id).padStart(4, '0') + ')',
+                            precio: precio,
+                            categoria: 'Reposteria',
+                            cantidad: 1,
+                            subtotal: precio,
+                            detalle_ingredientes: { ingredientes: [], notas_especiales: specs },
+                            encargo_detalles: {
+                                fecha_entrega: fecha,
+                                especificaciones: specs,
+                                ruta_imagen_referencia: img || null,
+                                telefono: null
+                            },
+                            es_custom: true
+                        };
+
+                        const existingIdx = carrito.findIndex(i => i.id === itemPersonalizado.id);
+                        if (existingIdx === -1) {
+                            carrito.push(itemPersonalizado);
+                        } else {
+                            carrito[existingIdx].cantidad += 1;
+                            carrito[existingIdx].subtotal = carrito[existingIdx].cantidad * precio;
+                        }
+
+                        renderizarCarrito();
+                        modalMisCotizaciones.classList.add('hidden');
+
+                        // Abrir drawer de carrito para que el cliente proceda
+                        const cartDrawer = document.getElementById('cartDrawer');
+                        const cartOverlay = document.getElementById('cartOverlay');
+                        if (cartDrawer) cartDrawer.classList.add('open');
+                        if (cartOverlay) cartOverlay.classList.add('active');
+
+                        showToast('¡Cotización aceptada! Tu pastel ha sido agregado al carrito.');
+                    } catch (err) {
+                        console.error('Error al aceptar cotización:', err);
+                        showToast(err.message || 'No se pudo aceptar la cotización.', true);
+                        targetBtn.disabled = false;
+                        targetBtn.textContent = originalText;
+                    }
                 });
             });
 
-            document.querySelectorAll('.btn-rechazar-cot').forEach(btn => {
+            // Event listeners para los botones de rechazar cotización
+            listaMisCot.querySelectorAll('.btn-rechazar-cot').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
-                    if (confirm('¿Seguro que deseas rechazar y cancelar esta cotización?')) {
-                        const id = e.target.dataset.id;
-                        await fetch(`/api/cotizaciones/${id}/rechazar`, { method: 'POST' });
-                        showToast('Cotización rechazada');
-                        cargarMisCotizaciones();
+                    const id = e.currentTarget.dataset.id;
+                    if (confirm('¿Seguro que deseas rechazar o cancelar esta cotización?')) {
+                        try {
+                            await API.rechazarPedido(id);
+                            showToast('Cotización rechazada.');
+                            await cargarMisCotizaciones();
+                        } catch (err) {
+                            console.error('Error al rechazar cotización:', err);
+                            showToast(err.message || 'Error al rechazar la cotización.', true);
+                        }
                     }
                 });
             });
 
         } catch (error) {
-            listaMisCot.innerHTML = '<p style="text-align: center; color: var(--danger);">Error al cargar las cotizaciones.</p>';
+            console.error('Error en cargarMisCotizaciones:', error);
+            const msg = (error && error.message) ? error.message : 'Error al cargar cotizaciones.';
+            listaMisCot.innerHTML = `
+                <div class="sales-ui-message-7">
+                    <p class="sales-ui-text-16">${escapeHTML(msg)}</p>
+                    <button type="button" class="btn btn-outline sales-ui-btn-6" id="btn-reintentar-cot">↻ Reintentar</button>
+                </div>`;
+            document.getElementById('btn-reintentar-cot')?.addEventListener('click', cargarMisCotizaciones);
         }
     }
+    window.cargarMisCotizaciones = cargarMisCotizaciones;
 
     // Modal Recepción: Pedidos Clientes
     const btnPedidosClientes = document.getElementById('btn-pedidos-clientes');
@@ -1242,58 +1539,58 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function cargarPedidosPendientes() {
-        listaPedidos.innerHTML = '<p style="text-align: center; color: var(--text-muted);">Cargando...</p>';
+        listaPedidos.innerHTML = '<p class="sales-ui-message">Cargando...</p>';
         try {
             const data = await API.obtenerCotizacionesPendientes();
-            
+
             if (data.length === 0) {
-                listaPedidos.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No hay pedidos pendientes por cotizar.</p>';
+                listaPedidos.innerHTML = '<p class="sales-ui-message">No hay pedidos pendientes por cotizar.</p>';
                 return;
             }
 
-            listaPedidos.innerHTML = data.map(cot => `
-                <div style="background: var(--background); padding: 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+            listaPedidos.innerHTML = data.map((cot, index) => `
+                <div class="sales-ui-text-17">
+                    <div class="sales-ui-row-6">
                         <div>
-                            <h4 style="margin-bottom: 0.25rem;">Pedido #${cot.id}</h4>
-                            <div style="color: var(--text-muted); font-size: 0.85rem;">
+                            <h4 class="sales-ui-text-18">Pedido #${cot.id}</h4>
+                            <div class="sales-ui-cart-item-price">
                                 <div><strong>Cliente:</strong> ${escapeHTML(cot.cliente_nombre || cot.cliente)}</div>
                                 <div><strong>Para entregar:</strong> ${escapeHTML(cot.fecha_entrega)}</div>
                             </div>
                         </div>
-                        <span class="badge" style="background: var(--warning); color: white; padding: 0.35rem 0.75rem; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600;">
+                        <span class="badge sales-ui-badge">
                             Nueva
                         </span>
                     </div>
-                    
-                    <div style="background: rgba(107, 58, 42, 0.03); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem; border-left: 3px solid var(--brand-dorado);">
-                        <strong style="display: block; margin-bottom: 0.5rem; color: var(--brand-cafe-dark); font-size: 0.85rem; text-transform: uppercase;">Especificaciones del Cliente:</strong>
-                        <p style="font-size: 0.95rem; margin: 0; line-height: 1.5; color: var(--text-main);">${escapeHTML(cot.especificaciones).replace(/\n/g, '<br>')}</p>
+
+                    <div class="sales-ui-text-19">
+                        <strong class="sales-ui-text-20">Especificaciones del Cliente:</strong>
+                        <p class="sales-ui-text-21">${escapeHTML(cot.especificaciones).replace(/\n/g, '<br>')}</p>
                     </div>
 
-                    ${cot.ruta_imagen ? `
-                        <div style="margin-bottom: 1rem;">
-                            <a href="${escapeHTML(cot.ruta_imagen.startsWith('http') ? cot.ruta_imagen : '/static/' + cot.ruta_imagen)}" target="_blank" class="btn btn-outline" style="font-size: 0.85rem; padding: 0.4rem 0.8rem; display: inline-flex; align-items: center; gap: 0.5rem;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                                Ver Imagen de Referencia
-                            </a>
-                        </div>
-                    ` : ''}
-                    
-                    <div style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center;">
-                        <input type="number" id="precio-cot-${cot.id}" class="form-control" placeholder="Precio (C$)" min="0" step="0.01" style="width: 150px;">
+                    <div class="sales-ui-text-22" data-reference-index="${index}"></div>
+
+                    <div class="sales-ui-row-7">
+                        <input type="number" id="precio-cot-${cot.id}" class="form-control sales-ui-form-control" placeholder="Precio (C$)" min="0" step="0.01">
                         <button class="btn btn-primary btn-enviar-cot" data-id="${cot.id}">Fijar Precio</button>
-                        ${cot.telefono ? `<a href="https://wa.me/505${cot.telefono.replace(/[^0-9]/g, '')}?text=Hola ${escapeHTML(cot.cliente_nombre || cot.cliente)}, te escribimos de Panadería Amada sobre tu encargo para el ${escapeHTML(cot.fecha_entrega)}..." target="_blank" class="btn btn-outline" style="border-color: #25D366; color: #25D366;">WhatsApp Cliente</a>` : ''}
+                        ${cot.telefono ? `<a href="https://wa.me/505${cot.telefono.replace(/[^0-9]/g, '')}?text=Hola ${escapeHTML(cot.cliente_nombre || cot.cliente)}, te escribimos de Panadería Amada sobre tu encargo para el ${escapeHTML(cot.fecha_entrega)}..." target="_blank" class="btn btn-outline sales-ui-btn-3">WhatsApp Cliente</a>` : ''}
                     </div>
                 </div>
             `).join('');
+
+            listaPedidos.querySelectorAll('[data-reference-index]').forEach(container => {
+                const link = referenceImageLink(data[Number(container.dataset.referenceIndex)].ruta_imagen,
+                    'btn btn-outline sales-ui-btn-7', '📷 Ver Imagen de Referencia');
+                if (link) container.append(link);
+                else container.remove();
+            });
 
             document.querySelectorAll('.btn-enviar-cot').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const id = e.target.dataset.id;
                     const precioInput = document.getElementById(`precio-cot-${id}`);
                     const precio = parseFloat(precioInput.value);
-                    
+
                     if (isNaN(precio) || precio <= 0) {
                         showToast('Ingresa un precio válido', true);
                         return;
@@ -1305,7 +1602,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ precio: precio })
                         });
-                        
+
                         if (res.ok) {
                             showToast('Cotización enviada al cliente');
                             cargarPedidosPendientes();
@@ -1319,7 +1616,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
         } catch (error) {
-            listaPedidos.innerHTML = '<p style="text-align: center; color: var(--danger);">Error al cargar pedidos.</p>';
+            listaPedidos.innerHTML = '<p class="sales-ui-message-3">Error al cargar pedidos.</p>';
         }
     }
 });

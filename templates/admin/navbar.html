@@ -1,6 +1,6 @@
 <header class="app-header">
-    <div style="display: flex; align-items: center; height: 100%; flex: 1; min-width: 0;">
-        <a href="/admin/dashboard" class="admin-nav-brand" style="flex-shrink: 0;">
+    <div class="navbar-row">
+        <a href="/admin/dashboard" class="admin-nav-brand navbar-admin-nav-brand">
             <div class="brand-icon">🥐</div>
             <span class="brand-text">Panadería Amada</span>
         </a>
@@ -36,7 +36,7 @@
                 <button class="admin-nav-link nav-dropdown-trigger {% if request.path in ['/admin/usuarios', '/admin/inventario', '/admin/produccion', '/admin/configuracion'] %}active{% endif %}" onclick="toggleNavMore(event)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
                     <span>Más</span>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;margin-left:2px;flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="navbar-svg-spacing"><polyline points="6 9 12 15 18 9"/></svg>
                 </button>
                 <div class="nav-dropdown-menu" id="nav-mas-menu">
                     <a href="/admin/usuarios" class="nav-dropdown-item {% if request.path == '/admin/usuarios' %}active{% endif %}">

@@ -1,13 +1,14 @@
 {% extends 'admin_base.html' %}
+{% block body_class %}page-estado-resultados{% endblock %}
 
 {% block content %}
-<main class="c-report">
+<section class="c-report" aria-label="Estado de resultados">
     <header class="c-report__header">
         <h1 class="c-report__title">Estado de Resultados</h1>
         <p class="c-report__subtitle">Periodo: {{ mes }}/{{ anio }} | Expresado en Córdobas (C$)</p>
     </header>
 
-    <div class="c-report__grid" style="grid-template-columns: 1fr;">
+    <div class="c-report__grid estado-resultados-c-report-grid">
         <!-- Bloque de Ingresos Operativos -->
         <section class="c-report__section c-report__section--glass">
             <h2 class="c-report__section-title">Ingresos Operativos</h2>
@@ -21,7 +22,7 @@
                     </tr>
                     {% else %}
                     <tr class="c-table__row">
-                        <td colspan="3" class="c-table__cell" style="text-align: center; color: var(--text-muted)">No hay ingresos en este periodo.</td>
+                        <td colspan="3" class="c-table__cell estado-resultados-c-table-cell">No hay ingresos en este periodo.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -47,14 +48,14 @@
                     </tr>
                     {% else %}
                     <tr class="c-table__row">
-                        <td colspan="3" class="c-table__cell" style="text-align: center; color: var(--text-muted)">No hay costos en este periodo.</td>
+                        <td colspan="3" class="c-table__cell estado-resultados-c-table-cell">No hay costos en este periodo.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
                 <tfoot>
                     <tr class="c-table__row c-table__row--total">
                         <td colspan="2" class="c-table__cell c-table__cell--label">Total Costos</td>
-                        <td class="c-table__cell c-table__cell--amount-total" style="color: var(--danger)">- {{ "C$ {:,.2f}".format(total_costos) }}</td>
+                        <td class="c-table__cell c-table__cell--amount-total estado-resultados-c-table-cell-2">- {{ "C$ {:,.2f}".format(total_costos) }}</td>
                     </tr>
                     <tr class="c-table__row c-table__row--supertotal">
                         <td colspan="2" class="c-table__cell c-table__cell--label">Utilidad Bruta</td>
@@ -77,18 +78,18 @@
                     </tr>
                     {% else %}
                     <tr class="c-table__row">
-                        <td colspan="3" class="c-table__cell" style="text-align: center; color: var(--text-muted)">No hay gastos en este periodo.</td>
+                        <td colspan="3" class="c-table__cell estado-resultados-c-table-cell">No hay gastos en este periodo.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
                 <tfoot>
                     <tr class="c-table__row c-table__row--total">
                         <td colspan="2" class="c-table__cell c-table__cell--label">Total Gastos</td>
-                        <td class="c-table__cell c-table__cell--amount-total" style="color: var(--danger)">- {{ "C$ {:,.2f}".format(total_gastos) }}</td>
+                        <td class="c-table__cell c-table__cell--amount-total estado-resultados-c-table-cell-2">- {{ "C$ {:,.2f}".format(total_gastos) }}</td>
                     </tr>
                     <tr class="c-table__row c-table__row--supertotal">
                         <td colspan="2" class="c-table__cell c-table__cell--label">Utilidad Neta del Ejercicio</td>
-                        <td class="c-table__cell c-table__cell--amount-supertotal" style="color: {% if utilidad_neta >= 0 %}var(--success){% else %}var(--danger){% endif %}">{{ "C$ {:,.2f}".format(utilidad_neta) }}</td>
+                        <td class="c-table__cell c-table__cell--amount-supertotal {{ "result-profit" if utilidad_neta >= 0 else "result-loss" }}">{{ "C$ {:,.2f}".format(utilidad_neta) }}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -110,12 +111,14 @@
         {% endif %}
     </div>
 
-    <footer class="c-report__actions" style="gap: 15px;">
-        <a href="?print=1" target="_blank" class="btn btn-outline" style="border-radius: var(--radius-full); padding: 1rem 2rem; display: flex; align-items: center; gap: 8px;">
+    <footer class="c-report__actions estado-resultados-c-report-actions">
+        <a href="?print=1" target="_blank" class="btn btn-outline estado-resultados-btn-outline">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
             Imprimir Reporte
         </a>
         <a href="{{ url_for('admin.balance_general') }}" class="btn btn-primary c-btn-glow">Ver Balance General</a>
     </footer>
-</main>
+</section>
 {% endblock %}
+
+{% block page_styles %}{{ super() }}<link rel="stylesheet" href="{{ css_url('pages/admin/estado_resultados') }}">{% endblock %}

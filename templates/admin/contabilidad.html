@@ -1,4 +1,5 @@
 {% extends 'admin_base.html' %}
+{% block body_class %}page-contabilidad{% endblock %}
 
 {% block title %}Contabilidad | Brajher's Cake{% endblock %}
 {% block page_title %}Contabilidad Financiera{% endblock %}
@@ -8,75 +9,67 @@
     <p>Resumen de ingresos, gastos y salud financiera de la empresa.</p>
 </div>
 
-<h3 style="margin-bottom: 1rem; color: var(--text-dark); font-family: 'Playfair Display', serif; font-size: 1.25rem;">Motor Contable NIIF</h3>
-<div class="metrics-grid" style="margin-bottom: 2rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+<h3 class="contabilidad-h3-text">Motor Contable NIIF</h3>
+<div class="metrics-grid contabilidad-metrics-grid">
     <!-- Catálogo de Cuentas -->
-    <a href="/admin/contabilidad/catalogo" class="metric-card hover-lift" style="text-decoration: none; cursor: pointer;">
-        <div class="metric-icon" style="background-color: rgba(107, 58, 42, 0.1); color: var(--brand-cafe);">
+    <a href="/admin/contabilidad/catalogo" class="metric-card hover-lift contabilidad-metric-card">
+        <div class="metric-icon contabilidad-metric-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h10"/></svg>
         </div>
         <div class="metric-body">
             <div class="metric-title">Catálogo de Cuentas</div>
-            <div class="metric-value text-dark" style="font-size: 0.9rem; margin-top: 4px;">Estructura de 87 cuentas</div>
+            <div class="metric-value text-dark contabilidad-metric-value">Estructura de 87 cuentas</div>
         </div>
     </a>
 
     <!-- Libro Mayor -->
-    <a href="/admin/contabilidad/mayor" class="metric-card hover-lift" style="text-decoration: none; cursor: pointer;">
-        <div class="metric-icon" style="background-color: rgba(52, 152, 219, 0.1); color: #3498db;">
+    <a href="/admin/contabilidad/mayor" class="metric-card hover-lift contabilidad-metric-card">
+        <div class="metric-icon contabilidad-metric-icon-2">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         </div>
         <div class="metric-body">
             <div class="metric-title">Libro Mayor</div>
-            <div class="metric-value text-dark" style="font-size: 0.9rem; margin-top: 4px;">Movimientos por cuenta</div>
+            <div class="metric-value text-dark contabilidad-metric-value">Movimientos por cuenta</div>
         </div>
     </a>
 
     <!-- Balance de Comprobación -->
-    <a href="/admin/contabilidad/comprobacion" class="metric-card hover-lift" style="text-decoration: none; cursor: pointer;">
-        <div class="metric-icon" style="background-color: rgba(155, 89, 182, 0.1); color: #9b59b6;">
+    <a href="/admin/contabilidad/comprobacion" class="metric-card hover-lift contabilidad-metric-card">
+        <div class="metric-icon contabilidad-metric-icon-3">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
         </div>
         <div class="metric-body">
             <div class="metric-title">Balance Comprobación</div>
-            <div class="metric-value text-dark" style="font-size: 0.9rem; margin-top: 4px;">Sumas y Saldos</div>
+            <div class="metric-value text-dark contabilidad-metric-value">Sumas y Saldos</div>
         </div>
     </a>
 
     <!-- Balance General -->
-    <a href="/admin/contabilidad/balance" class="metric-card hover-lift" style="text-decoration: none; cursor: pointer;">
-        <div class="metric-icon" style="background-color: rgba(212, 149, 43, 0.1); color: var(--brand-dorado);">
+    <a href="/admin/contabilidad/balance" class="metric-card hover-lift contabilidad-metric-card">
+        <div class="metric-icon contabilidad-metric-icon-4">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
         </div>
         <div class="metric-body">
             <div class="metric-title">Balance General</div>
-            <div class="metric-value text-dark" style="font-size: 0.9rem; margin-top: 4px;">Estado de Situación</div>
+            <div class="metric-value text-dark contabilidad-metric-value">Estado de Situación</div>
         </div>
     </a>
-    
+
     <!-- Estado de Resultados -->
-    <a href="/admin/contabilidad/estado-resultados" class="metric-card hover-lift" style="text-decoration: none; cursor: pointer;">
-        <div class="metric-icon" style="background-color: rgba(46, 204, 113, 0.1); color: var(--success);">
+    <a href="/admin/contabilidad/estado-resultados" class="metric-card hover-lift contabilidad-metric-card">
+        <div class="metric-icon contabilidad-metric-icon-5">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         </div>
         <div class="metric-body">
             <div class="metric-title">Estado de Resultados</div>
-            <div class="metric-value text-dark" style="font-size: 0.9rem; margin-top: 4px;">Pérdidas y Ganancias</div>
+            <div class="metric-value text-dark contabilidad-metric-value">Pérdidas y Ganancias</div>
         </div>
     </a>
 </div>
 
-<style>
-.hover-lift {
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.hover-lift:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.08);
-}
-</style>
 
-<h3 style="margin-bottom: 1rem; color: var(--text-dark); font-family: 'Playfair Display', serif; font-size: 1.25rem;">Resumen de Operaciones (Hoy)</h3>
+
+<h3 class="contabilidad-h3-text">Resumen de Operaciones (Hoy)</h3>
 <div class="metrics-grid">
     <!-- Ingresos Hoy -->
     <div class="metric-card">
@@ -120,7 +113,7 @@
     </div>
 </div>
 
-<h3 style="margin-bottom: 1rem; margin-top: 1.5rem; color: var(--text-dark); font-family: 'Playfair Display', serif; font-size: 1.25rem;">Resumen del Mes en Curso</h3>
+<h3 class="contabilidad-h3-text-2">Resumen del Mes en Curso</h3>
 <div class="metrics-grid">
      <!-- Ingresos Mes -->
      <div class="metric-card">
@@ -136,10 +129,18 @@
             <div class="metric-value text-warning">C${{ "%.2f"|format(metricas.compras_mes) }}</div>
         </div>
     </div>
+    <!-- Planilla / Salarios Mes -->
+    <div class="metric-card">
+        <div class="metric-body">
+            <div class="metric-title">Planilla / Salarios del Mes</div>
+            <div class="metric-value text-danger">C${{ "%.2f"|format(metricas.planilla_costo_total_mes or 0) }}</div>
+            <div class="text-muted">Sueldos: C${{ "%.2f"|format(metricas.salarios_devengados_mes or 0) }} | INSS/INATEC Pat: C${{ "%.2f"|format((metricas.inss_patronal_mes or 0) + (metricas.inatec_mes or 0)) }}</div>
+        </div>
+    </div>
     <!-- Gastos Mes -->
     <div class="metric-card">
         <div class="metric-body">
-            <div class="metric-title">Gastos Mensuales</div>
+            <div class="metric-title">Otros Gastos Mensuales</div>
             <div class="metric-value text-danger">C${{ "%.2f"|format(metricas.egresos_mes) }}</div>
         </div>
     </div>
@@ -152,7 +153,92 @@
     </div>
 </div>
 
-<h3 style="margin-bottom: 1rem; margin-top: 1.5rem; color: var(--text-dark); font-family: 'Playfair Display', serif; font-size: 1.25rem;">Control de Gastos</h3>
+<div class="panel panel-full panel-accent-primary mb-3">
+    <div class="panel-header flex-between">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            Planilla y Salarios Contabilizados (NIIF)
+        </h3>
+        <div class="payroll-header-controls">
+            <select id="filtro-periodo-contabilidad" class="payroll-filter-select" onchange="filtrarPlanillaContable()">
+                <option value="ALL">Todos los períodos</option>
+                <option value="2026-10" selected>Octubre 2026 (Mes actual)</option>
+                <option value="2026-09">Septiembre 2026</option>
+            </select>
+            <a href="/admin/rrhh" class="btn btn-outline btn-sm">Ir a Planilla RRHH</a>
+            <a href="/admin/contabilidad/estado-resultados" class="btn btn-primary btn-sm">Ver en Estado de Resultados</a>
+        </div>
+    </div>
+    <div class="panel-body panel-body-flush">
+        <div class="table-responsive">
+            <table class="data-table payroll-table" id="tabla-planilla-contable">
+                <thead>
+                    <tr>
+                        <th>Comprobante / Período</th>
+                        <th>Colaborador / Cargo</th>
+                        <th class="col-num">Devengado</th>
+                        <th class="col-num">Deducc. Ley</th>
+                        <th class="col-num">Neto a Pagar</th>
+                        <th class="col-num">Aporte Patronal</th>
+                        <th class="col-num">Costo Total</th>
+                        <th class="col-actions"> Soportes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for n in nominas_contables or [] %}
+                    <tr class="fila-nomina-contable" data-mes="{{ n.mes_anio }}" data-devengado="{{ n.devengado }}" data-deducciones="{{ n.inss_laboral + n.ir }}" data-neto="{{ n.neto }}" data-patronal="{{ n.inss_patronal + n.inatec }}" data-costo="{{ n.costo_total }}">
+                        <td>
+                            <div class="cell-bold">{{ n.comprobante }}</div>
+                            <div class="payroll-sub">{{ n.periodo }}</div>
+                        </td>
+                        <td>
+                            <div class="cell-bold">{{ n.empleado }}</div>
+                            <div class="payroll-sub">{{ n.cargo }}</div>
+                        </td>
+                        <td class="cell-money col-num">C${{ "{:,.2f}".format(n.devengado) }}</td>
+                        <td class="cell-money text-danger col-num">-C${{ "{:,.2f}".format(n.inss_laboral + n.ir) }}</td>
+                        <td class="cell-money text-success fw-700 col-num">C${{ "{:,.2f}".format(n.neto) }}</td>
+                        <td class="cell-money text-warning col-num">C${{ "{:,.2f}".format(n.inss_patronal + n.inatec) }}</td>
+                        <td class="cell-money text-danger fw-700 col-num">C${{ "{:,.2f}".format(n.costo_total) }}</td>
+                        <td class="col-actions">
+                            <div class="payroll-actions-group">
+                                <a href="{{ url_for('admin.colilla_pago', nomina_id=n.id) }}" target="_blank" class="btn btn-outline btn-sm" title="Ver Colilla de Pago">Colilla</a>
+                                {% if n.asiento_id %}
+                                <a href="/admin/fiscal/asientos/{{ n.asiento_id }}/imprimir" target="_blank" class="btn btn-outline btn-sm" title="Ver Comprobante de Diario NIIF">Asiento</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">💼</div>
+                                <p>No hay nóminas contabilizadas registradas.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if nominas_contables %}
+                <tfoot>
+                    <tr>
+                        <th colspan="2" id="tfoot-label-contable">Totales del Período Seleccionado</th>
+                        <th class="col-num" id="tot-cont-dev">C$0.00</th>
+                        <th class="col-num text-danger" id="tot-cont-ded">-C$0.00</th>
+                        <th class="col-num text-success" id="tot-cont-neto">C$0.00</th>
+                        <th class="col-num text-warning" id="tot-cont-pat">C$0.00</th>
+                        <th class="col-num text-danger" id="tot-cont-costo">C$0.00</th>
+                        <th></th>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+</div>
+
+<h3 class="contabilidad-h3-text-2">Control de Gastos</h3>
 
 <!-- Panels -->
 <div class="panels-grid">
@@ -241,9 +327,7 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <button class="btn btn-outline btn-sm" onclick="toggleVale({{ v.id }})">
-                                    {{ 'Marcar Pendiente' if v.descontado else 'Marcar Descontado' }}
-                                </button>
+                                <span class="text-muted">Se liquida en nómina</span>
                             </td>
                         </tr>
                         {% else %}
@@ -268,7 +352,7 @@
     <div class="modal-content">
         <h2>Nuevo Egreso Privado</h2>
         <p class="subtitle">Registra un gasto operativo del negocio.</p>
-        
+
         <form id="form-egreso">
             <div class="form-group">
                 <label class="form-label" for="egreso-concepto">Concepto</label>
@@ -291,7 +375,7 @@
     <div class="modal-content">
         <h2>Nuevo Vale a Empleado</h2>
         <p class="subtitle">Registra un adelanto de salario.</p>
-        
+
         <form id="form-vale">
             <div class="form-group">
                 <label class="form-label" for="vale-empleado">Empleado</label>
@@ -357,13 +441,13 @@
             });
             const data = await res.json();
             hideLoading();
-            if (res.ok) { 
+            if (res.ok) {
                 showToast('Egreso registrado correctamente');
                 cerrarModal('egreso');
                 const tbody = document.querySelector('.panel-accent-danger .data-table tbody');
                 const empty = tbody.querySelector('.empty-state');
                 if(empty) tbody.innerHTML = '';
-                
+
                 const tr = document.createElement('tr');
                 const d = new Date();
                 const fecha = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -374,8 +458,8 @@
                     <td class="cell-muted">Tú</td>
                 `;
                 tbody.prepend(tr);
-            } else { 
-                showToast(data.error, true); 
+            } else {
+                showToast(data.error, true);
             }
         } catch (e) { hideLoading(); showToast('Error de red', true); }
     });
@@ -397,13 +481,13 @@
             });
             const data = await res.json();
             hideLoading();
-            if (res.ok) { 
+            if (res.ok) {
                 showToast('Vale registrado correctamente');
                 cerrarModal('vale');
                 const tbody = document.querySelector('.panel-accent-warning .data-table tbody');
                 const empty = tbody.querySelector('.empty-state');
                 if(empty) tbody.innerHTML = '';
-                
+
                 const tr = document.createElement('tr');
                 const d = new Date();
                 const fecha = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -413,12 +497,12 @@
                     <td class="cell-money text-warning">C$${parseFloat(monto).toFixed(2)}</td>
                     <td><span class="badge badge-danger badge-live">Pendiente</span></td>
                     <td>
-                        <button class="btn btn-outline btn-sm" onclick="toggleVale(${data.id})">Marcar Descontado</button>
+                        <span class="text-muted">Se liquida en nómina</span>
                     </td>
                 `;
                 tbody.prepend(tr);
-            } else { 
-                showToast(data.error, true); 
+            } else {
+                showToast(data.error, true);
             }
         } catch (e) { hideLoading(); showToast('Error de red', true); }
     });
@@ -432,6 +516,39 @@
         } catch (e) { hideLoading(); showToast('Error de red', true); }
     }
 
+    function formatoMoneda(valor) {
+        return 'C$' + Number(valor || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function filtrarPlanillaContable() {
+        const select = document.getElementById('filtro-periodo-contabilidad');
+        if (!select) return;
+        const filtro = select.value;
+        const filas = document.querySelectorAll('.fila-nomina-contable');
+        let dev = 0, ded = 0, neto = 0, pat = 0, costo = 0, visibles = 0;
+        filas.forEach(tr => {
+            const coincide = (filtro === 'ALL' || tr.dataset.mes === filtro);
+            tr.style.display = coincide ? '' : 'none';
+            if (coincide) {
+                visibles += 1;
+                dev += parseFloat(tr.dataset.devengado || 0);
+                ded += parseFloat(tr.dataset.deducciones || 0);
+                neto += parseFloat(tr.dataset.neto || 0);
+                pat += parseFloat(tr.dataset.patronal || 0);
+                costo += parseFloat(tr.dataset.costo || 0);
+            }
+        });
+        const setEl = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+        setEl('tfoot-label-contable', `Totales (${visibles} nóminas mostradas)`);
+        setEl('tot-cont-dev', formatoMoneda(dev));
+        setEl('tot-cont-ded', '-' + formatoMoneda(ded));
+        setEl('tot-cont-neto', formatoMoneda(neto));
+        setEl('tot-cont-pat', formatoMoneda(pat));
+        setEl('tot-cont-costo', formatoMoneda(costo));
+    }
+
+    document.addEventListener('DOMContentLoaded', filtrarPlanillaContable);
+
     // Utilidad escapeHTML
     function escapeHTML(str) {
         if (!str) return '';
@@ -444,3 +561,5 @@
     }
 </script>
 {% endblock %}
+
+{% block page_styles %}{{ super() }}<link rel="stylesheet" href="{{ css_url('pages/admin/contabilidad') }}">{% endblock %}

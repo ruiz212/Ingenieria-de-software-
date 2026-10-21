@@ -56,7 +56,7 @@ def run_migration():
                     EfectivoContado DECIMAL(10, 2) NOT NULL DEFAULT 0,
                     TransferenciasContadas DECIMAL(10, 2) NOT NULL DEFAULT 0,
                     DolaresContados DECIMAL(10, 2) NOT NULL DEFAULT 0,
-                    TipoCambioUsado DECIMAL(10, 4) NULL,
+                    TipoCambioUsado DECIMAL(12, 6) NULL,
                     EfectivoSistema DECIMAL(10, 2) NOT NULL DEFAULT 0,
                     TransferenciasSistema DECIMAL(10, 2) NOT NULL DEFAULT 0,
                     DiferenciaEfectivo DECIMAL(10, 2) NOT NULL DEFAULT 0,

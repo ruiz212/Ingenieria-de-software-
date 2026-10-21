@@ -22,8 +22,14 @@
     animation: badge-in 0.25s var(--ease-spring) both;
 }
 @keyframes badge-in {
-    from { transform: scale(0.75); opacity: 0; }
-    to   { transform: scale(1);    opacity: 1; }
+    from {
+        transform: scale(0.75);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -95,8 +101,14 @@
     flex-shrink: 0;
 }
 @keyframes badge-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.4; transform: scale(0.7); }
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.4;
+        transform: scale(0.7);
+    }
 }
 
 /* Shimmer — para estados "nuevo" o "hot" */
@@ -120,8 +132,12 @@
     animation: badge-sheen 2s ease-in-out infinite 1s;
 }
 @keyframes badge-sheen {
-    0%   { left: -60%; }
-    100% { left: 140%; }
+    0% {
+        left: -60%;
+    }
+    100% {
+        left: 140%;
+    }
 }
 
 /* ── Dot indicator (bare circle) ── */
@@ -133,10 +149,22 @@
     border: none;
     animation: none;
 }
-.badge-dot.success { background: var(--success); box-shadow: 0 0 0 2px var(--success-bg); }
-.badge-dot.danger  { background: var(--danger);  box-shadow: 0 0 0 2px var(--danger-bg);  }
-.badge-dot.warning { background: var(--warning); box-shadow: 0 0 0 2px var(--warning-bg); }
-.badge-dot.info    { background: var(--info);    box-shadow: 0 0 0 2px var(--info-bg);    }
+.badge-dot.success {
+    background: var(--success);
+    box-shadow: 0 0 0 2px var(--success-bg);
+}
+.badge-dot.danger {
+    background: var(--danger);
+    box-shadow: 0 0 0 2px var(--danger-bg);
+}
+.badge-dot.warning {
+    background: var(--warning);
+    box-shadow: 0 0 0 2px var(--warning-bg);
+}
+.badge-dot.info {
+    background: var(--info);
+    box-shadow: 0 0 0 2px var(--info-bg);
+}
 
 /* ══════════════════════════════════════════════════════════
    SIZES
