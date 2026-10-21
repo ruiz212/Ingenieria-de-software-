@@ -3,14 +3,17 @@ from flask import render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
 import json
 import traceback
+import calendar
+import decimal
 
 from app.admin import admin_bp
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp
 from app.services.business_time import business_now
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime
 from app.services.validation import amount, required_text
+from app.services.contabilidad_service import ContabilidadService
 
 @admin_bp.route('/contabilidad')
 @login_required
@@ -21,11 +24,15 @@ def contabilidad():
     cursor = conn.cursor()
 
     # Egresos Privados
-    cursor.execute(
-        "SELECT e.ID, e.Concepto, e.Monto, e.Fecha, u.NombreCompleto AS RegistradoPor "
-        "FROM EgresosPrivados e "
-        "JOIN Usuarios u ON e.UsuarioID = u.ID "
-        "ORDER BY e.Fecha DESC"
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ListarEgresosPrivados',
+        fallback_sql=(
+            "SELECT e.ID, e.Concepto, e.Monto, e.Fecha, u.NombreCompleto AS RegistradoPor "
+            "FROM EgresosPrivados e "
+            "JOIN Usuarios u ON e.UsuarioID = u.ID "
+            "ORDER BY e.Fecha DESC"
+        ),
     )
     egresos = [
         {'id': row.ID, 'concepto': row.Concepto, 'monto': float(row.Monto),
@@ -34,11 +41,15 @@ def contabilidad():
     ]
 
     # Vales a Empleados
-    cursor.execute(
-        "SELECT v.ID, u.NombreCompleto AS Empleado, v.Monto, v.Fecha, v.Descontado "
-        "FROM ValesEmpleados v "
-        "JOIN Usuarios u ON v.EmpleadoID = u.ID "
-        "ORDER BY v.Fecha DESC"
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ListarValesEmpleados',
+        fallback_sql=(
+            "SELECT v.ID, u.NombreCompleto AS Empleado, v.Monto, v.Fecha, v.Descontado "
+            "FROM ValesEmpleados v "
+            "JOIN Usuarios u ON v.EmpleadoID = u.ID "
+            "ORDER BY v.Fecha DESC"
+        ),
     )
     vales = [
         {'id': row.ID, 'empleado': row.Empleado, 'monto': float(row.Monto),
@@ -47,38 +58,154 @@ def contabilidad():
     ]
 
     # Lista de usuarios para el dropdown de vales
-    cursor.execute("SELECT ID, NombreCompleto FROM Usuarios WHERE Activo = 1 ORDER BY NombreCompleto")
+    execute_sp(
+        cursor,
+        'seguridad.sp_ListarUsuariosActivosSimple',
+        fallback_sql="SELECT ID, NombreCompleto FROM Usuarios WHERE Activo = 1 ORDER BY NombreCompleto",
+    )
     empleados = [{'id': row.ID, 'nombre': row.NombreCompleto} for row in cursor.fetchall()]
 
     now_ni = business_now()
     hoy_ni = now_ni.date()
 
     # Totales del MES actual
-    # 1. Ingresos (Ventas)
-    cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND MONTH(FechaHora) = ? AND YEAR(FechaHora) = ?", now_ni.month, now_ni.year)
+    execute_sp(
+        cursor,
+        'ventas.sp_ContabilidadIngresosMes',
+        (now_ni.month, now_ni.year),
+        fallback_sql="SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND MONTH(FechaHora) = ? AND YEAR(FechaHora) = ?",
+    )
     ingresos_mes = float(cursor.fetchone()[0])
 
-    # 2. Compras de Materia Prima
-    cursor.execute("SELECT ISNULL(SUM(CostoTotal), 0) FROM ComprasMateriaPrima WHERE MONTH(Fecha) = ? AND YEAR(Fecha) = ?", now_ni.month, now_ni.year)
+    execute_sp(
+        cursor,
+        'produccion.sp_ContabilidadComprasMes',
+        (now_ni.month, now_ni.year),
+        fallback_sql="SELECT ISNULL(SUM(CostoTotal), 0) FROM ComprasMateriaPrima WHERE MONTH(Fecha) = ? AND YEAR(Fecha) = ?",
+    )
     compras_mes = float(cursor.fetchone()[0])
 
-    # 3. Egresos Privados
-    cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE MONTH(Fecha) = ? AND YEAR(Fecha) = ?", now_ni.month, now_ni.year)
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ContabilidadEgresosMes',
+        (now_ni.month, now_ni.year),
+        fallback_sql="SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE MONTH(Fecha) = ? AND YEAR(Fecha) = ?",
+    )
     egresos_mes = float(cursor.fetchone()[0])
 
     # Totales del DIA actual
-    cursor.execute("SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND CONVERT(date, FechaHora) = ?", hoy_ni)
+    execute_sp(
+        cursor,
+        'ventas.sp_ContabilidadIngresosDia',
+        (hoy_ni,),
+        fallback_sql="SELECT ISNULL(SUM(Total), 0) FROM Facturas WHERE EstadoFiscal='Emitida' AND CONVERT(date, FechaHora) = ?",
+    )
     ingresos_hoy = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT ISNULL(SUM(CostoTotal), 0) FROM ComprasMateriaPrima WHERE CONVERT(date, Fecha) = ?", hoy_ni)
+    execute_sp(
+        cursor,
+        'produccion.sp_ContabilidadComprasDia',
+        (hoy_ni,),
+        fallback_sql="SELECT ISNULL(SUM(CostoTotal), 0) FROM ComprasMateriaPrima WHERE CONVERT(date, Fecha) = ?",
+    )
     compras_hoy = float(cursor.fetchone()[0])
 
-    cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE CONVERT(date, Fecha) = ?", hoy_ni)
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ContabilidadEgresosDia',
+        (hoy_ni,),
+        fallback_sql="SELECT ISNULL(SUM(Monto), 0) FROM EgresosPrivados WHERE CONVERT(date, Fecha) = ?",
+    )
     egresos_hoy = float(cursor.fetchone()[0])
 
     # Vales Pendientes
-    cursor.execute("SELECT ISNULL(SUM(Monto), 0) FROM ValesEmpleados WHERE Descontado = 0")
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ContabilidadValesPendientes',
+        fallback_sql="SELECT ISNULL(SUM(Monto), 0) FROM ValesEmpleados WHERE Descontado = 0",
+    )
     total_vales_pendientes = float(cursor.fetchone()[0])
+
+    # Planilla / Salarios del mes actual
+    execute_sp(
+        cursor,
+        'rrhh.sp_ContabilidadNominaMes',
+        (now_ni.month, now_ni.year),
+        fallback_sql="""
+        SELECT
+            ISNULL(SUM(TotalDevengado), 0) AS TotalDevengado,
+            ISNULL(SUM(SalarioNeto), 0) AS TotalSalarioNeto,
+            ISNULL(SUM(INSSLaboral), 0) AS TotalINSSLaboral,
+            ISNULL(SUM(INSSPatronal), 0) AS TotalINSSPatronal,
+            ISNULL(SUM(INATEC), 0) AS TotalINATEC,
+            ISNULL(SUM(IRMensual), 0) AS TotalIR,
+            ISNULL(SUM(TotalDevengado + INSSPatronal + INATEC), 0) AS CostoTotalPlanilla,
+            COUNT(*) AS CantidadNominas
+        FROM Nomina
+        WHERE MONTH(PeriodoInicio) = ?
+          AND YEAR(PeriodoInicio) = ?
+          AND SalarioBruto > 0
+          AND Estado IN ('Contabilizada', 'Pagada')
+    """,
+    )
+    row_nomina_mes = cursor.fetchone()
+    salarios_devengados_mes = float(row_nomina_mes[0]) if row_nomina_mes else 0.0
+    salarios_netos_mes = float(row_nomina_mes[1]) if row_nomina_mes else 0.0
+    inss_laboral_mes = float(row_nomina_mes[2]) if row_nomina_mes else 0.0
+    inss_patronal_mes = float(row_nomina_mes[3]) if row_nomina_mes else 0.0
+    inatec_mes = float(row_nomina_mes[4]) if row_nomina_mes else 0.0
+    ir_mes = float(row_nomina_mes[5]) if row_nomina_mes else 0.0
+    planilla_costo_total_mes = float(row_nomina_mes[6]) if row_nomina_mes else 0.0
+    cantidad_nominas_mes = int(row_nomina_mes[7]) if row_nomina_mes else 0
+
+    # Nóminas contabilizadas (detalle para Contabilidad Financiera)
+    execute_sp(
+        cursor,
+        'rrhh.sp_ListarNominasContabilizadasMes',
+        (None, None),
+        fallback_sql="""
+        SELECT TOP 30 n.ID, e.NombreCompleto, e.Cargo, n.PeriodoInicio, n.PeriodoFin,
+               n.TotalDevengado, n.TotalDeducciones, n.SalarioNeto,
+               n.INSSLaboral, n.INSSPatronal, n.INATEC, n.IRMensual,
+               (n.TotalDevengado + n.INSSPatronal + n.INATEC) AS CostoTotal,
+               n.Estado, n.SalarioBruto, n.OtrosIngresos,
+               a.ID AS AsientoID, a.NumeroComprobante
+        FROM Nomina n
+        JOIN Empleados e ON n.EmpleadoID = e.ID
+        OUTER APPLY (
+            SELECT TOP 1 ID, NumeroComprobante
+            FROM AsientosDiario
+            WHERE ReferenciaExterna = CONCAT('NOM-', n.ID)
+              AND Estado = 'Contabilizado'
+            ORDER BY ID DESC
+        ) a
+        WHERE ((MONTH(n.PeriodoInicio) = ? AND YEAR(n.PeriodoInicio) = ?) OR 1=1)
+          AND n.Estado IN ('Contabilizada', 'Pagada')
+        ORDER BY n.PeriodoFin DESC, n.ID DESC
+    """,
+    )
+    nominas_contables = [
+        {
+            'id': r.ID,
+            'empleado': r.NombreCompleto,
+            'cargo': r.Cargo or '',
+            'periodo': f"{r.PeriodoInicio.strftime('%d/%m/%Y')} - {r.PeriodoFin.strftime('%d/%m/%Y')}",
+            'mes_anio': r.PeriodoFin.strftime('%Y-%m') if r.PeriodoFin else '',
+            'devengado': float(r.TotalDevengado),
+            'deducciones': float(r.TotalDeducciones),
+            'neto': float(r.SalarioNeto),
+            'inss_laboral': float(r.INSSLaboral),
+            'inss_patronal': float(r.INSSPatronal),
+            'inatec': float(r.INATEC),
+            'ir': float(r.IRMensual),
+            'costo_total': float(r.CostoTotal),
+            'estado': r.Estado,
+            'es_aguinaldo': float(r.SalarioBruto) == 0 and float(r.OtrosIngresos) > 0,
+            'asiento_id': getattr(r, 'AsientoID', None),
+            'comprobante': getattr(r, 'NumeroComprobante', None) or f"NOM-{r.ID}",
+        }
+        for r in cursor.fetchall()
+    ]
 
     conn.close()
 
@@ -86,7 +213,15 @@ def contabilidad():
         'ingresos_mes': ingresos_mes,
         'compras_mes': compras_mes,
         'egresos_mes': egresos_mes,
-        'balance_mes': ingresos_mes - compras_mes - egresos_mes,
+        'salarios_devengados_mes': salarios_devengados_mes,
+        'salarios_netos_mes': salarios_netos_mes,
+        'inss_laboral_mes': inss_laboral_mes,
+        'inss_patronal_mes': inss_patronal_mes,
+        'inatec_mes': inatec_mes,
+        'ir_mes': ir_mes,
+        'planilla_costo_total_mes': planilla_costo_total_mes,
+        'cantidad_nominas_mes': cantidad_nominas_mes,
+        'balance_mes': ingresos_mes - compras_mes - egresos_mes - planilla_costo_total_mes,
         'ingresos_hoy': ingresos_hoy,
         'compras_hoy': compras_hoy,
         'egresos_hoy': egresos_hoy,
@@ -94,7 +229,15 @@ def contabilidad():
         'total_vales_pendientes': total_vales_pendientes
     }
 
-    return render_template('admin/contabilidad.html', user=current_user, egresos=egresos, vales=vales, empleados=empleados, metricas=metricas)
+    return render_template(
+        'admin/contabilidad.html',
+        user=current_user,
+        egresos=egresos,
+        vales=vales,
+        empleados=empleados,
+        metricas=metricas,
+        nominas_contables=nominas_contables,
+    )
 
 
 @admin_bp.route('/api/contabilidad/egresos', methods=['POST'])
@@ -111,25 +254,24 @@ def crear_egreso():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            "INSERT INTO EgresosPrivados (Concepto, Monto, UsuarioID) OUTPUT INSERTED.ID VALUES (?, ?, ?)",
-            concepto, float(monto), current_user.id
+        fecha = business_now()
+        execute_sp(
+            cursor,
+            'contabilidad.sp_InsertarEgresoPrivado',
+            (concepto, float(monto), current_user.id, fecha),
+            fallback_sql="INSERT INTO EgresosPrivados (Concepto, Monto, UsuarioID, Fecha) OUTPUT INSERTED.ID VALUES (?, ?, ?, ?)",
         )
         new_id = cursor.fetchone()[0]
 
-        # ============================================================
-        # INTEGRACIÓN CONTABLE NIIF
-        # ============================================================
-        from app.services.contabilidad_service import ContabilidadService
         ContabilidadService.contabilizar_egreso(
             cursor=cursor,
             usuario_id=current_user.id,
             concepto=concepto,
             monto=float(monto),
             referencia=f"EGR-{new_id}",
-            ip=request.remote_addr
+            ip=request.remote_addr,
+            fecha=fecha
         )
-        # ============================================================
 
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Egreso registrado y contabilizado', 'id': new_id})
@@ -156,20 +298,23 @@ def crear_vale():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            "INSERT INTO ValesEmpleados (EmpleadoID, Monto, Fecha) OUTPUT INSERTED.ID VALUES (?, ?, ?)",
-            int(empleado_id), float(monto), business_now()
+        execute_sp(
+            cursor,
+            'contabilidad.sp_InsertarValeEmpleado',
+            (int(empleado_id), float(monto), business_now()),
+            fallback_sql="INSERT INTO ValesEmpleados (EmpleadoID, Monto, Fecha) OUTPUT INSERTED.ID VALUES (?, ?, ?)",
         )
         new_id = cursor.fetchone()[0]
 
         # Necesitamos el nombre del empleado para la glosa
-        cursor.execute("SELECT NombreCompleto FROM Usuarios WHERE ID = ?", (int(empleado_id),))
+        execute_sp(
+            cursor,
+            'seguridad.sp_ObtenerNombreUsuarioPorID',
+            (int(empleado_id),),
+            fallback_sql="SELECT NombreCompleto FROM Usuarios WHERE ID = ?",
+        )
         emp_nombre = cursor.fetchone()[0]
 
-        # ============================================================
-        # INTEGRACIÓN CONTABLE NIIF
-        # ============================================================
-        from app.services.contabilidad_service import ContabilidadService
         ContabilidadService.contabilizar_vale(
             cursor=cursor,
             usuario_id=current_user.id,
@@ -178,7 +323,6 @@ def crear_vale():
             referencia=f"VALE-{new_id}",
             ip=request.remote_addr
         )
-        # ============================================================
 
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Vale registrado y contabilizado', 'id': new_id})
@@ -195,14 +339,12 @@ def crear_vale():
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def toggle_vale(vale_id):
-    return jsonify(error='Los vales se descuentan al contabilizar la nómina. Una corrección requiere un ajuste contable.'),409
+    return jsonify(error='Los vales se descuentan al contabilizar la nómina. Una corrección requiere un ajuste contable.'), 409
 
 
 # ============================================================
 # MÓDULO DE PARTIDA DOBLE (CONTABILIDAD CORE)
 # ============================================================
-
-import decimal
 
 @admin_bp.route('/contabilidad/balance', methods=['GET'])
 @login_required
@@ -213,7 +355,6 @@ def balance_general():
 
     fecha_corte = request.args.get('fecha_corte', business_now().strftime('%Y-%m-%d'))
 
-    # 1. Consulta con CTE para obtener Saldos Finales de TODAS las cuentas
     sql_balance = """
     WITH SaldosHistoricos AS (
         SELECT
@@ -245,11 +386,15 @@ def balance_general():
     ORDER BY Codigo;
     """
 
-    cursor.execute(sql_balance, (fecha_corte,))
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ObtenerBalanceGeneralCorte',
+        (fecha_corte,),
+        fallback_sql=sql_balance,
+    )
     cuentas = cursor.fetchall()
     conn.close()
 
-    # Organizar resultados
     activos = []
     pasivos = []
     capital = []
@@ -282,7 +427,6 @@ def balance_general():
         elif row.Clase == 'Gasto':
             utilidad_ejercicio -= cuenta_obj['SaldoFinal']
 
-    # Agregar la Utilidad del Ejercicio al Capital (Ecuación contable ampliada)
     if utilidad_ejercicio != 0:
         capital.append({
             'Codigo': '3.X',
@@ -312,30 +456,40 @@ def balance_general():
 @roles_required('Admin', 'SuperAdmin')
 def crear_asiento():
     from app.services.contabilidad_service import ContabilidadError
-    data=request.get_json()
-    conn=get_db_connection()
+    data = request.get_json()
+    conn = get_db_connection()
     try:
-        cursor=conn.cursor()
-        fecha=datetime.fromisoformat(data.get('fecha',business_now().isoformat()))
-        cursor.execute('SELECT Mes,Anio FROM PeriodosContables WHERE ID=?',data.get('periodo_id'))
-        period=cursor.fetchone()
+        cursor = conn.cursor()
+        fecha = datetime.fromisoformat(data.get('fecha', business_now().isoformat()))
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerMesAnioPeriodoPorID',
+            (data.get('periodo_id'),),
+            fallback_sql='SELECT Mes,Anio FROM PeriodosContables WHERE ID=?',
+        )
+        period = cursor.fetchone()
         if not period:
             raise ValueError('Seleccione un período existente.')
-        lines=[]
-        for detail in data.get('detalles',[]):
-            cursor.execute('SELECT Codigo FROM CatalogoCuentas WHERE ID=?',detail.get('cuenta_id'))
-            account=cursor.fetchone()
+        lines = []
+        for detail in data.get('detalles', []):
+            execute_sp(
+                cursor,
+                'contabilidad.sp_ObtenerCodigoCuentaPorID',
+                (detail.get('cuenta_id'),),
+                fallback_sql='SELECT Codigo FROM CatalogoCuentas WHERE ID=?',
+            )
+            account = cursor.fetchone()
             if not account:
                 raise ValueError('Cuenta no encontrada.')
-            lines.append((account[0],detail.get('debe',0),detail.get('haber',0)))
-        result=ContabilidadService.crear_asiento(cursor,data.get('descripcion'),lines,current_user.id,
-            referencia_externa=data.get('referencia'),mes=period.Mes,anio=period.Anio,fecha=fecha,ip=request.remote_addr)
+            lines.append((account[0], detail.get('debe', 0), detail.get('haber', 0)))
+        result = ContabilidadService.crear_asiento(cursor, data.get('descripcion'), lines, current_user.id,
+            referencia_externa=data.get('referencia'), mes=period.Mes, anio=period.Anio, fecha=fecha, ip=request.remote_addr)
         from app.services.fiscal_service import audit
-        audit(cursor,current_user.id,'ASIENTO_MANUAL','Asiento',result['asiento_id'],result,request.remote_addr)
+        audit(cursor, current_user.id, 'ASIENTO_MANUAL', 'Asiento', result['asiento_id'], result, request.remote_addr)
         conn.commit()
-        return jsonify(success=True,**result)
-    except (ValueError,ContabilidadError) as error:
-        conn.rollback(); return jsonify(error=str(error)),400
+        return jsonify(success=True, **result)
+    except (ValueError, ContabilidadError) as error:
+        conn.rollback(); return jsonify(error=str(error)), 400
     except Exception:
         conn.rollback(); raise
     finally:
@@ -348,22 +502,22 @@ def crear_asiento():
 def cierre_periodo():
     from app.services.contabilidad_service import ContabilidadError
     from app.services.fiscal_service import audit
-    conn=get_db_connection()
+    conn = get_db_connection()
     try:
-        cursor=conn.cursor()
-        data=request.get_json() if request.is_json else request.form
-        period=int(data.get('periodo_id',0))
-        ContabilidadService.cerrar_periodo(cursor,period,current_user.id)
-        audit(cursor,current_user.id,'CIERRE_MENSUAL','Periodo',period,{},request.remote_addr)
+        cursor = conn.cursor()
+        data = request.get_json() if request.is_json else request.form
+        period = int(data.get('periodo_id', 0))
+        ContabilidadService.cerrar_periodo(cursor, period, current_user.id)
+        audit(cursor, current_user.id, 'CIERRE_MENSUAL', 'Periodo', period, {}, request.remote_addr)
         conn.commit()
-        flash('Período cerrado. Ya no admite nuevos asientos.','success')
+        flash('Período cerrado. Ya no admite nuevos asientos.', 'success')
         if request.is_json:
             return jsonify(success=True)
-    except (ValueError,ContabilidadError) as error:
+    except (ValueError, ContabilidadError) as error:
         conn.rollback()
         if request.is_json:
-            return jsonify(error=str(error)),400
-        flash(str(error),'error')
+            return jsonify(error=str(error)), 400
+        flash(str(error), 'error')
     except Exception:
         conn.rollback(); raise
     finally:
@@ -377,16 +531,20 @@ def estado_resultados():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Por defecto, filtramos por el mes y año actual
     now_ni = business_now()
     mes = request.args.get('mes', now_ni.month)
     anio = request.args.get('anio', now_ni.year)
 
-    # 1. Obtener el PeriodoID correspondiente
-    cursor.execute("SELECT ID FROM PeriodosContables WHERE Mes = ? AND Anio = ?", (mes, anio))
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ObtenerPeriodoIDPorMesAnio',
+        (mes, anio),
+        fallback_sql="SELECT ID FROM PeriodosContables WHERE Mes = ? AND Anio = ?",
+    )
     periodo_row = cursor.fetchone()
 
     if not periodo_row:
+        conn.close()
         flash(f'No hay un periodo contable creado para {mes}/{anio}.', 'warning')
         return render_template('admin/estado_resultados.html',
                                user=current_user,
@@ -397,7 +555,6 @@ def estado_resultados():
 
     periodo_id = periodo_row[0]
 
-    # 2. Consulta con CTE para obtener Saldos de Ingresos, Costos y Gastos
     sql_resultados = """
     WITH MovimientosResultados AS (
         SELECT
@@ -431,11 +588,15 @@ def estado_resultados():
              ELSE 3 END, Codigo;
     """
 
-    cursor.execute(sql_resultados, (periodo_id,))
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ObtenerEstadoResultadosPeriodo',
+        (periodo_id,),
+        fallback_sql=sql_resultados,
+    )
     cuentas = cursor.fetchall()
     conn.close()
 
-    # Organizar resultados
     ingresos = []
     costos = []
     gastos = []
@@ -451,7 +612,6 @@ def estado_resultados():
             'SaldoNeto': float(row.SaldoNeto)
         }
 
-        # Categorizar estrictamente según Clase NIIF
         if row.Clase == 'Ingreso':
             ingresos.append(cuenta_obj)
             total_ingresos += cuenta_obj['SaldoNeto']
@@ -484,11 +644,10 @@ def estado_resultados():
                            utilidad_bruta=utilidad_bruta,
                            utilidad_neta=utilidad_neta)
 
+
 # ============================================================
 # NUEVAS RUTAS NIIF PROFESIONALES
 # ============================================================
-
-from app.services.contabilidad_service import ContabilidadService
 
 @admin_bp.route('/contabilidad/catalogo', methods=['GET'])
 @login_required
@@ -516,9 +675,9 @@ def balance_comprobacion():
         mes = request.args.get('mes', now_ni.month)
         anio = request.args.get('anio', now_ni.year)
 
-        balance=ContabilidadService.balanza_mensual(cursor,int(mes),int(anio))
-        total_debe=sum(item['TotalDebe'] for item in balance)
-        total_haber=sum(item['TotalHaber'] for item in balance)
+        balance = ContabilidadService.balanza_mensual(cursor, int(mes), int(anio))
+        total_debe = sum(item['TotalDebe'] for item in balance)
+        total_haber = sum(item['TotalHaber'] for item in balance)
         return render_template('admin/balance_comprobacion.html',
                                user=current_user,
                                balance=balance,
@@ -539,17 +698,17 @@ def libro_mayor():
     try:
         now_ni = business_now()
         cuenta_codigo = request.args.get('cuenta_codigo')
-        mes = request.args.get('mes', now_ni.month)
-        anio = request.args.get('anio', now_ni.year)
+        mes = int(request.args.get('mes', now_ni.month))
+        anio = int(request.args.get('anio', now_ni.year))
 
         cuentas = ContabilidadService.obtener_catalogo_cuentas(cursor, solo_transaccionales=True)
 
         movimientos = []
         if cuenta_codigo:
-            cursor.execute("SELECT ID FROM PeriodosContables WHERE Mes = ? AND Anio = ?", (mes, anio))
-            periodo_row = cursor.fetchone()
-            if periodo_row:
-                movimientos = ContabilidadService.obtener_libro_mayor(cursor, cuenta_codigo, periodo_id=periodo_row[0])
+            fecha_inicio = datetime(anio, mes, 1)
+            fecha_fin = datetime(anio, mes, calendar.monthrange(anio, mes)[1])
+            movimientos = ContabilidadService.obtener_libro_mayor(
+                cursor, cuenta_codigo, fecha_inicio=fecha_inicio, fecha_fin=fecha_fin)
 
         return render_template('admin/libro_mayor.html',
                                user=current_user,
@@ -562,7 +721,3 @@ def libro_mayor():
         return redirect(url_for('admin.contabilidad'))
     finally:
         conn.close()
-
-# ============================================================
-# MÓDULO DE CONFIGURACIÓN
-# ============================================================

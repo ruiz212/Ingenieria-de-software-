@@ -9,95 +9,15 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Bundled CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle.css') }}">
-    <style>
-        body {
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            background: transparent;
-        }
+    <link rel="stylesheet" href="{{ css_url('app') }}">
 
-        .login-wrapper {
-            width: 100%;
-            max-width: 500px;
-            padding: 2rem;
-            z-index: 10;
-        }
-
-        .login-card {
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.9);
-            border-radius: var(--radius-lg);
-            padding: 4rem 3rem;
-            box-shadow: var(--shadow-lg), 0 0 40px rgba(217, 119, 6, 0.15);
-            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-            text-align: center;
-        }
-
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .success-icon {
-            font-size: 4rem;
-            color: #10b981; /* Emerald-500 */
-            margin-bottom: 1.5rem;
-            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-
-        @keyframes popIn {
-            0% { transform: scale(0); opacity: 0; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        h1 {
-            font-size: 2.2rem;
-            margin-bottom: 0.5rem;
-            color: var(--secondary);
-            font-weight: 800;
-        }
-
-        p {
-            color: var(--text-muted);
-            font-size: 1.1rem;
-            font-weight: 500;
-            line-height: 1.5;
-            margin-bottom: 2.5rem;
-        }
-
-        .btn-action {
-            width: 100%;
-            padding: 1rem;
-            font-size: 1.05rem;
-            letter-spacing: 0.02em;
-            border-radius: var(--radius-md);
-            font-weight: 600;
-            display: inline-block;
-            text-decoration: none;
-            transition: all 0.3s ease;
-            background: var(--primary);
-            color: white;
-            box-shadow: 0 4px 15px rgba(217, 119, 6, 0.3);
-        }
-
-        .btn-action:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(217, 119, 6, 0.4);
-            background: var(--primary-dark);
-        }
-
-    </style>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/accessibility.css', v=1) }}">
+    <link rel="stylesheet" href="{{ css_url('accessibility') }}">
+    <link rel="stylesheet" href="{{ css_url('pages/auth/success') }}">
+    <link rel="stylesheet" href="{{ css_url('motion') }}">
 </head>
-<body>
+<body class="page-cliente-inicio-exitoso">
     <div class="ambient-bg">
         <div class="ambient-shape shape-1"></div>
         <div class="ambient-shape shape-2"></div>
@@ -112,7 +32,7 @@
             </div>
             <h1>¡Bienvenido, {{ current_user.nombre }}!</h1>
             <p>Tu cuenta ha sido creada exitosamente. Pronto podrás ver nuestros pasteles y personalizar tus pedidos desde aquí.</p>
-            
+
             <a href="/pos" class="btn-action">Ir al catálogo por ahora</a>
         </div>
     </div>

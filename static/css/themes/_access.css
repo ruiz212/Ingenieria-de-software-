@@ -1,0 +1,100 @@
+@media screen {
+    /* Access: a framed photograph and a generous, rounded working surface. */
+    .login-page {
+        padding: 24px;
+        background: var(--background);
+    }
+    .login-page .l-split {
+        max-width: 1520px;
+        min-height: calc(100dvh - 48px);
+        margin: 0 auto;
+        grid-template-columns: minmax(0, 1.02fr) minmax(0, 1fr);
+        background: var(--surface);
+        border-radius: 36px;
+        overflow: hidden;
+        box-shadow: 0 20px 64px rgb(78 42 30 / .08);
+    }
+    .login-page .l-split__left {
+        margin: 12px;
+        padding: clamp(32px, 4.2vw, 64px);
+        border-radius: 28px;
+        overflow: hidden;
+    }
+    .login-page .l-split__left::before {
+        border-radius: inherit;
+        background-image:
+            linear-gradient(var(--bakery-photo-scrim), rgb(35 20 12 / .76)),
+            url('https://images.unsplash.com/photo-1509440159596-0249088772ff?q=75&w=1200&auto=format&fit=crop');
+        opacity: 1;
+    }
+    .login-page .c-brand__logo,
+    .login-page .c-login-header__logo-mobile {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: var(--brand-dorado);
+        box-shadow: 0 0 0 5px rgb(212 149 43 / .13);
+    }
+    .login-page .c-welcome {
+        margin: 4rem 0;
+    }
+    .login-page .c-welcome h2 {
+        font-size: clamp(2.4rem, 4.1vw, 4.1rem);
+        line-height: 1.12;
+    }
+    .login-page .c-welcome p {
+        color: #fff4e7;
+        max-width: 35ch;
+    }
+    .login-page .l-split__right {
+        padding: 48px clamp(32px, 4.2vw, 64px);
+        background: transparent;
+    }
+    .login-page .c-login-container {
+        max-width: 420px;
+    }
+    .login-page .c-login-header h2 {
+        line-height: 1.2;
+        text-wrap: balance;
+    }
+    .login-page .form-input,
+    .login-page .c-password-toggle {
+        border-radius: var(--bakery-control-radius);
+    }
+    .login-page .form-input {
+        min-height: 54px;
+        background: var(--card-bg);
+        border-color: var(--border-interactive);
+    }
+    .login-page .login-submit,
+    .login-page .customer-actions .btn {
+        min-height: 54px;
+        border-radius: 999px;
+        padding-inline: 24px;
+    }
+    .login-page .login-submit,
+    .login-page .customer-actions .btn-primary {
+        background: var(--brand-cafe);
+        color: #fff;
+        box-shadow: 0 5px 16px rgb(78 42 30 / .12);
+    }
+    .login-page .login-submit:hover,
+    .login-page .customer-actions .btn-primary:hover {
+        background: var(--brand-cafe-dark);
+        color: #fff;
+        box-shadow: 0 7px 20px rgb(78 42 30 / .16);
+    }
+    .login-page .c-portal-link a {
+        border-radius: 20px;
+        background: color-mix(in srgb, var(--brand-dorado) 9%, var(--surface));
+        padding: 18px 22px;
+    }
+    .login-page .c-portal-link a:hover {
+        background: color-mix(in srgb, var(--brand-dorado) 15%, var(--surface));
+    }
+    .login-page .login-alert {
+        border-radius: 16px;
+    }
+
+
+}

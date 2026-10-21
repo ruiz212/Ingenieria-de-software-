@@ -3,15 +3,17 @@
 
 import uuid
 import os
+import json
 from datetime import datetime
 
-from flask import render_template, request, jsonify, current_app
+from flask import render_template, request, jsonify, current_app, session
 from werkzeug.utils import secure_filename
 from flask_login import login_required, current_user
 
 from app.pos import pos_bp
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp, is_sqlserver_cursor
 from app.services.business_time import business_now
+from app.services.reference_images import validate_reference_image
 from app.extensions import csrf
 from app.utils.qr import generar_qr_base64
 from app.auth.decorators import roles_required
@@ -26,22 +28,30 @@ def index():
     cursor = conn.cursor()
 
     # Obtener categorías activas que tengan al menos un producto activo
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'catalogo.sp_ObtenerCategoriasConProductosActivos',
+        fallback_sql="""
         SELECT DISTINCT c.ID, c.Nombre 
         FROM Categorias c
         JOIN Productos p ON p.CategoriaID = c.ID
         WHERE p.Activo = 1
         ORDER BY c.Nombre
-    """)
+    """,
+    )
     categorias = [{'id': row.ID, 'nombre': row.Nombre} for row in cursor.fetchall()]
 
     # Obtener productos activos con su categoría e imagen
-    cursor.execute(
-        "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.PrecioBase, p.EsFicticio, p.PorcentajeDescuento, p.ImagenUrl, p.TasaIVA "
-        "FROM Productos p "
-        "JOIN Categorias c ON p.CategoriaID = c.ID "
-        "WHERE p.Activo = 1 "
-        "ORDER BY c.Nombre, p.Nombre"
+    execute_sp(
+        cursor,
+        'catalogo.sp_ObtenerProductosPOS',
+        fallback_sql=(
+            "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.PrecioBase, p.EsFicticio, p.PorcentajeDescuento, p.ImagenUrl, p.TasaIVA "
+            "FROM Productos p "
+            "JOIN Categorias c ON p.CategoriaID = c.ID "
+            "WHERE p.Activo = 1 "
+            "ORDER BY c.Nombre, p.Nombre"
+        ),
     )
     productos = [
         {'id': row.ID, 'nombre': row.Nombre, 'categoria': row.Categoria,
@@ -53,8 +63,10 @@ def index():
     ]
 
     # Obtener ingredientes extras activos
-    cursor.execute(
-        "SELECT ID, Nombre, PrecioAdicional FROM Ingredientes WHERE Activo = 1 ORDER BY Nombre"
+    execute_sp(
+        cursor,
+        'catalogo.sp_ObtenerIngredientesPOS',
+        fallback_sql="SELECT ID, Nombre, PrecioAdicional FROM Ingredientes WHERE Activo = 1 ORDER BY Nombre",
     )
     ingredientes = [
         {'id': row.ID, 'nombre': row.Nombre, 'precio': float(row.PrecioAdicional)}
@@ -62,18 +74,26 @@ def index():
     ]
 
     # Obtener configuración del sistema (IVA, etc)
-    cursor.execute("SELECT Clave, Valor FROM ConfiguracionSistema")
+    execute_sp(
+        cursor,
+        'seguridad.sp_ObtenerConfiguracionGlobal',
+        fallback_sql="SELECT Clave, Valor FROM ConfiguracionSistema",
+    )
     configuracion = {row.Clave: row.Valor for row in cursor.fetchall()}
 
-    cursor.execute(
-        "SELECT TOP 1 ID, FechaApertura FROM TurnosCaja WHERE UsuarioID = ? AND Cerrado = 0 ORDER BY ID DESC",
-        current_user.id
-    )
-    turno = cursor.fetchone()
+    es_cliente = getattr(current_user, 'rol_nombre', '') in ['Cliente', 'Invitado']
+    turno = None
+    if not es_cliente:
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerTurnoAbierto',
+            (current_user.id,),
+            fallback_sql="SELECT TOP 1 ID, FechaApertura FROM TurnosCaja WHERE UsuarioID = ? AND Cerrado = 0 ORDER BY ID DESC",
+        )
+        turno = cursor.fetchone()
 
     conn.close()
 
-    es_cliente = getattr(current_user, 'rol_nombre', '') in ['Cliente', 'Invitado']
     template = 'tienda.html' if es_cliente else 'pos.html'
 
     return render_template(template,
@@ -94,18 +114,24 @@ def abrir_turno():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            "SELECT TOP 1 ID FROM TurnosCaja WITH (UPDLOCK, HOLDLOCK) "
-            "WHERE UsuarioID = ? AND Cerrado = 0 ORDER BY ID DESC",
-            current_user.id
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerTurnoAbiertoBloqueo',
+            (current_user.id,),
+            fallback_sql=(
+                "SELECT TOP 1 ID FROM TurnosCaja WITH (UPDLOCK, HOLDLOCK) "
+                "WHERE UsuarioID = ? AND Cerrado = 0 ORDER BY ID DESC"
+            ),
         )
         activo = cursor.fetchone()
         if activo:
             return jsonify(status='success', turno_id=activo.ID, existente=True)
 
-        cursor.execute(
-            "INSERT INTO TurnosCaja (UsuarioID) OUTPUT INSERTED.ID VALUES (?)",
-            current_user.id
+        execute_sp(
+            cursor,
+            'ventas.sp_InsertarTurnoCaja',
+            (current_user.id,),
+            fallback_sql="INSERT INTO TurnosCaja (UsuarioID) OUTPUT INSERTED.ID VALUES (?)",
         )
         turno_id = cursor.fetchone()[0]
         conn.commit()
@@ -139,8 +165,6 @@ def upload_referencia():
         import requests
         import base64
         
-        # API Key de ImgBB (debe configurarse en .env, si no usa una por defecto o falla)
-        # Nota: Por favor define IMGBB_API_KEY en tu archivo .env
         api_key = os.environ.get('IMGBB_API_KEY', '')
         
         if not api_key:
@@ -150,12 +174,9 @@ def upload_referencia():
             file.save(os.path.join(upload_folder, filename))
             return jsonify({'ruta': f'uploads/referencias/{filename}'}), 200
 
-        # Leer el archivo solo en la rama remota; la carga local debe conservar
-        # el stream completo para FileStorage.save().
         b64_image = base64.b64encode(file.read()).decode('utf-8')
 
         try:
-            # Petición a la API de ImgBB
             response = requests.post(
                 'https://api.imgbb.com/1/upload',
                 data={
@@ -166,7 +187,7 @@ def upload_referencia():
             
             result = response.json()
             if result.get('success'):
-                url_imagen = result['data']['url']
+                url_imagen = validate_reference_image(result['data']['url'])
                 return jsonify({'ruta': url_imagen}), 200
             else:
                 error_msg = result.get('error', {}).get('message', 'Error desconocido en ImgBB')
@@ -181,7 +202,6 @@ def upload_referencia():
 @roles_required('Estandar', 'Admin', 'SuperAdmin')
 def registrar_factura():
     """Factura atómica: precio de catálogo, pagos conciliados y copia inmutable."""
-    import json
     import hashlib
     from app.services.fiscal_service import configuration, calculate_sale, normalize_payments, next_invoice, audit
     from app.services.validation import amount, required_text
@@ -193,140 +213,261 @@ def registrar_factura():
     cursor = conn.cursor()
     try:
         # Serializar reintentos antes de asignar número o registrar cobros.
-        cursor.execute("DECLARE @r INT; EXEC @r=sp_getapplock @Resource=?,@LockMode='Exclusive',@LockOwner='Transaction',@LockTimeout=10000; SELECT @r", 'factura:'+key)
+        execute_sp(
+            cursor,
+            'ventas.sp_AdquirirLockFactura',
+            ('factura:' + key,),
+            fallback_sql="DECLARE @r INT; EXEC @r=sp_getapplock @Resource=?,@LockMode='Exclusive',@LockOwner='Transaction',@LockTimeout=10000; SELECT @r",
+        )
         if cursor.fetchone()[0] < 0:
             raise ValueError('La operación está en proceso. Reintente con el mismo carrito.')
-        cursor.execute('SELECT UsuarioID,DocumentoJSON FROM Facturas WHERE ClaveSolicitud=?',key)
-        previous=cursor.fetchone()
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerFacturaPorClaveSolicitud',
+            (key,),
+            fallback_sql='SELECT UsuarioID,DocumentoJSON FROM Facturas WHERE ClaveSolicitud=?',
+        )
+        previous = cursor.fetchone()
         if previous:
             if previous[0] != current_user.id:
-                return jsonify(error='Identificador de operación no disponible.'),409
+                return jsonify(error='Identificador de operación no disponible.'), 409
             saved = json.loads(previous[1])
             if saved.get('solicitud_hash') != fingerprint:
-                return jsonify(error='La clave ya corresponde a otra venta. Recargue el carrito.'),409
-            return jsonify(status='success',factura=saved)
-        config=configuration(cursor)
-        carrito,subtotal,iva,total=calculate_sale(cursor,datos.get('carrito'),config)
+                return jsonify(error='La clave ya corresponde a otra venta. Recargue el carrito.'), 409
+            return jsonify(status='success', factura=saved)
+        config = configuration(cursor)
+        carrito, subtotal, iva, total = calculate_sale(cursor, datos.get('carrito'), config)
         if total <= 0:
             raise ValueError('El total debe ser positivo.')
-        es_encargo=datos.get('es_encargo') is True
-        encargo=datos.get('encargo_detalles') if es_encargo else None
-        if es_encargo and not isinstance(encargo,dict) and any(k in datos for k in ('adelanto','fecha_entrega','nombre_cliente','telefono')):
-            encargo={
-                'adelanto':datos.get('adelanto',0),
-                'saldo':datos.get('saldo',0),
-                'metodo_adelanto':datos.get('metodo_adelanto','Efectivo'),
-                'referencia':datos.get('referencia',''),
-                'fecha_entrega':datos.get('fecha_entrega',''),
-                'nombre_cliente':datos.get('nombre_cliente',''),
-                'telefono':datos.get('telefono',''),
-                'especificaciones':datos.get('especificaciones'),
-                'ruta_imagen_referencia':datos.get('ruta_imagen_referencia'),
-                'notas':datos.get('notas',''),
-                'monto_recibido':datos.get('monto_recibido'),
+        es_encargo = datos.get('es_encargo') is True
+        encargo = datos.get('encargo_detalles') if es_encargo else None
+        if es_encargo and not isinstance(encargo, dict) and any(k in datos for k in ('adelanto', 'fecha_entrega', 'nombre_cliente', 'telefono')):
+            encargo = {
+                'adelanto': datos.get('adelanto', 0),
+                'saldo': datos.get('saldo', 0),
+                'metodo_adelanto': datos.get('metodo_adelanto', 'Efectivo'),
+                'referencia': datos.get('referencia', ''),
+                'fecha_entrega': datos.get('fecha_entrega', ''),
+                'nombre_cliente': datos.get('nombre_cliente', ''),
+                'telefono': datos.get('telefono', ''),
+                'especificaciones': datos.get('especificaciones'),
+                'ruta_imagen_referencia': datos.get('ruta_imagen_referencia'),
+                'notas': datos.get('notas', ''),
+                'monto_recibido': datos.get('monto_recibido'),
             }
-        if es_encargo and not isinstance(encargo,dict):
+        if es_encargo and not isinstance(encargo, dict):
             raise ValueError('Complete los datos del encargo.')
+        delivery = None
         if es_encargo:
-            required_text(encargo.get('nombre_cliente'),'Cliente',100)
-            required_text(encargo.get('telefono'),'Teléfono',20)
-            delivery=datetime.fromisoformat(encargo.get('fecha_entrega',''))
+            encargo['ruta_imagen_referencia'] = validate_reference_image(encargo.get('ruta_imagen_referencia'))
+            required_text(encargo.get('nombre_cliente'), 'Cliente', 100)
+            required_text(encargo.get('telefono'), 'Teléfono', 20)
+            delivery = datetime.fromisoformat(encargo.get('fecha_entrega', ''))
             if delivery.date() < business_now().date():
                 raise ValueError('La entrega no puede ser anterior a hoy.')
-            advance=amount(encargo.get('adelanto',0))
-            metodo_adelanto=encargo.get('metodo_adelanto','Efectivo')
-            monto_pago=advance
+            advance = amount(encargo.get('adelanto', 0))
+            metodo_adelanto = encargo.get('metodo_adelanto', 'Efectivo')
+            monto_pago = advance
             if metodo_adelanto == 'Efectivo' and encargo.get('monto_recibido') not in (None, ''):
-                recibido=amount(encargo.get('monto_recibido'))
+                recibido = amount(encargo.get('monto_recibido'))
                 if recibido >= advance:
-                    monto_pago=recibido
-            payments=[{'metodo':metodo_adelanto,'monto':monto_pago,
-                       'referencia':datos.get('nombre_transferente') or encargo.get('referencia','')}]
-            encargo={**encargo,'adelanto':float(advance),'saldo':float(total-advance)}
+                    monto_pago = recibido
+            payments = [{'metodo': metodo_adelanto, 'monto': monto_pago,
+                         'referencia': datos.get('nombre_transferente') or encargo.get('referencia', '')}]
+            encargo = {**encargo, 'adelanto': float(advance), 'saldo': float(total - advance)}
         else:
-            advance=None
-            payments=datos.get('pagos_multiples') or [{'metodo':datos.get('metodo_pago','Efectivo'),
-                          'monto':total,'referencia':datos.get('nombre_transferente','')}]
+            advance = None
+            payments = datos.get('pagos_multiples') or [{'metodo': datos.get('metodo_pago', 'Efectivo'),
+                          'monto': total, 'referencia': datos.get('nombre_transferente', '')}]
         if not isinstance(payments, list) or any(not isinstance(p, dict) for p in payments):
             raise ValueError('Pagos inválidos.')
         from decimal import Decimal
-        exchange=Decimal(str(config.get('tipo_cambio_usd','0')))
+        exchange = Decimal(str(config.get('tipo_cambio_usd', '0')))
         if not exchange.is_finite() or exchange <= 0:
             raise ValueError('Configure un tipo de cambio positivo en ajustes.')
         if not es_encargo:
-            payments=[{**p,'monto':amount(p.get('monto'), 'Pago USD')*exchange} if p.get('metodo')=='Efectivo USD' else p for p in payments]
-        payments,change=normalize_payments(payments,total,advance)
-        ruc=datos.get('ruc')
+            payments = [{**p, 'monto': amount(p.get('monto'), 'Pago USD') * exchange} if p.get('metodo') == 'Efectivo USD' else p for p in payments]
+        payments, change = normalize_payments(payments, total, advance)
+        ruc = datos.get('ruc')
         if ruc:
-            if not isinstance(ruc,dict):
+            if not isinstance(ruc, dict):
                 raise ValueError('Datos de RUC inválidos.')
-            ruc={'numero':required_text(ruc.get('numero'),'RUC del cliente',50),
-                 'razon_social':required_text(ruc.get('razon_social'),'Razón social del cliente',255)}
+            ruc = {'numero': required_text(ruc.get('numero'), 'RUC del cliente', 50),
+                   'razon_social': required_text(ruc.get('razon_social'), 'Razón social del cliente', 255)}
         # Turno y venta comparten la misma transacción.
-        cursor.execute('SELECT ID FROM TurnosCaja WITH (UPDLOCK,HOLDLOCK) WHERE UsuarioID=? AND Cerrado=0',current_user.id)
-        shift=cursor.fetchone()
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerTurnoActivoParaVenta',
+            (current_user.id,),
+            fallback_sql='SELECT ID FROM TurnosCaja WITH (UPDLOCK,HOLDLOCK) WHERE UsuarioID=? AND Cerrado=0',
+        )
+        shift = cursor.fetchone()
         if shift:
-            turno_id=shift[0]
-            cursor.execute("SELECT ID FROM ArqueoCaja WHERE TurnoID=? AND EstadoArqueo IN ('Pendiente','Verificado')",turno_id)
+            turno_id = shift[0]
+            execute_sp(
+                cursor,
+                'ventas.sp_VerificarArqueoPendienteTurno',
+                (turno_id,),
+                fallback_sql="SELECT ID FROM ArqueoCaja WHERE TurnoID=? AND EstadoArqueo IN ('Pendiente','Verificado')",
+            )
             if cursor.fetchone():
                 raise ValueError('La caja tiene un arqueo pendiente. Finalice la verificación antes de vender.')
         else:
             raise ValueError('Debe abrir un turno antes de registrar ventas.')
-        cliente_id=1
+        cliente_id = 1
         if es_encargo:
-            cursor.execute('SELECT ID FROM Clientes WHERE Telefono=?',encargo['telefono'])
-            client=cursor.fetchone()
+            execute_sp(
+                cursor,
+                'crm.sp_ObtenerClientePorTelefono',
+                (encargo['telefono'],),
+                fallback_sql='SELECT ID FROM Clientes WHERE Telefono=?',
+            )
+            client = cursor.fetchone()
             if client:
-                cliente_id=client[0]
+                cliente_id = client[0]
             else:
-                cursor.execute('INSERT INTO Clientes(Nombre,Telefono,NivelConfianzaID) OUTPUT INSERTED.ID VALUES(?,?,1)',encargo['nombre_cliente'],encargo['telefono'])
-                cliente_id=cursor.fetchone()[0]
-        number=next_invoice(cursor,config.get('fiscal_serie','FAC'))
-        code=uuid.uuid4().hex[:10].upper()
-        issued_at=business_now()
-        cursor.execute("INSERT INTO Facturas(NumeroFactura,CodigoSeguimiento,UsuarioID,ClienteID,TurnoID,Subtotal,IVA,Total,EsEncargo,IncluyeRUC,ClaveSolicitud,FechaHora) OUTPUT INSERTED.ID VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-            number,code,current_user.id,cliente_id,turno_id,subtotal,iva,total,es_encargo,bool(ruc),key,issued_at)
-        factura_id=cursor.fetchone()[0]
-        if ruc:
-            cursor.execute('INSERT INTO FacturasRUC(FacturaID,RazonSocial,NumeroRUC) VALUES(?,?,?)',factura_id,ruc['razon_social'],ruc['numero'])
-        for item in carrito:
-            cursor.execute('INSERT INTO DetalleFacturas(FacturaID,ProductoID,Cantidad,PrecioUnitario,Subtotal) OUTPUT INSERTED.ID VALUES(?,?,?,?,?)',factura_id,item['id'],item['cantidad'],amount(item['precio']),amount(item['subtotal']))
-            detail_id=cursor.fetchone()[0]
-            for extra in item['detalle_ingredientes']['ingredientes']:
-                cursor.execute('INSERT INTO DetalleIngredientes(DetalleFacturaID,IngredienteID,PrecioAplicado) VALUES(?,?,?)',detail_id,extra['id'],amount(extra['precio']))
-            if item.get('cotizacion_id'):
-                cursor.execute("UPDATE Cotizaciones SET Estado='Aceptada' WHERE ID=? AND Estado IN ('Cotizada','Aceptada')", item['cotizacion_id'])
-        for payment in payments:
-            cursor.execute("INSERT INTO Pagos(FacturaID,MetodoPago,Monto,NombreTransferente,MonedaRegistro,TipoCambioAplicado) VALUES(?,?,?,?,'NIO',?)",factura_id,payment['metodo'],payment['monto'],payment['referencia'] or None,exchange if payment['metodo']=='Efectivo USD' else None)
-        if es_encargo:
-            cursor.execute("INSERT INTO Encargos(FacturaID,FechaEntrega,Estado,NotasCliente,Especificaciones,RutaImagenReferencia,TelefonoContacto) VALUES(?,?,'Pendiente',?,?,?,?)",factura_id,delivery,encargo.get('notas',''),encargo.get('especificaciones'),encargo.get('ruta_imagen_referencia'),encargo['telefono'])
-        if cliente_id > 1:
-            cursor.execute('UPDATE Clientes SET TotalCompras=ISNULL(TotalCompras,0)+1 WHERE ID=?',cliente_id)
-            cursor.execute('UPDATE Clientes SET NivelConfianzaID=CASE WHEN TotalCompras>=10 THEN 3 WHEN TotalCompras>=3 THEN 2 ELSE 1 END WHERE ID=?',cliente_id)
-        entry=ContabilidadService.contabilizar_venta(cursor,current_user.id,number,subtotal,iva,total,payments,es_encargo,advance or 0,request.remote_addr,fecha=issued_at)
-        now=issued_at
-        link=request.host_url.rstrip('/')+'/seguimiento/'+code
-        document={'id':factura_id,'numero_factura':number,'codigo_seguimiento':code,'solicitud_hash':fingerprint,
-            'fecha':now.strftime('%d/%m/%Y'),'hora':now.strftime('%H:%M:%S'),'zona_horaria':'America/Managua',
-            'productos':carrito,'subtotal':float(subtotal),'iva':float(iva),'total':float(total),
-            'cambio':float(change),'es_encargo':es_encargo,'encargo_detalles':encargo,
-            'tipo_cambio':str(exchange),'pagos':[dict(p,monto=float(p['monto'])) for p in payments],
-            'qr_image':generar_qr_base64(link),'url_seguimiento':link,'asiento_id':entry['asiento_id'],
-            'emisor':{k:v for k,v in config.items() if k.startswith('fiscal_')},'ruc':ruc,
-            'condicion':'Crédito' if es_encargo and advance<total else 'Contado',
-            'aviso':'COMPROBANTE DE PRUEBA SIN VALIDEZ FISCAL' if config.get('fiscal_regimen','Pendiente')=='Pendiente' else '',
-            'url_impresion':f'/admin/fiscal/facturas/{factura_id}/imprimir'}
-        cursor.execute('UPDATE Facturas SET DocumentoJSON=? WHERE ID=?',json.dumps(document,ensure_ascii=False),factura_id)
-        audit(cursor,current_user.id,'EMISION','Factura',factura_id,{'numero':number,'total':total},request.remote_addr)
+                execute_sp(
+                    cursor,
+                    'crm.sp_InsertarClienteRapido',
+                    (encargo['nombre_cliente'], encargo['telefono']),
+                    fallback_sql='INSERT INTO Clientes(Nombre,Telefono,NivelConfianzaID) OUTPUT INSERTED.ID VALUES(?,?,1)',
+                )
+                cliente_id = cursor.fetchone()[0]
+        number = next_invoice(cursor, config.get('fiscal_serie', 'FAC'))
+        code = uuid.uuid4().hex[:10].upper()
+        issued_at = business_now()
+
+        if is_sqlserver_cursor(cursor):
+            pagos_payload = [
+                {
+                    'metodo': p['metodo'],
+                    'monto': float(p['monto']),
+                    'referencia': p['referencia'] or None,
+                    'tipo_cambio': float(exchange) if p['metodo'] == 'Efectivo USD' else None,
+                }
+                for p in payments
+            ]
+            execute_sp(
+                cursor,
+                'ventas.sp_RegistrarFacturaCompleta',
+                (
+                    number,
+                    code,
+                    current_user.id,
+                    cliente_id,
+                    turno_id,
+                    subtotal,
+                    iva,
+                    total,
+                    1 if es_encargo else 0,
+                    1 if ruc else 0,
+                    key,
+                    issued_at,
+                    ruc['razon_social'] if ruc else None,
+                    ruc['numero'] if ruc else None,
+                    json.dumps(carrito, ensure_ascii=False),
+                    json.dumps(pagos_payload, ensure_ascii=False),
+                    delivery if es_encargo else None,
+                    encargo.get('notas', '') if es_encargo else None,
+                    encargo.get('especificaciones') if es_encargo else None,
+                    encargo.get('ruta_imagen_referencia') if es_encargo else None,
+                    encargo['telefono'] if es_encargo else None,
+                ),
+            )
+            factura_id = cursor.fetchone()[0]
+        else:
+            execute_sp(
+                cursor,
+                'ventas.sp_InsertarFacturaCabecera',
+                (number, code, current_user.id, cliente_id, turno_id, subtotal, iva, total, es_encargo, bool(ruc), key, issued_at),
+                fallback_sql="INSERT INTO Facturas(NumeroFactura,CodigoSeguimiento,UsuarioID,ClienteID,TurnoID,Subtotal,IVA,Total,EsEncargo,IncluyeRUC,ClaveSolicitud,FechaHora) OUTPUT INSERTED.ID VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            )
+            factura_id = cursor.fetchone()[0]
+            if ruc:
+                execute_sp(
+                    cursor,
+                    'ventas.sp_InsertarFacturaRUC',
+                    (factura_id, ruc['razon_social'], ruc['numero']),
+                    fallback_sql='INSERT INTO FacturasRUC(FacturaID,RazonSocial,NumeroRUC) VALUES(?,?,?)',
+                )
+            for item in carrito:
+                execute_sp(
+                    cursor,
+                    'ventas.sp_InsertarDetalleFactura',
+                    (factura_id, item['id'], item['cantidad'], amount(item['precio']), amount(item['subtotal'])),
+                    fallback_sql='INSERT INTO DetalleFacturas(FacturaID,ProductoID,Cantidad,PrecioUnitario,Subtotal) OUTPUT INSERTED.ID VALUES(?,?,?,?,?)',
+                )
+                detail_id = cursor.fetchone()[0]
+                for extra in item['detalle_ingredientes']['ingredientes']:
+                    execute_sp(
+                        cursor,
+                        'ventas.sp_InsertarDetalleIngrediente',
+                        (detail_id, extra['id'], amount(extra['precio'])),
+                        fallback_sql='INSERT INTO DetalleIngredientes(DetalleFacturaID,IngredienteID,PrecioAplicado) VALUES(?,?,?)',
+                    )
+                if item.get('cotizacion_id'):
+                    execute_sp(
+                        cursor,
+                        'crm.sp_MarcarCotizacionAceptadaEnVenta',
+                        (item['cotizacion_id'],),
+                        fallback_sql="UPDATE Cotizaciones SET Estado='Aceptada' WHERE ID=? AND Estado IN ('Cotizada','Aceptada')",
+                    )
+            for payment in payments:
+                execute_sp(
+                    cursor,
+                    'ventas.sp_InsertarPagoFactura',
+                    (factura_id, payment['metodo'], payment['monto'], payment['referencia'] or None, exchange if payment['metodo'] == 'Efectivo USD' else None),
+                    fallback_sql="INSERT INTO Pagos(FacturaID,MetodoPago,Monto,NombreTransferente,MonedaRegistro,TipoCambioAplicado) VALUES(?,?,?,?,'NIO',?)",
+                )
+            if es_encargo:
+                execute_sp(
+                    cursor,
+                    'produccion.sp_InsertarEncargo',
+                    (factura_id, delivery, encargo.get('notas', ''), encargo.get('especificaciones'), encargo.get('ruta_imagen_referencia'), encargo['telefono']),
+                    fallback_sql="INSERT INTO Encargos(FacturaID,FechaEntrega,Estado,NotasCliente,Especificaciones,RutaImagenReferencia,TelefonoContacto) VALUES(?,?,'Pendiente',?,?,?,?)",
+                )
+            if cliente_id > 1:
+                execute_sp(
+                    cursor,
+                    'crm.sp_IncrementarComprasCliente',
+                    (cliente_id,),
+                    fallback_sql='UPDATE Clientes SET TotalCompras=ISNULL(TotalCompras,0)+1 WHERE ID=?',
+                )
+                execute_sp(
+                    cursor,
+                    'crm.sp_ActualizarNivelConfianzaCliente',
+                    (cliente_id,),
+                    fallback_sql='UPDATE Clientes SET NivelConfianzaID=CASE WHEN TotalCompras>=10 THEN 3 WHEN TotalCompras>=3 THEN 2 ELSE 1 END WHERE ID=?',
+                )
+        entry = ContabilidadService.contabilizar_venta(cursor, current_user.id, number, subtotal, iva, total, payments, es_encargo, advance or 0, request.remote_addr, fecha=issued_at)
+        now = issued_at
+        link = request.host_url.rstrip('/') + '/seguimiento/' + code
+        document = {'id': factura_id, 'numero_factura': number, 'codigo_seguimiento': code, 'solicitud_hash': fingerprint,
+            'fecha': now.strftime('%d/%m/%Y'), 'hora': now.strftime('%H:%M:%S'), 'zona_horaria': 'America/Managua',
+            'productos': carrito, 'subtotal': float(subtotal), 'iva': float(iva), 'total': float(total),
+            'cambio': float(change), 'es_encargo': es_encargo, 'encargo_detalles': encargo,
+            'tipo_cambio': str(exchange), 'pagos': [dict(p, monto=float(p['monto'])) for p in payments],
+            'qr_image': generar_qr_base64(link), 'url_seguimiento': link, 'asiento_id': entry['asiento_id'],
+            'emisor': {k: v for k, v in config.items() if k.startswith('fiscal_')}, 'ruc': ruc,
+            'condicion': 'Crédito' if es_encargo and advance < total else 'Contado',
+            'aviso': 'COMPROBANTE DE PRUEBA SIN VALIDEZ FISCAL' if config.get('fiscal_regimen', 'Pendiente') == 'Pendiente' else '',
+            'url_impresion': f'/admin/fiscal/facturas/{factura_id}/imprimir'}
+        execute_sp(
+            cursor,
+            'ventas.sp_ActualizarDocumentoJSONFactura',
+            (json.dumps(document, ensure_ascii=False), factura_id),
+            fallback_sql='UPDATE Facturas SET DocumentoJSON=? WHERE ID=?',
+        )
+        audit(cursor, current_user.id, 'EMISION', 'Factura', factura_id, {'numero': number, 'total': total}, request.remote_addr)
         conn.commit()
-        return jsonify(status='success',mensaje='Factura registrada',factura=document)
-    except (ValueError,ContabilidadError) as error:
+        return jsonify(status='success', mensaje='Factura registrada', factura=document)
+    except (ValueError, ContabilidadError) as error:
         conn.rollback()
-        return jsonify(error=str(error)),400
+        return jsonify(error=str(error)), 400
     except Exception:
         conn.rollback()
         current_app.logger.exception('Error registrando factura')
-        return jsonify(error='No se registró la venta. Intente de nuevo con el mismo carrito.'),500
+        return jsonify(error='No se registró la venta. Intente de nuevo con el mismo carrito.'), 500
     finally:
         conn.close()
 
@@ -334,7 +475,16 @@ def registrar_factura():
 # API DE COTIZACIONES DE PASTELES PERSONALIZADOS
 # ============================================================
 
-from flask import session
+
+def _puede_gestionar_cotizacion(row):
+    """Propiedad por identidad o token privado; un teléfono no autoriza."""
+    if getattr(current_user, 'rol_nombre', '') in ('Estandar', 'Admin', 'SuperAdmin'):
+        return True
+    registered = getattr(current_user, 'rol_nombre', '') == 'Cliente' and not getattr(current_user, 'es_invitado', False)
+    if row.ClienteID is not None:
+        return registered and row.ClienteID == current_user.id
+    token = session.get('cotizacion_session_id')
+    return bool(token and row.SessionID and token == row.SessionID)
 
 @pos_bp.route('/api/cotizaciones', methods=['POST'])
 @login_required
@@ -342,9 +492,9 @@ def crear_cotizacion():
     datos = request.json or {}
     especificaciones = datos.get('especificaciones')
     fecha_entrega = datos.get('fecha_entrega')
-    ruta_imagen = datos.get('ruta_imagen_referencia')
+    ruta_imagen = validate_reference_image(datos.get('ruta_imagen_referencia'))
     telefono = datos.get('telefono')
-    nombre_contacto = datos.get('nombre') # Para invitados
+    nombre_contacto = datos.get('nombre')  # Para invitados
 
     if not especificaciones or not fecha_entrega:
         return jsonify({'error': 'Faltan datos requeridos'}), 400
@@ -361,17 +511,19 @@ def crear_cotizacion():
         if 'cotizacion_session_id' not in session:
             session['cotizacion_session_id'] = str(uuid.uuid4())
         session_id = session['cotizacion_session_id']
-        if telefono:
-            session['cotizacion_telefono'] = telefono
         
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            "SET NOCOUNT ON; INSERT INTO Cotizaciones (ClienteID, SessionID, Especificaciones, FechaEntrega, RutaImagenReferencia, TelefonoContacto, Estado, NombreContacto) "
-            "OUTPUT INSERTED.ID "
-            "VALUES (?, ?, ?, ?, ?, ?, 'Pendiente', ?)",
-            cliente_id, session_id, especificaciones, fecha_entrega, ruta_imagen, telefono, nombre_contacto
+        execute_sp(
+            cursor,
+            'crm.sp_CrearCotizacion',
+            (cliente_id, session_id, especificaciones, fecha_entrega, ruta_imagen, telefono, nombre_contacto),
+            fallback_sql=(
+                "SET NOCOUNT ON; INSERT INTO Cotizaciones (ClienteID, SessionID, Especificaciones, FechaEntrega, RutaImagenReferencia, TelefonoContacto, Estado, NombreContacto) "
+                "OUTPUT INSERTED.ID "
+                "VALUES (?, ?, ?, ?, ?, ?, 'Pendiente', ?)"
+            ),
         )
         cotizacion_id = cursor.fetchone()[0]
         numero_cotizacion = f"COT-{cotizacion_id:04d}"
@@ -396,39 +548,41 @@ def obtener_cotizaciones_cliente():
     try:
         es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente' and not getattr(current_user, 'es_invitado', False)
         cliente_id = current_user.id if es_cliente_registrado else None
-        telefono = getattr(current_user, 'telefono', None)
         session_id = session.get('cotizacion_session_id')
-        session_telefono = session.get('cotizacion_telefono')
         
-        # Si es un cliente registrado, vincular cualquier cotización huérfana previa que coincida con su teléfono o sesión
+        # Sólo un token privado de este navegador puede vincular solicitudes previas.
         if cliente_id:
-            if telefono:
-                cursor.execute(
-                    "UPDATE Cotizaciones SET ClienteID = ? WHERE ClienteID IS NULL AND TelefonoContacto = ?",
-                    cliente_id, telefono
-                )
             if session_id:
-                cursor.execute(
-                    "UPDATE Cotizaciones SET ClienteID = ? WHERE ClienteID IS NULL AND SessionID = ?",
-                    cliente_id, session_id
+                execute_sp(
+                    cursor,
+                    'crm.sp_VincularCotizacionesSesionCliente',
+                    (cliente_id, session_id),
+                    fallback_sql="UPDATE Cotizaciones SET ClienteID = ? WHERE ClienteID IS NULL AND SessionID = ?",
                 )
             conn.commit()
             
-            cursor.execute(
-                "SELECT ID, Especificaciones, FechaEntrega, RutaImagenReferencia, Estado, PrecioCotizado, TelefonoContacto "
-                "FROM Cotizaciones "
-                "WHERE ClienteID = ? "
-                "ORDER BY FechaSolicitud DESC",
-                cliente_id
+            execute_sp(
+                cursor,
+                'crm.sp_ObtenerCotizacionesPorClienteID',
+                (cliente_id,),
+                fallback_sql=(
+                    "SELECT ID, Especificaciones, FechaEntrega, RutaImagenReferencia, Estado, PrecioCotizado, TelefonoContacto "
+                    "FROM Cotizaciones "
+                    "WHERE ClienteID = ? "
+                    "ORDER BY FechaSolicitud DESC"
+                ),
             )
-        elif session_id or session_telefono:
-            cursor.execute(
-                "SELECT ID, Especificaciones, FechaEntrega, RutaImagenReferencia, Estado, PrecioCotizado, TelefonoContacto "
-                "FROM Cotizaciones "
-                "WHERE (SessionID IS NOT NULL AND SessionID = ?) "
-                "   OR (TelefonoContacto IS NOT NULL AND TelefonoContacto = ?) "
-                "ORDER BY FechaSolicitud DESC",
-                session_id or '', session_telefono or ''
+        elif session_id:
+            execute_sp(
+                cursor,
+                'crm.sp_ObtenerCotizacionesPorSessionID',
+                (session_id,),
+                fallback_sql=(
+                    "SELECT ID, Especificaciones, FechaEntrega, RutaImagenReferencia, Estado, PrecioCotizado, TelefonoContacto "
+                    "FROM Cotizaciones "
+                    "WHERE ClienteID IS NULL AND SessionID = ? "
+                    "ORDER BY FechaSolicitud DESC"
+                ),
             )
         else:
             return jsonify([])
@@ -459,13 +613,17 @@ def obtener_cotizaciones_pendientes():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute("""
+    execute_sp(
+        cursor,
+        'crm.sp_ObtenerCotizacionesPendientesAdmin',
+        fallback_sql="""
         SELECT c.*, cl.Nombre AS ClienteNombre 
         FROM Cotizaciones c
         LEFT JOIN Clientes cl ON c.ClienteID = cl.ID
         WHERE c.Estado IN ('Pendiente', 'Cotizada', 'Aceptada')
         ORDER BY CASE WHEN c.Estado = 'Pendiente' THEN 0 ELSE 1 END, c.FechaSolicitud ASC
-    """)
+    """,
+    )
     
     cotizaciones = []
     for row in cursor.fetchall():
@@ -499,12 +657,14 @@ def cotizar_pedido(id):
     cursor = conn.cursor()
     
     try:
-        cursor.execute(
-            "UPDATE Cotizaciones SET PrecioCotizado = ?, Estado = 'Cotizada' WHERE ID = ? AND Estado IN ('Pendiente','Cotizada')",
-            precio, id
+        execute_sp(
+            cursor,
+            'crm.sp_CotizarPedidoAdmin',
+            (precio, id),
+            fallback_sql="UPDATE Cotizaciones SET PrecioCotizado = ?, Estado = 'Cotizada' WHERE ID = ? AND Estado IN ('Pendiente','Cotizada')",
         )
         if cursor.rowcount != 1:
-            return jsonify(error='Cotización inexistente o ya procesada.'),409
+            return jsonify(error='Cotización inexistente o ya procesada.'), 409
         conn.commit()
         return jsonify({'mensaje': 'Cotización enviada'}), 200
     except Exception as e:
@@ -520,33 +680,28 @@ def rechazar_cotizacion(id):
     cursor = conn.cursor()
     
     try:
-        cursor.execute('SELECT ClienteID, SessionID, Estado, TelefonoContacto FROM Cotizaciones WITH(UPDLOCK,HOLDLOCK) WHERE ID=?', id)
+        execute_sp(
+            cursor,
+            'crm.sp_ObtenerCotizacionPorIDBloqueo',
+            (id,),
+            fallback_sql='SELECT ClienteID, SessionID, Estado, TelefonoContacto FROM Cotizaciones WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',
+        )
         row = cursor.fetchone()
         if not row:
             return jsonify(error='Cotización no encontrada.'), 404
 
-        es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente' and not getattr(current_user, 'es_invitado', False)
-        cliente_id = current_user.id if es_cliente_registrado else None
-        telefono = getattr(current_user, 'telefono', None)
-        session_id = session.get('cotizacion_session_id')
-        session_telefono = session.get('cotizacion_telefono')
-        is_staff = getattr(current_user, 'rol_nombre', '') in ('Estandar', 'Admin', 'SuperAdmin')
-
-        owner = (
-            is_staff or
-            (cliente_id and row.ClienteID == cliente_id) or
-            (cliente_id and telefono and row.TelefonoContacto == telefono) or
-            (session_id and row.SessionID and row.SessionID == session_id) or
-            (session_telefono and row.TelefonoContacto and row.TelefonoContacto == session_telefono)
-        )
-
-        if not owner:
+        if not _puede_gestionar_cotizacion(row):
             return jsonify(error='Cotización no disponible para este usuario.'), 403
 
         if row.Estado not in ('Pendiente', 'Cotizada'):
             return jsonify(error='La cotización ya no se puede rechazar.'), 409
 
-        cursor.execute("UPDATE Cotizaciones SET Estado='Rechazada' WHERE ID=?", id)
+        execute_sp(
+            cursor,
+            'crm.sp_CancelarCotizacionCliente',
+            (id,),
+            fallback_sql="UPDATE Cotizaciones SET Estado='Rechazada' WHERE ID=?",
+        )
         conn.commit()
         return jsonify({'mensaje': 'Cotización rechazada'}), 200
     except Exception as e:
@@ -564,9 +719,11 @@ def aceptar_cotizacion(id):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            'SELECT ClienteID, SessionID, Estado, PrecioCotizado, TelefonoContacto FROM Cotizaciones WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',
-            id
+        execute_sp(
+            cursor,
+            'crm.sp_ObtenerCotizacionParaAceptarBloqueo',
+            (id,),
+            fallback_sql='SELECT ClienteID, SessionID, Estado, PrecioCotizado, TelefonoContacto FROM Cotizaciones WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',
         )
         row = cursor.fetchone()
         if not row:
@@ -574,20 +731,7 @@ def aceptar_cotizacion(id):
 
         es_cliente_registrado = getattr(current_user, 'rol_nombre', '') == 'Cliente' and not getattr(current_user, 'es_invitado', False)
         cliente_id = current_user.id if es_cliente_registrado else None
-        telefono = getattr(current_user, 'telefono', None)
-        session_id = session.get('cotizacion_session_id')
-        session_telefono = session.get('cotizacion_telefono')
-        is_staff = getattr(current_user, 'rol_nombre', '') in ('Estandar', 'Admin', 'SuperAdmin')
-
-        owner = (
-            is_staff or
-            (cliente_id and row.ClienteID == cliente_id) or
-            (cliente_id and telefono and row.TelefonoContacto == telefono) or
-            (session_id and row.SessionID and row.SessionID == session_id) or
-            (session_telefono and row.TelefonoContacto and row.TelefonoContacto == session_telefono)
-        )
-
-        if not owner:
+        if not _puede_gestionar_cotizacion(row):
             return jsonify(error='Cotización no disponible para este usuario.'), 403
 
         if row.Estado != 'Cotizada' or row.PrecioCotizado is None:
@@ -597,9 +741,19 @@ def aceptar_cotizacion(id):
 
         # Vincular ClienteID si faltaba
         if row.ClienteID is None and cliente_id:
-            cursor.execute("UPDATE Cotizaciones SET ClienteID = ? WHERE ID = ?", cliente_id, id)
+            execute_sp(
+                cursor,
+                'crm.sp_VincularCotizacionPorID',
+                (cliente_id, id),
+                fallback_sql="UPDATE Cotizaciones SET ClienteID = ? WHERE ID = ?",
+            )
 
-        cursor.execute("UPDATE Cotizaciones SET Estado='Aceptada' WHERE ID=? AND Estado='Cotizada'", id)
+        execute_sp(
+            cursor,
+            'crm.sp_AceptarCotizacionCliente',
+            (id,),
+            fallback_sql="UPDATE Cotizaciones SET Estado='Aceptada' WHERE ID=? AND Estado='Cotizada'",
+        )
         if cursor.rowcount != 1:
             return jsonify(error='La cotización cambió. Actualice la pantalla.'), 409
 

@@ -1,56 +1,156 @@
 {% extends 'admin_base.html' %}
+{% block body_class %}page-usuarios{% endblock %}
 
-{% block title %}Gestor de Usuarios | Brajher's Cake{% endblock %}
-{% block page_title %}Gestor de Usuarios{% endblock %}
+{% block title %}Equipo y Accesos | Brajher's Cake{% endblock %}
+{% block page_title %}Equipo y Perfiles de Acceso{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <p>Gestiona los usuarios y sus roles de acceso al sistema.</p>
-</div>
+<section class="usuarios-workspace">
+    <!-- Hero Editorial y Filtro Interactivo por Estación de Trabajo -->
+    <header class="usuarios-hero">
+        <div class="usuarios-hero-Lead">
+            <h2 class="usuarios-editorial-title">Directorio de colaboradores y permisos</h2>
+            <p class="usuarios-editorial-desc">
+                Asigna a cada integrante del equipo el perfil que corresponde a su puesto en mostrador, horno, gerencia o asistencia, manteniendo cada área protegida.
+            </p>
+        </div>
+        <div class="usuarios-hero-cta">
+            <button type="button" class="btn btn-primary usuarios-new-btn" onclick="abrirModal()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Registrar colaborador
+            </button>
+        </div>
+    </header>
 
-<div class="panel panel-accent-primary">
-    <div class="panel-header">
-        <h3>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-            Usuarios del Sistema
-        </h3>
-        <button class="btn btn-primary btn-sm" onclick="abrirModal()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Nuevo Usuario
+    <!-- Barra de Estaciones / Perfiles (Filtra la nómina de usuarios e inspecciona permisos) -->
+    <nav class="usuarios-station-rail" aria-label="Filtrar colaboradores por perfil de acceso">
+        <button type="button" class="usuarios-station-pill is-active" data-role-filter="ALL" onclick="seleccionarFiltroRol('ALL', this)">
+            <span class="usuarios-station-name">Todo el equipo</span>
+            <span class="usuarios-station-count">{{ usuarios|length }}</span>
         </button>
-    </div>
-    <div class="panel-body panel-body-flush">
+        {% for r in roles %}
+        <button type="button" class="usuarios-station-pill" data-role-filter="{{ r.nombre }}" onclick="seleccionarFiltroRol('{{ r.nombre }}', this)">
+            <span class="usuarios-station-dot {{ r.badge_class }}"></span>
+            <span class="usuarios-station-name">{{ r.etiqueta }}</span>
+            <span class="usuarios-station-count">{{ r.usuarios_activos + r.usuarios_inactivos }}</span>
+        </button>
+        {% endfor %}
+    </nav>
+
+    <!-- Inspector Dinámico del Perfil Seleccionado (visible al elegir una estación arriba) -->
+    <aside id="usuarios-station-inspector" class="usuarios-inspector hidden" aria-live="polite">
+        <div class="usuarios-inspector-head">
+            <div>
+                <span id="insp-badge" class="usuarios-role-pill"></span>
+                <h3 id="insp-title" class="usuarios-inspector-title"></h3>
+                <p id="insp-desc" class="usuarios-inspector-desc"></p>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="seleccionarFiltroRol('ALL', document.querySelector('[data-role-filter=ALL]'))">
+                Ver todo el equipo
+            </button>
+        </div>
+        <div class="usuarios-inspector-columns">
+            <div class="usuarios-inspector-box">
+                <h4 class="usuarios-box-heading">Áreas donde puede trabajar</h4>
+                <ul id="insp-modulos" class="usuarios-check-list"></ul>
+            </div>
+            <div class="usuarios-inspector-box usuarios-inspector-box-guard">
+                <h4 class="usuarios-box-heading">Protección del sistema</h4>
+                <p id="insp-restricciones" class="usuarios-guard-copy"></p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Panel Principal: Nómina de Cuentas del Sistema -->
+    <div class="panel usuarios-roster-panel">
+        <div class="usuarios-toolbar">
+            <div class="usuarios-search-wrap">
+                <svg class="usuarios-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="search" id="usuarios-search" class="form-input usuarios-search-input" placeholder="Buscar por nombre o usuario…" aria-label="Buscar colaborador por nombre o usuario" oninput="filtrarTablaUsuarios()">
+            </div>
+            <div class="usuarios-status-tabs" role="group" aria-label="Estado de la cuenta">
+                <button type="button" class="usuarios-status-tab is-active" data-status-filter="ALL" onclick="cambiarFiltroEstado('ALL', this)">Todos</button>
+                <button type="button" class="usuarios-status-tab" data-status-filter="ACTIVO" onclick="cambiarFiltroEstado('ACTIVO', this)">Activos</button>
+                <button type="button" class="usuarios-status-tab" data-status-filter="INACTIVO" onclick="cambiarFiltroEstado('INACTIVO', this)">Inactivos</button>
+            </div>
+        </div>
+
         <div class="table-responsive">
-            <table class="data-table">
+            <table class="data-table usuarios-table" id="tabla-usuarios">
                 <thead>
                     <tr>
-                        <th>Nombre Completo</th>
-                        <th>Usuario (Login)</th>
-                        <th>Rol</th>
+                        <th>Colaborador</th>
+                        <th>Perfil de trabajo</th>
+                        <th>Áreas habilitadas</th>
                         <th>Estado</th>
-                        <th>Acción</th>
+                        <th>Gestión de acceso</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for u in usuarios %}
-                    <tr>
-                        <td class="cell-bold">{{ u.nombre }}</td>
-                        <td class="cell-muted">@{{ u.username }}</td>
-                        <td><span class="badge badge-neutral fw-600" style="font-family: monospace;">{{ u.rol }}</span></td>
-                        <td>
+                    <tr class="usuarios-row {% if not u.activo %}is-inactive{% endif %}"
+                        data-role="{{ u.rol }}"
+                        data-status="{% if u.activo %}ACTIVO{% else %}INACTIVO{% endif %}"
+                        data-search="{{ (u.nombre ~ ' ' ~ u.username ~ ' ' ~ u.etiqueta_rol)|lower }}">
+                        <td class="usuarios-col-person">
+                            <div class="usuarios-person-cell">
+                                <div class="usuarios-avatar {{ u.badge_class }}" aria-hidden="true">
+                                    {{ u.nombre[:2]|upper }}
+                                </div>
+                                <div class="usuarios-person-meta">
+                                    <div class="usuarios-person-name">
+                                        {{ u.nombre }}
+                                        {% if u.id == user.id %}
+                                        <span class="usuarios-you-pill">Tú</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="usuarios-person-handle">{{ u.username if u.username.startswith('@') else '@' ~ u.username }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="usuarios-col-role">
+                            <span class="usuarios-role-pill {{ u.badge_class }}">{{ u.etiqueta_rol }}</span>
+                            <p class="usuarios-role-caption">{{ u.perfil_rol }}</p>
+                        </td>
+                        <td class="usuarios-col-modules">
+                            <div class="usuarios-modules-list">
+                                {% for mod in u.modulos[:3] %}
+                                <span class="usuarios-module-pill">{{ mod }}</span>
+                                {% endfor %}
+                                {% if u.modulos|length > 3 %}
+                                <span class="usuarios-module-more" title="{{ u.modulos[3:]|join(' • ') }}">+{{ u.modulos|length - 3 }} áreas</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="usuarios-col-status">
                             {% if u.activo %}
-                                <span class="badge badge-success">Activo</span>
+                                <span class="usuarios-status-badge is-active">
+                                    <span class="usuarios-status-dot"></span> Activo
+                                </span>
                             {% else %}
-                                <span class="badge badge-danger">Inactivo</span>
+                                <span class="usuarios-status-badge is-inactive">
+                                    <span class="usuarios-status-dot"></span> Inactivo
+                                </span>
                             {% endif %}
                         </td>
-                        <td>
-                            {% if u.id != user.id %}
-                            <button class="btn btn-outline btn-sm" onclick="toggleUsuario({{ u.id }})">
-                                {% if u.activo %}Desactivar{% else %}Activar{% endif %}
-                            </button>
+                        <td class="usuarios-col-actions">
+                            {% if u.id != user.id and u.puede_administrar %}
+                            <div class="usuarios-actions-cell">
+                                <select class="form-select usuarios-role-select" aria-label="Cambiar perfil de {{ u.nombre }}" onchange="cambiarRolUsuario({{ u.id }}, this.value, '{{ u.nombre|e }}')">
+                                    {% for r in roles %}
+                                    <option value="{{ r.id }}" {% if r.nombre == u.rol %}selected{% endif %} {% if not r.puede_asignar %}disabled{% endif %}>
+                                        {{ r.etiqueta }}{% if not r.puede_asignar %} (Restringido){% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-outline btn-sm usuarios-toggle-btn" onclick="toggleUsuario({{ u.id }})">
+                                    {% if u.activo %}Desactivar{% else %}Reactivar{% endif %}
+                                </button>
+                            </div>
+                            {% elif u.id == user.id %}
+                            <span class="usuarios-action-note">Sesión activa en este equipo</span>
                             {% else %}
-                            <span class="cell-muted" style="font-size: 0.8rem; font-weight: 600;">Tú</span>
+                            <span class="usuarios-action-note">Protegido por nivel de seguridad</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -58,52 +158,129 @@
                 </tbody>
             </table>
         </div>
+        <div id="usuarios-empty-filter" class="usuarios-empty-state hidden" role="status">
+            <p class="usuarios-empty-title">No encontramos colaboradores con ese filtro.</p>
+            <button type="button" class="btn btn-outline btn-sm" onclick="limpiarFiltrosUsuarios()">Mostrar todas las cuentas</button>
+        </div>
     </div>
-</div>
 
-<!-- Modal Nuevo Usuario -->
+    <!-- Guía de los 6 Perfiles de Trabajo -->
+    <section class="usuarios-profiles-section" aria-labelledby="profiles-heading">
+        <div class="usuarios-section-header">
+            <div>
+                <h3 id="profiles-heading" class="usuarios-section-heading">Guía de perfiles y alcances</h3>
+                <p class="usuarios-section-sub">Cada perfil limita automáticamente qué pantallas y operaciones están disponibles para el usuario.</p>
+            </div>
+        </div>
+
+        <div class="usuarios-profiles-grid">
+            {% for r in roles %}
+            <article class="usuarios-profile-card">
+                <header class="usuarios-profile-top">
+                    <div>
+                        <span class="usuarios-role-pill {{ r.badge_class }}">{{ r.etiqueta }}</span>
+                        <p class="usuarios-profile-lead">{{ r.perfil }}</p>
+                    </div>
+                    <span class="usuarios-profile-counter">
+                        {{ r.usuarios_activos }} {% if r.usuarios_activos == 1 %}activo{% else %}activos{% endif %}
+                    </span>
+                </header>
+
+                <div class="usuarios-profile-body">
+                    <h4 class="usuarios-box-heading">Qué puede hacer</h4>
+                    <ul class="usuarios-check-list">
+                        {% for m in r.modulos %}
+                        <li>{{ m }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <footer class="usuarios-profile-guard">
+                    <h4 class="usuarios-box-heading">Límites de seguridad</h4>
+                    <p class="usuarios-guard-copy">{{ r.restricciones }}</p>
+                </footer>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+</section>
+
+<!-- Modal Registrar Colaborador -->
 <div id="modal-nuevo-usuario" class="modal-overlay hidden">
-    <div class="modal-content" style="max-width: 500px;">
-        <h2>Agregar Usuario</h2>
-        <p class="subtitle">Crear un nuevo acceso al sistema.</p>
+    <div class="modal-content usuarios-modal-content">
+        <div class="usuarios-modal-head">
+            <h2>Registrar nuevo colaborador</h2>
+            <p class="subtitle">Crea sus credenciales de acceso y elige el perfil de su puesto de trabajo.</p>
+        </div>
 
         <form id="form-nuevo-usuario">
-            <div class="form-group">
-                <label class="form-label" for="nu-nombre">Nombre Completo</label>
-                <input type="text" id="nu-nombre" class="form-input" placeholder="Ej. Juan Pérez" required>
+            <div class="usuarios-form-grid">
+                <div class="form-group">
+                    <label class="form-label" for="nu-nombre">Nombre completo</label>
+                    <input type="text" id="nu-nombre" class="form-input" placeholder="Ej. María Fernanda López" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="nu-username">Usuario para iniciar sesión</label>
+                    <input type="text" id="nu-username" class="form-input" placeholder="Ej. mlopez" required>
+                </div>
             </div>
 
-            <div class="form-group">
-                <label class="form-label" for="nu-username">Nombre de Usuario (Login)</label>
-                <input type="text" id="nu-username" class="form-input" placeholder="Ej. juanp" required>
+            <div class="usuarios-form-grid">
+                <div class="form-group">
+                    <label class="form-label" for="nu-password">Contraseña inicial</label>
+                    <input type="password" id="nu-password" class="form-input" placeholder="Mínimo 12 caracteres" minlength="12" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="nu-rol">Perfil de trabajo</label>
+                    <select id="nu-rol" class="form-select" required onchange="mostrarDetalleRolModal(this.value)">
+                        <option value="" disabled selected>Elige un perfil…</option>
+                        {% for r in roles %}
+                            <option value="{{ r.id }}" {% if not r.puede_asignar %}disabled{% endif %}>
+                                {{ r.etiqueta }}{% if not r.puede_asignar %} (Solo Admin General){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
 
-            <div class="form-group">
-                <label class="form-label" for="nu-password">Contraseña</label>
-                <input type="password" id="nu-password" class="form-input" placeholder="Mínimo 6 caracteres" required>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label" for="nu-rol">Rol del Sistema</label>
-                <select id="nu-rol" class="form-select" required>
-                    <option value="" disabled selected>Seleccione...</option>
-                    {% for r in roles %}
-                        <option value="{{ r.id }}">{{ r.nombre }}</option>
-                    {% endfor %}
-                </select>
+            <div id="nu-rol-preview" class="usuarios-modal-preview hidden">
+                <div class="usuarios-preview-header">
+                    <span id="nu-preview-badge" class="usuarios-role-pill"></span>
+                    <span id="nu-preview-perfil" class="usuarios-preview-summary"></span>
+                </div>
+                <div class="usuarios-preview-columns">
+                    <div>
+                        <span class="usuarios-box-heading">Tendrá acceso a:</span>
+                        <ul id="nu-preview-modulos" class="usuarios-check-list"></ul>
+                    </div>
+                    <div class="usuarios-preview-guard">
+                        <span class="usuarios-box-heading">Restricciones:</span>
+                        <p id="nu-preview-restricciones" class="usuarios-guard-copy"></p>
+                    </div>
+                </div>
             </div>
 
             <div class="modal-actions">
                 <button type="button" class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
-                <button type="submit" class="btn btn-primary">Crear Usuario</button>
+                <button type="submit" class="btn btn-primary">Guardar colaborador</button>
             </div>
         </form>
     </div>
 </div>
+
+<script id="roles-metadata-json" type="application/json">
+{{ roles|tojson|safe }}
+</script>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
+    const ROLES_META = JSON.parse(document.getElementById('roles-metadata-json').textContent || '[]');
+    let filtroRolActual = 'ALL';
+    let filtroEstadoActual = 'ALL';
+
     function abrirModal() {
         document.getElementById('modal-nuevo-usuario').classList.remove('hidden');
     }
@@ -111,9 +288,95 @@
     function cerrarModal() {
         document.getElementById('modal-nuevo-usuario').classList.add('hidden');
         document.getElementById('form-nuevo-usuario').reset();
+        const preview = document.getElementById('nu-rol-preview');
+        if (preview) preview.classList.add('hidden');
     }
 
-    // Close modal on overlay click
+    function seleccionarFiltroRol(rolNombre, btnEl) {
+        filtroRolActual = rolNombre;
+        document.querySelectorAll('.usuarios-station-pill').forEach(b => b.classList.remove('is-active'));
+        if (btnEl) btnEl.classList.add('is-active');
+
+        const inspector = document.getElementById('usuarios-station-inspector');
+        const rol = ROLES_META.find(r => r.nombre === rolNombre);
+        if (!rol || rolNombre === 'ALL') {
+            inspector.classList.add('hidden');
+        } else {
+            const badge = document.getElementById('insp-badge');
+            badge.className = `usuarios-role-pill ${rol.badge_class || ''}`;
+            badge.textContent = rol.etiqueta;
+            document.getElementById('insp-title').textContent = rol.etiqueta;
+            document.getElementById('insp-desc').textContent = rol.perfil;
+            document.getElementById('insp-restricciones').textContent = rol.restricciones;
+
+            const ul = document.getElementById('insp-modulos');
+            ul.innerHTML = '';
+            (rol.modulos || []).forEach(m => {
+                const li = document.createElement('li');
+                li.textContent = m;
+                ul.appendChild(li);
+            });
+            inspector.classList.remove('hidden');
+        }
+        filtrarTablaUsuarios();
+    }
+
+    function cambiarFiltroEstado(estado, btnEl) {
+        filtroEstadoActual = estado;
+        document.querySelectorAll('.usuarios-status-tab').forEach(b => b.classList.remove('is-active'));
+        if (btnEl) btnEl.classList.add('is-active');
+        filtrarTablaUsuarios();
+    }
+
+    function filtrarTablaUsuarios() {
+        const q = (document.getElementById('usuarios-search').value || '').trim().toLowerCase();
+        const rows = document.querySelectorAll('#tabla-usuarios tbody .usuarios-row');
+        let visibles = 0;
+
+        rows.forEach(row => {
+            const matchRol = (filtroRolActual === 'ALL' || row.dataset.role === filtroRolActual);
+            const matchEst = (filtroEstadoActual === 'ALL' || row.dataset.status === filtroEstadoActual);
+            const matchTxt = (!q || (row.dataset.search || '').includes(q));
+            const mostrar = matchRol && matchEst && matchTxt;
+            row.classList.toggle('hidden', !mostrar);
+            if (mostrar) visibles++;
+        });
+
+        const emptyState = document.getElementById('usuarios-empty-filter');
+        if (emptyState) {
+            emptyState.classList.toggle('hidden', visibles > 0);
+        }
+    }
+
+    function limpiarFiltrosUsuarios() {
+        document.getElementById('usuarios-search').value = '';
+        cambiarFiltroEstado('ALL', document.querySelector('[data-status-filter=ALL]'));
+        seleccionarFiltroRol('ALL', document.querySelector('[data-role-filter=ALL]'));
+    }
+
+    function mostrarDetalleRolModal(rolId) {
+        const preview = document.getElementById('nu-rol-preview');
+        const rol = ROLES_META.find(r => String(r.id) === String(rolId));
+        if (!rol || !preview) {
+            if (preview) preview.classList.add('hidden');
+            return;
+        }
+        const badge = document.getElementById('nu-preview-badge');
+        badge.className = `usuarios-role-pill ${rol.badge_class || ''}`;
+        badge.textContent = rol.etiqueta;
+        document.getElementById('nu-preview-perfil').textContent = rol.perfil;
+        document.getElementById('nu-preview-restricciones').textContent = rol.restricciones;
+
+        const ul = document.getElementById('nu-preview-modulos');
+        ul.innerHTML = '';
+        (rol.modulos || []).forEach(m => {
+            const li = document.createElement('li');
+            li.textContent = m;
+            ul.appendChild(li);
+        });
+        preview.classList.remove('hidden');
+    }
+
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) cerrarModal();
@@ -139,13 +402,49 @@
                 location.reload();
             } else {
                 const data = await res.json();
-                showToast(data.error || 'Error al guardar usuario', true);
+                showToast(data.error || 'Error al guardar colaborador', true);
             }
         } catch (err) {
             hideLoading();
             showToast('Error de conexión', true);
         }
     });
+
+    async function cambiarRolUsuario(userId, nuevoRolId, nombreUsuario) {
+        const rolObj = ROLES_META.find(r => String(r.id) === String(nuevoRolId));
+        const nombreRol = rolObj ? rolObj.etiqueta : nuevoRolId;
+        const ok = await showConfirm({
+            title: '¿Cambiar perfil de trabajo?',
+            message: `Se asignará el perfil "${nombreRol}" a ${nombreUsuario}.`,
+            type: 'warning',
+            confirmText: 'Actualizar perfil',
+            icon: '🔐'
+        });
+        if (!ok) {
+            location.reload();
+            return;
+        }
+        showLoading();
+        try {
+            const res = await fetch(`/admin/api/usuarios/${userId}/rol`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rol_id: nuevoRolId })
+            });
+            hideLoading();
+            if (res.ok) {
+                showToast('Perfil actualizado correctamente');
+                setTimeout(() => location.reload(), 450);
+            } else {
+                const data = await res.json();
+                showToast(data.error || 'No se pudo cambiar el perfil', true);
+                setTimeout(() => location.reload(), 900);
+            }
+        } catch (err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
+    }
 
     async function toggleUsuario(id) {
         showLoading();
@@ -158,7 +457,7 @@
                 location.reload();
             } else {
                 const data = await res.json();
-                showToast(data.error || 'Error al cambiar estado', true);
+                showToast(data.error || 'Error al actualizar usuario', true);
             }
         } catch (err) {
             hideLoading();
@@ -167,3 +466,5 @@
     }
 </script>
 {% endblock %}
+
+{% block page_styles %}{{ super() }}<link rel="stylesheet" href="{{ css_url('pages/admin/usuarios') }}">{% endblock %}

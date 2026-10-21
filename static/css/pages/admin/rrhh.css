@@ -1,0 +1,443 @@
+
+
+.page-rrhh .rrhh-page-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.page-rrhh .rrhh-actions {
+    display:flex;
+    gap:.75rem;
+    flex-wrap:wrap;
+    align-items:center;
+}
+.page-rrhh .rrhh-actions .btn {
+    flex:0 0 auto;
+}
+.page-rrhh .rrhh-actions .btn-outline {
+    color:var(--text-main);
+    border-color:var(--border-interactive);
+}
+.page-rrhh .rrhh-page-header {
+    flex-wrap:wrap;
+    gap:1rem;
+}
+
+@media screen and (max-width: 600px) {
+    .page-rrhh .rrhh-actions {
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+    .page-rrhh .rrhh-actions .btn {
+        white-space:normal;
+        min-height:44px;
+        height:auto;
+        line-height:1.3;
+        padding-inline:12px;
+    }
+}
+
+.page-rrhh .rrhh-btn-outline {
+    border-color: #9b59b6;
+    color: #9b59b6;
+    text-decoration: none;
+}
+
+.page-rrhh .rrhh-btn-outline-2 {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.page-rrhh .rrhh-btn-outline-3 {
+    border-color: var(--success);
+    color: var(--success);
+}
+
+.page-rrhh .rrhh-btn-outline-4 {
+    border-color: #f39c12;
+    color: #f39c12;
+}
+
+.page-rrhh .rrhh-btn-outline-5 {
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
+.page-rrhh .rrhh-mb-3 {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.page-rrhh .rrhh-btn-outline-6 {
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    border-color: #3498db;
+    color: #3498db;
+}
+
+.page-rrhh .rrhh-svg-spacing {
+    vertical-align:middle;
+    margin-right:2px;
+}
+
+.page-rrhh .rrhh-btn-outline-7 {
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    border-color: #9b59b6;
+    color: #9b59b6;
+}
+
+.page-rrhh .rrhh-h3-text {
+    color: #d35400;
+}
+
+.page-rrhh .rrhh-panel-body {
+    padding: 10px 20px;
+}
+
+.page-rrhh .rrhh-alertas-list {
+    margin: 0;
+    padding-left: 20px;
+    line-height: 1.8;
+}
+
+.page-rrhh .rrhh-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.page-rrhh .rrhh-card {
+    padding: 1rem;
+}
+
+.page-rrhh .rrhh-fw-700 {
+    font-size: 1.1rem;
+}
+
+.page-rrhh .rrhh-text-muted {
+    font-size: 0.9rem;
+}
+
+.page-rrhh .rrhh-row-2 {
+    font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.page-rrhh .rrhh-btn-outline-8 {
+    padding: 2px 5px;
+    font-size: 0.7rem;
+}
+
+.page-rrhh .rrhh-btn-outline-9 {
+    padding: 2px 5px;
+    font-size: 0.7rem;
+    color: #e74c3c;
+    border-color: #e74c3c;
+    margin-left: 5px;
+}
+
+.page-rrhh .rrhh-text-success {
+    font-size: 0.8rem;
+}
+
+.page-rrhh .rrhh-svg-spacing-2 {
+    vertical-align: middle;
+}
+
+.page-rrhh .rrhh-th-spacing {
+    text-align: right;
+}
+
+.page-rrhh .rrhh-th-spacing-2 {
+    text-align: center;
+}
+
+.page-rrhh .rrhh-modal-content {
+    max-width: 600px;
+}
+
+.page-rrhh .rrhh-row-3 {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    border: 1px dashed var(--glass-border, #ccc);
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.page-rrhh .rrhh-camera-container {
+    position: relative;
+    width: 320px;
+    height: 240px;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    display: none;
+}
+
+.page-rrhh .rrhh-emp-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+}
+
+.page-rrhh .rrhh-emp-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.page-rrhh .rrhh-emp-foto-preview {
+    width: 320px;
+    height: 240px;
+    object-fit: cover;
+    border-radius: 8px;
+    display: none;
+    border: 2px solid var(--success, #2ecc71);
+}
+
+.page-rrhh .rrhh-row-4 {
+    display: flex;
+    gap: 10px;
+}
+
+.page-rrhh .rrhh-camera-status {
+    font-size: 0.8rem;
+    color: #888;
+    margin: 0;
+}
+
+.page-rrhh .rrhh-modal-content-2 {
+    max-width: 500px;
+}
+
+.page-rrhh .rrhh-form-group {
+    display:flex;
+    align-items:flex-end;
+}
+
+.page-rrhh .rrhh-btn-submit-aguinaldo {
+    width:100%;
+}
+
+.page-rrhh .rrhh-modal-actions {
+    display: flex;
+    justify-content: space-between;
+}
+
+.page-rrhh .rrhh-btn-outline-10 {
+    border-color: #f39c12;
+    color: #f39c12;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.page-rrhh .rrhh-a-text {
+    color:var(--primary-color);
+    text-decoration:none;
+}
+
+.page-rrhh .rrhh-a-text-2 {
+    color:var(--danger);
+    text-decoration:none;
+}
+
+.page-rrhh .rrhh-modal-content-3 {
+    max-width: 400px;
+}
+
+.page-rrhh .rrhh-modal-content-4 {
+    max-width: 800px;
+}
+
+.page-rrhh .rrhh-row-5 {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.page-rrhh .rrhh-div-spacing {
+    flex: 1;
+    min-width: 300px;
+}
+
+.page-rrhh .rrhh-btn-primary {
+    width: 100%;
+}
+
+.page-rrhh .rrhh-btn-outline-11 {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.page-rrhh .rrhh-div-surface {
+    flex: 1;
+    min-width: 300px;
+    border-left: 1px solid var(--border);
+    padding-left: 20px;
+    min-height: 250px;
+}
+
+.page-rrhh .rrhh-h4-text {
+    margin-top: 0;
+    color: var(--primary);
+}
+
+.page-rrhh .rrhh-liq-resultado {
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.page-rrhh .rrhh-empty-state {
+    padding: 20px 0;
+}
+
+.page-rrhh .rrhh-p-text {
+    font-size: 0.85rem;
+}
+
+.page-rrhh .rrhh-spinner {
+    animation: spin 1s linear infinite;
+}
+
+.page-rrhh .rrhh-div-surface-2 {
+    background: var(--surface-sunken);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border: 1px solid var(--border-light);
+}
+
+.page-rrhh .rrhh-row-6 {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.page-rrhh .rrhh-row-7 {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    color: var(--success);
+}
+
+.page-rrhh .rrhh-row-8 {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    color: var(--warning);
+}
+
+.page-rrhh .rrhh-hr-surface {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 15px 0;
+}
+
+.page-rrhh .rrhh-row-9 {
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: var(--text-main);
+    margin-bottom: 15px;
+}
+
+.page-rrhh .rrhh-btn-primary-2 {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* Data-driven visual states, shared by server and client rendering. */
+.page-rrhh .rrhh-initially-hidden {
+    display:none;
+}
+
+/* ── Tabla y Controles de Nóminas Recientes ── */
+.page-rrhh .rrhh-nominas-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.page-rrhh .rrhh-filter-tabs {
+    display: inline-flex;
+    background: var(--surface-sunken);
+    padding: 3px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-light);
+}
+
+.page-rrhh .rrhh-filter-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.3rem 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.page-rrhh .rrhh-filter-btn.active {
+    background: var(--surface);
+    color: var(--brand-cafe);
+    box-shadow: var(--shadow-sm);
+}
+
+.page-rrhh .rrhh-filter-select {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+.page-rrhh .rrhh-nominas-table {
+    display: table;
+    width: 100%;
+    white-space: normal;
+}
+
+.page-rrhh .rrhh-nominas-table thead th,
+.page-rrhh .rrhh-nominas-table tbody td,
+.page-rrhh .rrhh-nominas-table tfoot th {
+    padding: 0.7rem 0.9rem;
+    vertical-align: middle;
+}
+
+.page-rrhh .rrhh-actions-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    justify-content: center;
+}
+
+.page-rrhh .rrhh-nominas-table tfoot tr {
+    background: var(--surface-sunken);
+    border-top: 2px solid var(--border);
+}
+
+.page-rrhh .rrhh-nominas-table tfoot th {
+    font-weight: 800;
+    font-size: 0.82rem;
+    color: var(--text-main);
+}

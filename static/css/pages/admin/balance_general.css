@@ -1,0 +1,18 @@
+
+
+.page-balance-general .balance-general-c-table-cell {
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.page-balance-general .balance-general-c-report-actions {
+    gap: 15px;
+}
+
+.page-balance-general .balance-general-btn-outline {
+    border-radius: var(--radius-full);
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}

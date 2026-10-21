@@ -8,7 +8,7 @@ from flask import render_template, request, jsonify, redirect, url_for, flash, R
 from flask_login import login_required, current_user
 from app.admin import admin_bp
 from app.auth.decorators import roles_required
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp
 from app.services.business_time import business_now
 from app.services.fiscal_service import configuration, audit
 from app.services.contabilidad_service import ContabilidadService, ContabilidadError
@@ -23,15 +23,37 @@ def fiscal():
     try:
         cursor=conn.cursor()
         config=configuration(cursor)
-        cursor.execute('SELECT TOP 100 ID,NumeroFactura,FechaHora,Total,EstadoFiscal,DocumentoJSON FROM Facturas ORDER BY ID DESC')
+        execute_sp(
+            cursor,
+            'ventas.sp_ListarUltimasFacturasFiscal',
+            fallback_sql='SELECT TOP 100 ID,NumeroFactura,FechaHora,Total,EstadoFiscal,DocumentoJSON FROM Facturas ORDER BY ID DESC',
+        )
         invoices=[dict(zip([c[0] for c in cursor.description],row)) for row in cursor.fetchall()]
-        cursor.execute('SELECT ID,Nombre,TasaIVA,MotivoExencion FROM Productos WHERE Activo=1 ORDER BY Nombre')
+        execute_sp(
+            cursor,
+            'catalogo.sp_ListarProductosFiscal',
+            fallback_sql='SELECT ID,Nombre,TasaIVA,MotivoExencion FROM Productos WHERE Activo=1 ORDER BY Nombre',
+        )
         products=cursor.fetchall()
-        cursor.execute('SELECT ID,Mes,Anio,Estado FROM PeriodosContables ORDER BY Anio DESC,Mes DESC')
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ListarPeriodosContablesFiscal',
+            fallback_sql='SELECT ID,Mes,Anio,Estado FROM PeriodosContables ORDER BY Anio DESC,Mes DESC',
+        )
         periods=cursor.fetchall()
-        cursor.execute('SELECT TOP 50 Fecha,Accion,Entidad,EntidadID,UsuarioID,Detalle FROM BitacoraFiscal ORDER BY ID DESC')
+        execute_sp(
+            cursor,
+            'fiscal.sp_ListarEventosBitacoraFiscal',
+            (50, None),
+            fallback_sql='SELECT TOP 50 ID,Fecha,UsuarioID,Accion,Entidad,EntidadID,Detalle,IP FROM BitacoraFiscal ORDER BY ID DESC',
+            fallback_params=(),
+        )
         events=cursor.fetchall()
-        cursor.execute('SELECT TOP 50 ID,NumeroComprobante,Fecha,Descripcion,Estado FROM AsientosDiario ORDER BY ID DESC')
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ListarUltimosAsientosFiscal',
+            fallback_sql='SELECT TOP 50 ID,NumeroComprobante,Fecha,Descripcion,Estado FROM AsientosDiario ORDER BY ID DESC',
+        )
         entries=cursor.fetchall()
         return render_template('admin/fiscal.html',config=config,invoices=invoices,products=products,periods=periods,events=events,entries=entries)
     finally:
@@ -56,7 +78,12 @@ def fiscal_configuration():
         cursor=conn.cursor()
         old=configuration(cursor)
         for key,value in data.items():
-            cursor.execute('UPDATE ConfiguracionSistema SET Valor=? WHERE Clave=?',value,key)
+            execute_sp(
+                cursor,
+                'seguridad.sp_ActualizarConfiguracionClaveValor',
+                (value, key),
+                fallback_sql='UPDATE ConfiguracionSistema SET Valor=? WHERE Clave=?',
+            )
         audit(cursor,current_user.id,'CONFIGURACION','Sistema',None,{'antes':{k:old.get(k) for k in data},'despues':data},request.remote_addr)
         conn.commit()
         flash('Datos guardados. Las facturas anteriores conservan su emisor original.','success')
@@ -74,15 +101,40 @@ def print_journal(entry_id):
     conn=get_db_connection()
     try:
         cursor=conn.cursor()
-        row=cursor.execute('SELECT * FROM AsientosDiario WHERE ID=?',entry_id).fetchone()
+        row=execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerAsientoDiarioPorID',
+            (entry_id,),
+            fallback_sql='SELECT * FROM AsientosDiario WHERE ID=?',
+        ).fetchone()
         if not row:
             return 'Comprobante no encontrado.',404
         entry=dict(zip([c[0] for c in cursor.description],row))
         emisor=json.loads(entry['EmisorJSON']) if entry.get('EmisorJSON') else {}
-        cursor.execute('SELECT c.Codigo,c.Nombre,d.Descripcion,d.Debe,d.Haber FROM DetalleAsientos d JOIN CatalogoCuentas c ON c.ID=d.CuentaID WHERE d.AsientoID=? ORDER BY d.ID',entry_id)
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerDetallesAsientoImpresion',
+            (entry_id,),
+            fallback_sql='SELECT c.Codigo,c.Nombre,d.Descripcion,d.Debe,d.Haber FROM DetalleAsientos d JOIN CatalogoCuentas c ON c.ID=d.CuentaID WHERE d.AsientoID=? ORDER BY d.ID',
+        )
         details=cursor.fetchall()
+        user_name = entry.get('UsuarioID')
+        if entry.get('UsuarioID'):
+            try:
+                execute_sp(
+                    cursor,
+                    'seguridad.sp_ObtenerNombreUsuarioPorID',
+                    (int(entry['UsuarioID']),),
+                    fallback_sql='SELECT NombreCompleto FROM Usuarios WHERE ID = ?',
+                )
+                u_row = cursor.fetchone()
+                if u_row and u_row[0]:
+                    user_name = u_row[0]
+            except Exception:
+                pass
         return render_template('admin/comprobante_imprimir.html',entry=entry,emisor=emisor,details=details,
-                               debe=sum(r.Debe for r in details),haber=sum(r.Haber for r in details))
+                               debe=sum(r.Debe for r in details),haber=sum(r.Haber for r in details),
+                               user_name=user_name)
     finally:
         conn.close()
 
@@ -100,7 +152,13 @@ def fiscal_product(product_id):
     conn=get_db_connection()
     try:
         cursor=conn.cursor()
-        cursor.execute('UPDATE Productos SET TasaIVA=?,MotivoExencion=? WHERE ID=?',rate,reason or None,product_id)
+        execute_sp(
+            cursor,
+            'catalogo.sp_ActualizarTratamientoIVAProducto',
+            (product_id, rate, reason or None),
+            fallback_sql='UPDATE Productos SET TasaIVA=?,MotivoExencion=? WHERE ID=?',
+            fallback_params=(rate, reason or None, product_id),
+        )
         audit(cursor,current_user.id,'TRATAMIENTO_IVA','Producto',product_id,{'tasa':rate,'fundamento':reason},request.remote_addr)
         conn.commit()
     except Exception:
@@ -117,7 +175,12 @@ def print_invoice(invoice_id):
     conn=get_db_connection()
     try:
         cursor=conn.cursor()
-        cursor.execute('SELECT DocumentoJSON,EstadoFiscal,MotivoAnulacion FROM Facturas WHERE ID=?',invoice_id)
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerFacturaImpresion',
+            (invoice_id,),
+            fallback_sql='SELECT DocumentoJSON,EstadoFiscal,MotivoAnulacion FROM Facturas WHERE ID=?',
+        )
         row=cursor.fetchone()
         if not row:
             return 'Factura no encontrada',404
@@ -144,33 +207,78 @@ def void_invoice(invoice_id):
     conn=get_db_connection()
     try:
         cursor=conn.cursor()
-        cursor.execute('SELECT EstadoFiscal,DocumentoJSON,TurnoID,ClienteID FROM Facturas WITH (UPDLOCK,HOLDLOCK) WHERE ID=?',invoice_id)
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerFacturaParaAnularBloqueo',
+            (invoice_id,),
+            fallback_sql='SELECT EstadoFiscal,DocumentoJSON,TurnoID,ClienteID FROM Facturas WITH (UPDLOCK,HOLDLOCK) WHERE ID=?',
+        )
         row=cursor.fetchone()
         if not row or row[0]=='Anulada' or not row[1]:
             raise ValueError('La factura no existe, ya está anulada o requiere revisión histórica.')
-        cursor.execute('SELECT Cerrado FROM TurnosCaja WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',row[2])
+        execute_sp(
+            cursor,
+            'ventas.sp_ObtenerEstadoCerradoTurnoBloqueo',
+            (row[2],),
+            fallback_sql='SELECT Cerrado FROM TurnosCaja WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',
+        )
         shift=cursor.fetchone()
         if not shift or shift[0]:
             raise ValueError('La caja ya está cerrada. La corrección requiere revisión contable y documento de ajuste.')
-        cursor.execute("SELECT ID FROM ArqueoCaja WHERE TurnoID=? AND EstadoArqueo IN ('Pendiente','Verificado')",row[2])
+        execute_sp(
+            cursor,
+            'ventas.sp_VerificarArqueoPendienteTurno',
+            (row[2],),
+            fallback_sql="SELECT ID FROM ArqueoCaja WHERE TurnoID=? AND EstadoArqueo IN ('Pendiente','Verificado')",
+        )
         if cursor.fetchone():
             raise ValueError('No se puede anular durante un arqueo pendiente.')
         doc=json.loads(row[1])
         voided_at=business_now()
         ContabilidadService.revertir_asiento(cursor,doc['asiento_id'],current_user.id,motivo,request.remote_addr,fecha=voided_at)
         if doc.get('numero_factura'):
-            cursor.execute("SELECT ID FROM AsientosDiario WHERE ReferenciaExterna=? AND Estado='Contabilizado'", f"SALDO-{doc['numero_factura']}")
+            execute_sp(
+                cursor,
+                'contabilidad.sp_ObtenerAsientosSaldoEncargoActivos',
+                (f"SALDO-{doc['numero_factura']}",),
+                fallback_sql="SELECT ID FROM AsientosDiario WHERE ReferenciaExterna=? AND Estado='Contabilizado'",
+            )
             for saldo_asiento in cursor.fetchall():
                 ContabilidadService.revertir_asiento(cursor,saldo_asiento[0],current_user.id,motivo,request.remote_addr,fecha=voided_at)
         # Devolución en la misma caja: original y contrapartida permanecen visibles.
-        cursor.execute('SELECT MetodoPago,SUM(Monto) FROM Pagos WHERE FacturaID=? GROUP BY MetodoPago',invoice_id)
+        execute_sp(
+            cursor,
+            'ventas.sp_AgruparPagosPorMetodoFactura',
+            (invoice_id,),
+            fallback_sql='SELECT MetodoPago,SUM(Monto) FROM Pagos WHERE FacturaID=? GROUP BY MetodoPago',
+        )
         for method,total in cursor.fetchall():
             if total>0:
-                cursor.execute("INSERT INTO Pagos(FacturaID,MetodoPago,Monto,NombreTransferente,MonedaRegistro) VALUES(?,?,?,?,'NIO')",invoice_id,method,-total,'Devolución por anulación')
-        cursor.execute("UPDATE Facturas SET EstadoFiscal='Anulada',AnuladaPor=?,FechaAnulacion=?,MotivoAnulacion=? WHERE ID=?",current_user.id,voided_at,motivo,invoice_id)
+                execute_sp(
+                    cursor,
+                    'ventas.sp_InsertarPagoDevolucionAnulacion',
+                    (invoice_id, method, -total, 'Devolución por anulación'),
+                    fallback_sql="INSERT INTO Pagos(FacturaID,MetodoPago,Monto,NombreTransferente,MonedaRegistro) VALUES(?,?,?,?,'NIO')",
+                )
+        execute_sp(
+            cursor,
+            'ventas.sp_MarcarFacturaAnulada',
+            (current_user.id, voided_at, motivo, invoice_id),
+            fallback_sql="UPDATE Facturas SET EstadoFiscal='Anulada',AnuladaPor=?,FechaAnulacion=?,MotivoAnulacion=? WHERE ID=?",
+        )
         if row[3] and row[3]>1:
-            cursor.execute('UPDATE Clientes SET TotalCompras=CASE WHEN TotalCompras>0 THEN TotalCompras-1 ELSE 0 END WHERE ID=?',row[3])
-            cursor.execute('UPDATE Clientes SET NivelConfianzaID=CASE WHEN TotalCompras>=10 THEN 3 WHEN TotalCompras>=3 THEN 2 ELSE 1 END WHERE ID=?',row[3])
+            execute_sp(
+                cursor,
+                'crm.sp_DecrementarComprasCliente',
+                (row[3],),
+                fallback_sql='UPDATE Clientes SET TotalCompras=CASE WHEN TotalCompras>0 THEN TotalCompras-1 ELSE 0 END WHERE ID=?',
+            )
+            execute_sp(
+                cursor,
+                'crm.sp_ActualizarNivelConfianzaCliente',
+                (row[3],),
+                fallback_sql='UPDATE Clientes SET NivelConfianzaID=CASE WHEN TotalCompras>=10 THEN 3 WHEN TotalCompras>=3 THEN 2 ELSE 1 END WHERE ID=?',
+            )
         audit(cursor,current_user.id,'ANULACION_Y_DEVOLUCION','Factura',invoice_id,{'motivo':motivo},request.remote_addr)
         conn.commit()
         flash('Factura anulada y devolución registrada. Conserve el original y todas las copias.','success')
@@ -195,7 +303,12 @@ def export_fiscal():
     conn=get_db_connection()
     try:
         cursor=conn.cursor()
-        cursor.execute('SELECT NumeroFactura,FechaHora,Subtotal,IVA,Total,EstadoFiscal,FechaAnulacion,MotivoAnulacion FROM Facturas WHERE FechaHora>=? AND FechaHora<DATEADD(day,1,CAST(? AS date)) ORDER BY ID',start,end)
+        execute_sp(
+            cursor,
+            'ventas.sp_ExportarFacturasRangoFiscal',
+            (start, end),
+            fallback_sql='SELECT NumeroFactura,FechaHora,Subtotal,IVA,Total,EstadoFiscal,FechaAnulacion,MotivoAnulacion FROM Facturas WHERE FechaHora>=? AND FechaHora<DATEADD(day,1,CAST(? AS date)) ORDER BY ID',
+        )
         stream=io.StringIO(newline=''); writer=csv.writer(stream)
         writer.writerow(['Número','Fecha emisión','Base C$','IVA C$','Total C$','Estado','Fecha anulación','Motivo'])
         for row in cursor.fetchall():

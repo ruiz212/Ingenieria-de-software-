@@ -9,7 +9,7 @@ from flask import render_template, request, jsonify, current_app
 from flask_login import login_required, current_user
 
 from app.admin import admin_bp
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from app.services.audit import registrar_auditoria
@@ -39,15 +39,23 @@ def catalogo():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT ID, Nombre FROM Categorias ORDER BY Nombre")
+    execute_sp(
+        cursor,
+        'catalogo.sp_ObtenerCategorias',
+        fallback_sql="SELECT ID, Nombre FROM Categorias ORDER BY Nombre",
+    )
     categorias = [{'id': row.ID, 'nombre': row.Nombre} for row in cursor.fetchall()]
 
-    cursor.execute(
-        "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.CategoriaID, "
-        "p.PrecioBase, p.Activo, p.EsFicticio, p.PorcentajeDescuento, p.ImagenUrl "
-        "FROM Productos p "
-        "JOIN Categorias c ON p.CategoriaID = c.ID "
-        "ORDER BY c.Nombre, p.Nombre"
+    execute_sp(
+        cursor,
+        'catalogo.sp_ListarProductosAdmin',
+        fallback_sql=(
+            "SELECT p.ID, p.Nombre, c.Nombre AS Categoria, p.CategoriaID, "
+            "p.PrecioBase, p.Activo, p.EsFicticio, p.PorcentajeDescuento, p.ImagenUrl "
+            "FROM Productos p "
+            "JOIN Categorias c ON p.CategoriaID = c.ID "
+            "ORDER BY c.Nombre, p.Nombre"
+        ),
     )
     productos = [
         {
@@ -154,17 +162,21 @@ def crear_producto():
     if not nombre or not precio or not categoria_id:
         return jsonify({'error': 'Faltan datos requeridos'}), 400
 
-    precio=amount(precio, 'Precio', minimum=0.01)
-    descuento=amount(descuento, 'Descuento', maximum=100)
+    precio = amount(precio, 'Precio', minimum=0.01)
+    descuento = amount(descuento, 'Descuento', maximum=100)
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            "INSERT INTO Productos "
-            "(Nombre, PrecioBase, CategoriaID, EsFicticio, Activo, PorcentajeDescuento, ImagenUrl) "
-            "OUTPUT INSERTED.ID "
-            "VALUES (?, ?, ?, 0, 1, ?, ?)",
-            nombre, float(precio), int(categoria_id), float(descuento), imagen_url
+        execute_sp(
+            cursor,
+            'catalogo.sp_CrearProductoAdmin',
+            (nombre, float(precio), int(categoria_id), float(descuento), imagen_url),
+            fallback_sql=(
+                "INSERT INTO Productos "
+                "(Nombre, PrecioBase, CategoriaID, EsFicticio, Activo, PorcentajeDescuento, ImagenUrl) "
+                "OUTPUT INSERTED.ID "
+                "VALUES (?, ?, ?, 0, 1, ?, ?)"
+            ),
         )
         new_id = cursor.fetchone()[0]
         registrar_auditoria(cursor, current_user.id, 'CREAR', 'Productos', new_id,
@@ -196,12 +208,20 @@ def toggle_producto(producto_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT Nombre, Activo FROM Productos WHERE ID=?", producto_id)
+        execute_sp(
+            cursor,
+            'catalogo.sp_ObtenerEstadoProducto',
+            (producto_id,),
+            fallback_sql="SELECT Nombre, Activo FROM Productos WHERE ID=?",
+        )
         previous = cursor.fetchone()
         if not previous:
             return jsonify(error='Producto no encontrado.'), 404
-        cursor.execute(
-            "UPDATE Productos SET Activo = 1 ^ Activo WHERE ID = ?", producto_id
+        execute_sp(
+            cursor,
+            'catalogo.sp_CambiarEstadoProducto',
+            (producto_id,),
+            fallback_sql="UPDATE Productos SET Activo = 1 ^ Activo WHERE ID = ?",
         )
         registrar_auditoria(cursor, current_user.id, 'CAMBIAR_ESTADO', 'Productos', producto_id,
                             datos_antes={'nombre': previous.Nombre, 'activo': bool(previous.Activo)},
@@ -235,39 +255,48 @@ def editar_producto(producto_id):
     if not nombre or not precio or not categoria_id:
         return jsonify({'error': 'Faltan datos requeridos'}), 400
 
-    # Si imagen_url es string vacío, lo ponemos None para guardar NULL;
-    # si viene None es que el usuario no tocó la imagen → conservar la actual
-    precio=amount(precio, 'Precio', minimum=0.01)
-    descuento=amount(descuento, 'Descuento', maximum=100)
+    precio = amount(precio, 'Precio', minimum=0.01)
+    descuento = amount(descuento, 'Descuento', maximum=100)
     actualizar_imagen = 'imagen_url' in datos
     imagen_value = (imagen_url or None) if actualizar_imagen else '_SKIP_'
 
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            "SELECT Nombre, PrecioBase, CategoriaID, PorcentajeDescuento, ImagenUrl, Activo "
-            "FROM Productos WHERE ID=?",
-            producto_id
+        execute_sp(
+            cursor,
+            'catalogo.sp_ObtenerProductoAdminPorID',
+            (producto_id,),
+            fallback_sql=(
+                "SELECT Nombre, PrecioBase, CategoriaID, PorcentajeDescuento, ImagenUrl, Activo "
+                "FROM Productos WHERE ID=?"
+            ),
         )
         previous = cursor.fetchone()
         if not previous:
             return jsonify(error='Producto no encontrado.'), 404
         if actualizar_imagen:
-            cursor.execute(
-                "UPDATE Productos "
-                "SET Nombre = ?, PrecioBase = ?, CategoriaID = ?, "
-                "PorcentajeDescuento = ?, ImagenUrl = ? "
-                "WHERE ID = ?",
-                nombre, float(precio), int(categoria_id),
-                float(descuento), imagen_value, producto_id
+            execute_sp(
+                cursor,
+                'catalogo.sp_ActualizarProductoConImagen',
+                (nombre, float(precio), int(categoria_id), float(descuento), imagen_value, producto_id),
+                fallback_sql=(
+                    "UPDATE Productos "
+                    "SET Nombre = ?, PrecioBase = ?, CategoriaID = ?, "
+                    "PorcentajeDescuento = ?, ImagenUrl = ? "
+                    "WHERE ID = ?"
+                ),
             )
         else:
-            cursor.execute(
-                "UPDATE Productos "
-                "SET Nombre = ?, PrecioBase = ?, CategoriaID = ?, PorcentajeDescuento = ? "
-                "WHERE ID = ?",
-                nombre, float(precio), int(categoria_id), float(descuento), producto_id
+            execute_sp(
+                cursor,
+                'catalogo.sp_ActualizarProductoSinImagen',
+                (nombre, float(precio), int(categoria_id), float(descuento), producto_id),
+                fallback_sql=(
+                    "UPDATE Productos "
+                    "SET Nombre = ?, PrecioBase = ?, CategoriaID = ?, PorcentajeDescuento = ? "
+                    "WHERE ID = ?"
+                ),
             )
         registrar_auditoria(
             cursor, current_user.id, 'EDITAR', 'Productos', producto_id,
@@ -280,7 +309,12 @@ def editar_producto(producto_id):
         conn.commit()
 
         # Obtener imagen_url actual para devolverla
-        cursor.execute("SELECT ImagenUrl FROM Productos WHERE ID = ?", producto_id)
+        execute_sp(
+            cursor,
+            'catalogo.sp_ObtenerImagenProducto',
+            (producto_id,),
+            fallback_sql="SELECT ImagenUrl FROM Productos WHERE ID = ?",
+        )
         row = cursor.fetchone()
         img = row.ImagenUrl if row else ''
 

@@ -1,0 +1,84 @@
+@media screen {
+    /* Back office: differentiated radii for surfaces, controls and small states. */
+    .app-container .glass-dock {
+        border-radius: 28px;
+    }
+    .app-container .brand-icon {
+        border-radius: 50%;
+    }
+    .app-container .dock-item {
+        border-radius: 14px;
+    }
+    .app-container .theme-toggle,
+    .app-container .mobile-menu-toggle {
+        border-radius: 50%;
+    }
+    .app-container .panel,
+    .app-container .metric-card,
+    .app-container .fiscal-card,
+    .app-container .dgi-card {
+        border-radius: var(--bakery-panel-radius);
+        box-shadow: var(--bakery-shadow);
+    }
+    .app-container .btn {
+        border-radius: 999px;
+        padding-inline: 20px;
+    }
+    .app-container .form-input,
+    .app-container .form-select,
+    .app-container .dgi input,
+    .app-container .dgi select,
+    .app-container .dgi textarea {
+        border-radius: var(--bakery-control-radius);
+    }
+    .app-container .tab-item {
+        border-radius: 999px;
+        margin-bottom: 8px;
+    }
+    .app-container .tab-item.active {
+        background: var(--primary-subtle);
+        border-bottom-color: transparent;
+    }
+    .app-container .tab-nav {
+        gap: 4px;
+    }
+    .app-container .dgi-notice,
+    .app-container .dgi-status,
+    .app-container .dgi-error {
+        border-radius: 18px;
+    }
+    .app-container .confirm-dialog {
+        border-radius: 24px;
+    }
+    .app-container dialog.confirm-overlay {
+        border-radius: 24px;
+    }
+    .dashboard-workspace .dashboard-metrics {
+        border-radius: 26px;
+        padding-block: 0;
+        overflow: hidden;
+        box-shadow: var(--bakery-shadow);
+    }
+    .dashboard-workspace .dashboard-metric {
+        padding-block: 24px;
+    }
+    .dashboard-workspace .dashboard-metric:first-child {
+        background: color-mix(in srgb, var(--brand-dorado) 10%, var(--card-bg));
+    }
+    .dashboard-workspace .dashboard-panel {
+        border-radius: 26px;
+        box-shadow: var(--bakery-shadow);
+        overflow: hidden;
+    }
+    .dashboard-workspace .dashboard-panel-heading {
+        background: color-mix(in srgb, var(--brand-beige) 14%, var(--card-bg));
+    }
+    .dashboard-workspace .dashboard-period {
+        padding: 5px 12px;
+        border-radius: 999px;
+        background: var(--primary-subtle);
+        color: var(--action-ink);
+    }
+
+
+}

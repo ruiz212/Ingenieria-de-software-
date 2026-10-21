@@ -9,9 +9,10 @@
 
 import decimal
 from datetime import datetime
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp, is_sqlserver_cursor
 from app.services.validation import amount
 from app.services.business_time import business_now
+from app.services.accounting_validation import validate_double_entry
 
 
 class ContabilidadError(Exception):
@@ -127,9 +128,11 @@ class ContabilidadService:
     @staticmethod
     def _get_cuenta_id(cursor, codigo):
         """Obtiene el ID de una cuenta por su código. Lanza error si no existe."""
-        cursor.execute(
-            "SELECT ID FROM CatalogoCuentas WHERE Codigo = ? AND Activa = 1",
-            (codigo,)
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerCuentaActivaPorCodigo',
+            (codigo,),
+            fallback_sql="SELECT ID FROM CatalogoCuentas WHERE Codigo = ? AND Activa = 1",
         )
         row = cursor.fetchone()
         if not row:
@@ -142,26 +145,10 @@ class ContabilidadService:
         Valida que la suma de débitos == suma de créditos.
         detalles: lista de tuplas (cuenta_codigo, debe, haber)
         """
-        if len(detalles) < 2:
-            raise ContabilidadError('El asiento requiere al menos dos líneas.')
         try:
-            for _, debe, haber in detalles:
-                debe, haber = amount(debe), amount(haber)
-                if (debe > 0) == (haber > 0):
-                    raise ContabilidadError('Cada línea debe tener un importe positivo en Debe o Haber, nunca en ambos.')
-            total_debe = sum(amount(d[1]) for d in detalles)
-            total_haber = sum(amount(d[2]) for d in detalles)
+            validate_double_entry([(amount(debe), amount(haber)) for _, debe, haber in detalles])
         except ValueError as error:
             raise ContabilidadError(str(error)) from error
-
-        if total_debe != total_haber:
-            raise ContabilidadError(
-                f"Partida doble violada: Debe ({total_debe}) != Haber ({total_haber}). "
-                f"Diferencia: {abs(total_debe - total_haber)}"
-            )
-
-        if total_debe == 0:
-            raise ContabilidadError("El asiento no puede tener todos los montos en cero.")
 
     @staticmethod
     def _obtener_o_crear_periodo(cursor, mes=None, anio=None):
@@ -171,9 +158,11 @@ class ContabilidadService:
         if anio is None:
             anio = business_now().year
 
-        cursor.execute(
-            "SELECT ID, Estado FROM PeriodosContables WITH (UPDLOCK, HOLDLOCK) WHERE Mes = ? AND Anio = ?",
-            (mes, anio)
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerPeriodoContablePorMesAnio',
+            (mes, anio),
+            fallback_sql="SELECT ID, Estado FROM PeriodosContables WITH (UPDLOCK, HOLDLOCK) WHERE Mes = ? AND Anio = ?",
         )
         row = cursor.fetchone()
 
@@ -186,21 +175,28 @@ class ContabilidadService:
             return row[0]
 
         # Crear periodo automáticamente
-        cursor.execute(
-            "SET NOCOUNT ON; INSERT INTO PeriodosContables (Mes, Anio, Estado) OUTPUT INSERTED.ID VALUES (?, ?, 'Abierto')",
-            (mes, anio)
+        execute_sp(
+            cursor,
+            'contabilidad.sp_InsertarPeriodoContableAbierto',
+            (mes, anio),
+            fallback_sql="SET NOCOUNT ON; INSERT INTO PeriodosContables (Mes, Anio, Estado) OUTPUT INSERTED.ID VALUES (?, ?, 'Abierto')",
         )
         return cursor.fetchone()[0]
 
     @staticmethod
     def _generar_numero_comprobante(cursor, tipo_comprobante_codigo):
         """Genera un número correlativo para el tipo de comprobante dado."""
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'contabilidad.sp_SiguienteNumeroComprobante',
+            (tipo_comprobante_codigo,),
+            fallback_sql="""
             UPDATE TiposComprobante WITH (UPDLOCK, HOLDLOCK)
             SET CorrelativoActual = CorrelativoActual + 1
             OUTPUT INSERTED.ID, INSERTED.Prefijo, INSERTED.CorrelativoActual
             WHERE Codigo = ?
-        """, (tipo_comprobante_codigo,))
+        """,
+        )
         row = cursor.fetchone()
         if not row:
             raise ContabilidadError('Tipo de comprobante no configurado.')
@@ -222,24 +218,6 @@ class ContabilidadService:
                       tipo_documento='Manual', ip=None, mes=None, anio=None, fecha=None):
         """
         Crea un asiento de diario completo con validación de partida doble.
-
-        Args:
-            cursor: cursor de pyodbc dentro de una transacción activa
-            descripcion: descripción del asiento
-            detalles: lista de tuplas (cuenta_codigo, debe, haber, descripcion_linea)
-                      o (cuenta_codigo, debe, haber) sin descripción
-            usuario_id: ID del usuario que crea el asiento
-            tipo_comprobante: código del tipo ('DI','FV','FC','NM','EG','AJ','CI')
-            referencia_externa: número de documento origen (ej: FAC-0001)
-            tipo_documento: tipo del documento origen
-            ip: dirección IP del usuario
-            mes, anio: periodo contable (default: mes y año actual)
-
-        Returns:
-            dict con {asiento_id, numero_comprobante, periodo_id}
-
-        Raises:
-            ContabilidadError si partida doble falla o periodo cerrado
         """
         if not descripcion or not descripcion.strip():
             raise ContabilidadError('La descripción del asiento es obligatoria.')
@@ -267,32 +245,47 @@ class ContabilidadService:
         )
 
         # 5. Insertar cabecera del asiento
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'contabilidad.sp_InsertarCabeceraAsiento',
+            (
+                fecha, periodo_id, descripcion, referencia_externa, tipo_documento,
+                usuario_id, tipo_comprobante_id, numero_comprobante, ip
+            ),
+            fallback_sql="""
             SET NOCOUNT ON;
             INSERT INTO AsientosDiario
                 (Fecha, PeriodoID, Descripcion, ReferenciaExterna, TipoDocumento,
                  Estado, UsuarioID, TipoComprobanteID, NumeroComprobante, IP)
             OUTPUT INSERTED.ID
             VALUES (?, ?, ?, ?, ?, 'Contabilizado', ?, ?, ?, ?)
-        """, (
-            fecha, periodo_id, descripcion, referencia_externa, tipo_documento,
-            usuario_id, tipo_comprobante_id, numero_comprobante, ip
-        ))
+        """,
+        )
         asiento_id = cursor.fetchone()[0]
-        from app.services.fiscal_service import configuration, audit
-        import json
-        emisor = {k:v for k,v in configuration(cursor).items() if k.startswith('fiscal_')}
-        cursor.execute('UPDATE AsientosDiario SET EmisorJSON=? WHERE ID=?', json.dumps(emisor,ensure_ascii=False),asiento_id)
-        audit(cursor,usuario_id,'ASIENTO','AsientosDiario',asiento_id,{'numero':numero_comprobante,'referencia':referencia_externa},ip)
+        if is_sqlserver_cursor(cursor):
+            execute_sp(cursor, 'contabilidad.sp_InicializarEmisorYAuditarAsiento',
+                       (asiento_id, usuario_id, numero_comprobante, referencia_externa, ip))
+        else:
+            from app.services.fiscal_service import configuration, audit
+            import json
+            emisor = {k:v for k,v in configuration(cursor).items() if k.startswith('fiscal_')}
+            execute_sp(
+                cursor, 'contabilidad.sp_ActualizarEmisorJSONAsiento',
+                (json.dumps(emisor, ensure_ascii=False), asiento_id),
+                fallback_sql='UPDATE AsientosDiario SET EmisorJSON=? WHERE ID=?',
+            )
+            audit(cursor,usuario_id,'ASIENTO','AsientosDiario',asiento_id,{'numero':numero_comprobante,'referencia':referencia_externa},ip)
 
         # 6. Insertar líneas de detalle
         for cuenta_codigo, debe, haber, desc_linea in detalles_normalizados:
             cuenta_id = cls._get_cuenta_id(cursor, cuenta_codigo)
 
             # Validar que la cuenta es transaccional
-            cursor.execute(
-                "SELECT EsTransaccional FROM CatalogoCuentas WHERE ID = ?",
-                (cuenta_id,)
+            execute_sp(
+                cursor,
+                'contabilidad.sp_ObtenerEsTransaccionalCuenta',
+                (cuenta_id,),
+                fallback_sql="SELECT EsTransaccional FROM CatalogoCuentas WHERE ID = ?",
             )
             es_transaccional = cursor.fetchone()
             if es_transaccional and not es_transaccional[0]:
@@ -300,15 +293,20 @@ class ContabilidadService:
                     f"La cuenta '{cuenta_codigo}' es de agrupación, no es transaccional."
                 )
 
-            cursor.execute("""
+            execute_sp(
+                cursor,
+                'contabilidad.sp_InsertarLineaDetalleAsiento',
+                (
+                    asiento_id, cuenta_id,
+                    debe, haber,
+                    desc_linea, referencia_externa
+                ),
+                fallback_sql="""
                 INSERT INTO DetalleAsientos
                     (AsientoID, CuentaID, Debe, Haber, Descripcion, DocumentoRelacionado)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                asiento_id, cuenta_id,
-                debe, haber,
-                desc_linea, referencia_externa
-            ))
+            """,
+            )
 
         return {
             'asiento_id': asiento_id,
@@ -331,10 +329,15 @@ class ContabilidadService:
         if not motivo or len(motivo.strip()) < 5:
             raise ContabilidadError('Indique un motivo de al menos cinco caracteres.')
         # 1. Obtener el asiento original
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerAsientoParaReversion',
+            (asiento_id_original,),
+            fallback_sql="""
             SELECT ID, PeriodoID, Descripcion, ReferenciaExterna, Estado
             FROM AsientosDiario WITH (UPDLOCK, HOLDLOCK) WHERE ID = ?
-        """, (asiento_id_original,))
+        """,
+        )
         original = cursor.fetchone()
 
         if not original:
@@ -345,12 +348,17 @@ class ContabilidadService:
             raise ContabilidadError(f"Asiento #{asiento_id_original} está en borrador, no en contabilizado.")
 
         # 2. Obtener detalles del asiento original
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerDetallesAsientoParaReversion',
+            (asiento_id_original,),
+            fallback_sql="""
             SELECT C.Codigo, D.Debe, D.Haber, D.Descripcion
             FROM DetalleAsientos D
             JOIN CatalogoCuentas C ON D.CuentaID = C.ID
             WHERE D.AsientoID = ?
-        """, (asiento_id_original,))
+        """,
+        )
         lineas_originales = cursor.fetchall()
 
         if not lineas_originales:
@@ -380,14 +388,19 @@ class ContabilidadService:
         )
 
         # 5. Marcar el asiento original como anulado
-        cursor.execute("""
+        execute_sp(
+            cursor,
+            'contabilidad.sp_MarcarAsientoAnulado',
+            (usuario_id, motivo, asiento_id_original),
+            fallback_sql="""
             UPDATE AsientosDiario SET
                 Estado = 'Anulado',
                 AnuladoPor = ?,
                 FechaAnulacion = GETDATE(),
                 MotivoAnulacion = ?
             WHERE ID = ? AND Estado = 'Contabilizado'
-        """, (usuario_id, motivo, asiento_id_original))
+        """,
+        )
 
         return resultado
 
@@ -401,11 +414,6 @@ class ContabilidadService:
                            es_encargo=False, adelanto=0, ip=None, fecha=None):
         """
         Genera el asiento contable automático para una venta POS.
-
-        Args:
-            pagos: lista de dicts [{metodo, monto}] con los pagos realizados
-            es_encargo: si es True, el restante va a CxC Encargos
-            adelanto: monto del adelanto (solo para encargos)
         """
         detalles = []
         descripcion = f"Venta POS {numero_factura}"
@@ -443,9 +451,11 @@ class ContabilidadService:
         if float(subtotal) > 0:
             cuenta_ingreso = cls.VENTAS_PAN
             if es_encargo:
-                cursor.execute(
-                    "SELECT 1 FROM CatalogoCuentas WHERE Codigo = ? AND Activa = 1 AND EsTransaccional = 1",
-                    (cls.VENTAS_PASTELES,)
+                execute_sp(
+                    cursor,
+                    'contabilidad.sp_VerificarCuentaTransaccionalActiva',
+                    (cls.VENTAS_PASTELES,),
+                    fallback_sql="SELECT 1 FROM CatalogoCuentas WHERE Codigo = ? AND Activa = 1 AND EsTransaccional = 1",
                 )
                 if cursor.fetchone():
                     cuenta_ingreso = cls.VENTAS_PASTELES
@@ -506,9 +516,6 @@ class ContabilidadService:
                             metodo_pago='Contado', referencia=None, ip=None, fecha=None):
         """
         Genera el asiento contable automático para una compra de materia prima.
-
-        Si metodo_pago == 'Credito', se registra en CxP Proveedores.
-        Si metodo_pago == 'Contado', se debita de Caja o Bancos.
         """
         detalles = []
         ref = referencia or f"COMP-{compra_id}"
@@ -562,7 +569,6 @@ class ContabilidadService:
                             cargo='Admin', ip=None, fecha=None):
         """
         Genera el asiento contable automático para una nómina individual.
-        Clasifica los gastos según el cargo del empleado (Admin vs Ventas vs Producción).
         """
         detalles = []
         ref = f"NOM-{nomina_id}"
@@ -571,7 +577,7 @@ class ContabilidadService:
         # Determinar cuentas de gasto según área del empleado
         if 'panadero' in cargo_lower or 'produccion' in cargo_lower or 'hornero' in cargo_lower:
             cuenta_sueldo = cls.MOD_PANADEROS
-            cuenta_inss_pat = cls.CIF  # CIF incluye INSS patronal de producción
+            cuenta_inss_pat = cls.CIF
             cuenta_inatec = cls.CIF
         elif 'vendedora' in cargo_lower or 'dependienta' in cargo_lower or 'cajera' in cargo_lower:
             cuenta_sueldo = cls.SUELDOS_VENTAS
@@ -625,21 +631,45 @@ class ContabilidadService:
         )
 
     @classmethod
+    def contabilizar_aguinaldo(cls, cursor, usuario_id, nomina_id,
+                               empleado_nombre, monto_aguinaldo,
+                               cargo='Admin', ip=None, fecha=None):
+        """
+        Genera el asiento contable automático para el treceavo mes (aguinaldo).
+        """
+        monto = float(amount(monto_aguinaldo))
+        if monto <= 0:
+            raise ContabilidadError('El monto de aguinaldo debe ser mayor a cero.')
+        ref = f"NOM-{nomina_id}"
+        detalles = [
+            (cls.AGUINALDO_ADMIN, monto, 0, f"Aguinaldo {empleado_nombre}"),
+            (cls.AGUINALDO_POR_PAGAR, 0, monto, f"Aguinaldo por pagar {empleado_nombre}"),
+        ]
+        return cls.crear_asiento(
+            cursor=cursor,
+            descripcion=f"Aguinaldo {empleado_nombre} — {ref}",
+            detalles=detalles,
+            usuario_id=usuario_id,
+            tipo_comprobante='NM',
+            referencia_externa=ref,
+            tipo_documento='Nomina',
+            ip=ip,
+            fecha=fecha
+        )
+
+    @classmethod
     def contabilizar_egreso(cls, cursor, usuario_id, concepto, monto,
                             cuenta_gasto=None, metodo_pago='Efectivo',
-                            referencia=None, ip=None):
+                            referencia=None, ip=None, fecha=None):
         """
         Genera el asiento contable automático para un egreso privado.
-
-        Args:
-            cuenta_gasto: código de la cuenta de gasto (default: Gastos Varios Admin)
-            metodo_pago: 'Efectivo', 'Transferencia', etc.
         """
         if cuenta_gasto is None:
             cuenta_gasto = cls.GASTOS_VARIOS_ADMIN
 
         cuenta_pago = cls.METODO_PAGO_CUENTA.get(metodo_pago, cls.CAJA_GENERAL_CS)
-        ref = referencia or f"EGR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        fecha = fecha or business_now()
+        ref = referencia or f"EGR-{fecha.strftime('%Y%m%d%H%M%S')}"
 
         detalles = [
             (cuenta_gasto, float(monto), 0, concepto),
@@ -654,7 +684,8 @@ class ContabilidadService:
             tipo_comprobante='EG',
             referencia_externa=ref,
             tipo_documento='EgresoPrivado',
-            ip=ip
+            ip=ip,
+            fecha=fecha
         )
 
     @classmethod
@@ -662,7 +693,6 @@ class ContabilidadService:
                           monto, metodo_pago='Efectivo', referencia=None, ip=None):
         """
         Genera el asiento contable automático para un vale a empleado.
-        El vale se registra como un anticipo (activo) que se descontará en nómina.
         """
         cuenta_pago = cls.METODO_PAGO_CUENTA.get(metodo_pago, cls.CAJA_GENERAL_CS)
         ref = referencia or f"VALE-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -689,7 +719,6 @@ class ContabilidadService:
                            motivo='Pan Frio', referencia=None, ip=None):
         """
         Genera el asiento contable automático para una merma.
-        Traslada el costo del inventario de productos terminados al gasto por merma.
         """
         monto = float(cantidad) * float(costo_unitario_estimado)
         ref = referencia or f"MERMA-{business_now().strftime('%Y%m%d%H%M%S')}"
@@ -716,28 +745,52 @@ class ContabilidadService:
 
     @staticmethod
     def cerrar_periodo(cursor, periodo_id, usuario_id):
-        cursor.execute('SELECT Mes,Anio,Estado FROM PeriodosContables WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',periodo_id)
-        period=cursor.fetchone()
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerPeriodoParaCierre',
+            (periodo_id,),
+            fallback_sql='SELECT Mes,Anio,Estado FROM PeriodosContables WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',
+        )
+        period = cursor.fetchone()
         if not period or period.Estado != 'Abierto':
             raise ContabilidadError('El período no existe o ya está cerrado.')
-        now=business_now()
-        if (period.Anio,period.Mes)>=(now.year,now.month):
+        now = business_now()
+        if (period.Anio, period.Mes) >= (now.year, now.month):
             raise ContabilidadError('Solo se pueden cerrar meses concluidos.')
-        cursor.execute("SELECT COUNT(*) FROM AsientosDiario WHERE PeriodoID=? AND Estado='Borrador'",periodo_id)
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ContarAsientosBorradorPeriodo',
+            (periodo_id,),
+            fallback_sql="SELECT COUNT(*) FROM AsientosDiario WHERE PeriodoID=? AND Estado='Borrador'",
+        )
         if cursor.fetchone()[0]:
             raise ContabilidadError('Revise los asientos en borrador antes del cierre.')
-        cursor.execute("""SELECT A.ID FROM AsientosDiario A LEFT JOIN DetalleAsientos D ON D.AsientoID=A.ID
+        execute_sp(
+            cursor,
+            'contabilidad.sp_VerificarAsientosDescuadradosPeriodo',
+            (periodo_id,),
+            fallback_sql="""SELECT A.ID FROM AsientosDiario A LEFT JOIN DetalleAsientos D ON D.AsientoID=A.ID
             WHERE A.PeriodoID=? AND A.Estado IN ('Contabilizado','Anulado') GROUP BY A.ID
-            HAVING COUNT(D.ID)<2 OR SUM(D.Debe)<>SUM(D.Haber) OR SUM(D.Debe)<=0""",periodo_id)
+            HAVING COUNT(D.ID)<2 OR SUM(D.Debe)<>SUM(D.Haber) OR SUM(D.Debe)<=0""",
+        )
         if cursor.fetchone():
             raise ContabilidadError('Hay asientos vacíos o descuadrados. No se cerró el período.')
-        cursor.execute("UPDATE PeriodosContables SET Estado='Cerrado',CerradoPor=?,CerradoEn=? WHERE ID=?",usuario_id,now,periodo_id)
+        execute_sp(
+            cursor,
+            'contabilidad.sp_CerrarPeriodoContable',
+            (usuario_id, now, periodo_id),
+            fallback_sql="UPDATE PeriodosContables SET Estado='Cerrado',CerradoPor=?,CerradoEn=? WHERE ID=?",
+        )
 
     @staticmethod
     def balanza_mensual(cursor, mes, anio):
-        start=datetime(int(anio),int(mes),1)
-        end=datetime(start.year+1,1,1) if start.month==12 else datetime(start.year,start.month+1,1)
-        cursor.execute("""
+        start = datetime(int(anio), int(mes), 1)
+        end = datetime(start.year + 1, 1, 1) if start.month == 12 else datetime(start.year, start.month + 1, 1)
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerBalanzaMensualRango',
+            (start, start, start, end),
+            fallback_sql="""
             SELECT C.Codigo,C.Nombre,C.Naturaleza,
               SUM(CASE WHEN A.Fecha<? THEN D.Debe-D.Haber ELSE 0 END) AS SaldoAnterior,
               SUM(CASE WHEN A.Fecha>=? THEN D.Debe ELSE 0 END) AS TotalDebe,
@@ -747,16 +800,14 @@ class ContabilidadService:
             JOIN AsientosDiario A ON A.ID=D.AsientoID
             WHERE A.Estado IN ('Contabilizado','Anulado') AND A.Fecha<? AND C.EsTransaccional=1
             GROUP BY C.Codigo,C.Nombre,C.Naturaleza ORDER BY C.Codigo
-        """,start,start,start,end)
-        return [dict(zip([c[0] for c in cursor.description],r)) for r in cursor.fetchall()]
+        """,
+        )
+        return [dict(zip([c[0] for c in cursor.description], r)) for r in cursor.fetchall()]
 
     @staticmethod
     def obtener_saldo_cuenta(cursor, cuenta_codigo, fecha_corte=None):
         """
         Calcula el saldo actual de una cuenta contable.
-        El saldo se calcula según la naturaleza de la cuenta:
-        - Deudora: Debe - Haber
-        - Acreedora: Haber - Debe
         """
         params = [cuenta_codigo]
         filtro_fecha = ""
@@ -764,7 +815,12 @@ class ContabilidadService:
             filtro_fecha = "AND A.Fecha < DATEADD(day,1,CAST(? AS date))"
             params.append(fecha_corte)
 
-        cursor.execute(f"""
+        sp_name = 'contabilidad.sp_ObtenerSaldoCuentaCorte' if fecha_corte else 'contabilidad.sp_ObtenerSaldoCuentaTotal'
+        execute_sp(
+            cursor,
+            sp_name,
+            (*params[1:], params[0]),
+            fallback_sql=f"""
             SELECT
                 C.Naturaleza,
                 ISNULL(SUM(CASE WHEN A.ID IS NOT NULL THEN D.Debe ELSE 0 END), 0) AS TotalDebe,
@@ -775,7 +831,8 @@ class ContabilidadService:
                 AND A.Estado IN ('Contabilizado', 'Anulado') {filtro_fecha}
             WHERE C.Codigo = ?
             GROUP BY C.Naturaleza
-        """, (*params[1:], params[0]))
+        """,
+        )
 
         row = cursor.fetchone()
         if not row:
@@ -798,11 +855,19 @@ class ContabilidadService:
         if periodo_id:
             filtro = "AND A.PeriodoID = ?"
             params.append(periodo_id)
+            sp_name = 'contabilidad.sp_ObtenerBalanceComprobacionPeriodo'
         elif fecha_corte:
             filtro = "AND A.Fecha < DATEADD(day,1,CAST(? AS date))"
             params.append(fecha_corte)
+            sp_name = 'contabilidad.sp_ObtenerBalanceComprobacionCorte'
+        else:
+            sp_name = 'contabilidad.sp_ObtenerBalanceComprobacionGeneral'
 
-        cursor.execute(f"""
+        execute_sp(
+            cursor,
+            sp_name,
+            params,
+            fallback_sql=f"""
             SELECT
                 C.Codigo,
                 C.Nombre,
@@ -824,7 +889,8 @@ class ContabilidadService:
             GROUP BY C.Codigo, C.Nombre, C.Clase, C.Naturaleza, C.Nivel
             HAVING ISNULL(SUM(D.Debe), 0) != 0 OR ISNULL(SUM(D.Haber), 0) != 0
             ORDER BY C.Codigo
-        """, params)
+        """,
+        )
 
         resultados = []
         for row in cursor.fetchall():
@@ -861,8 +927,13 @@ class ContabilidadService:
             params.append(fecha_fin)
 
         where_clause = " AND ".join(filtros)
+        mov_params = (cuenta_codigo, periodo_id, fecha_inicio, fecha_fin) if is_sqlserver_cursor(cursor) else params
 
-        cursor.execute(f"""
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerMovimientosLibroMayor',
+            mov_params,
+            fallback_sql=f"""
             SELECT
                 A.Fecha,
                 A.NumeroComprobante,
@@ -876,33 +947,50 @@ class ContabilidadService:
             INNER JOIN CatalogoCuentas C ON D.CuentaID = C.ID
             WHERE C.Codigo = ? AND {where_clause}
             ORDER BY A.Fecha, A.ID
-        """, params)
+        """,
+        )
 
         # Obtener naturaleza para calcular saldo acumulado
-        cursor.execute(
-            "SELECT Naturaleza FROM CatalogoCuentas WHERE Codigo = ?",
-            (cuenta_codigo,)
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerNaturalezaCuenta',
+            (cuenta_codigo,),
+            fallback_sql="SELECT Naturaleza FROM CatalogoCuentas WHERE Codigo = ?",
         )
         nat_row = cursor.fetchone()
         es_deudora = nat_row and nat_row[0] == 'Deudora'
 
         movimientos = []
         saldo_acumulado = decimal.Decimal('0')
-        opening_date=fecha_inicio
+        opening_date = fecha_inicio
         if periodo_id:
-            cursor.execute('SELECT Anio,Mes FROM PeriodosContables WHERE ID=?',periodo_id)
-            period=cursor.fetchone()
+            execute_sp(
+                cursor,
+                'contabilidad.sp_ObtenerAnioMesPeriodo',
+                (periodo_id,),
+                fallback_sql='SELECT Anio,Mes FROM PeriodosContables WHERE ID=?',
+            )
+            period = cursor.fetchone()
             if period:
-                opening_date=datetime(period[0],period[1],1)
+                opening_date = datetime(period[0], period[1], 1)
         if opening_date:
-            cursor.execute("""SELECT ISNULL(SUM(D.Debe-D.Haber),0) FROM DetalleAsientos D
+            execute_sp(
+                cursor,
+                'contabilidad.sp_ObtenerSaldoAnteriorLibroMayor',
+                (cuenta_codigo, opening_date),
+                fallback_sql="""SELECT ISNULL(SUM(D.Debe-D.Haber),0) FROM DetalleAsientos D
               JOIN AsientosDiario A ON D.AsientoID=A.ID JOIN CatalogoCuentas C ON D.CuentaID=C.ID
-              WHERE C.Codigo=? AND A.Fecha<? AND A.Estado IN ('Contabilizado','Anulado')""",cuenta_codigo,opening_date)
-            saldo_acumulado=cursor.fetchone()[0] * (1 if es_deudora else -1)
-            movimientos.append({'Fecha':'','Comprobante':'','Descripcion':'Saldo anterior','Referencia':'', 'Debe':0,'Haber':0,'Saldo':float(saldo_acumulado)})
+              WHERE C.Codigo=? AND A.Fecha<? AND A.Estado IN ('Contabilizado','Anulado')""",
+            )
+            saldo_acumulado = cursor.fetchone()[0] * (1 if es_deudora else -1)
+            movimientos.append({'Fecha': '', 'Comprobante': '', 'Descripcion': 'Saldo anterior', 'Referencia': '', 'Debe': 0, 'Haber': 0, 'Saldo': float(saldo_acumulado)})
 
         # Re-ejecutar la query (el cursor fue consumido por la query de naturaleza)
-        cursor.execute(f"""
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerMovimientosLibroMayor',
+            mov_params,
+            fallback_sql=f"""
             SELECT
                 A.Fecha,
                 A.NumeroComprobante,
@@ -916,7 +1004,8 @@ class ContabilidadService:
             INNER JOIN CatalogoCuentas C ON D.CuentaID = C.ID
             WHERE C.Codigo = ? AND {where_clause}
             ORDER BY A.Fecha, A.ID
-        """, params)
+        """,
+        )
 
         for row in cursor.fetchall():
             debe = decimal.Decimal(str(row.Debe))
@@ -943,14 +1032,19 @@ class ContabilidadService:
     def obtener_catalogo_cuentas(cursor, solo_transaccionales=False):
         """Retorna el catálogo de cuentas completo en estructura jerárquica."""
         filtro = "AND EsTransaccional = 1" if solo_transaccionales else ""
+        sp_name = 'contabilidad.sp_ObtenerCatalogoCuentasTransaccionales' if solo_transaccionales else 'contabilidad.sp_ObtenerCatalogoCuentasActivas'
 
-        cursor.execute(f"""
+        execute_sp(
+            cursor,
+            sp_name,
+            fallback_sql=f"""
             SELECT ID, Codigo, Nombre, Clase, Grupo, Naturaleza,
                    Nivel, EsTransaccional, Descripcion, CuentaPadreID, Activa
             FROM CatalogoCuentas
             WHERE Activa = 1 {filtro}
             ORDER BY OrdenVisualizacion, Codigo
-        """)
+        """,
+        )
 
         cuentas = []
         for row in cursor.fetchall():

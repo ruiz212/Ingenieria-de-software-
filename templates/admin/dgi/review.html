@@ -101,7 +101,7 @@
     <div>
       <h4>Diagnóstico para investigar o compartir</h4>
       <p>Disponible aunque existan errores en los datos o el perfil esté pendiente. El archivo indica <strong>DIAGNÓSTICO SIN APROBACIÓN</strong> y conserva los hallazgos.</p>
-      <form action="{{ url_for('admin.dgi_diagnosis_report',review_id=review.ID) }}" method="post">
+      <form action="{{ url_for('admin.dgi_diagnosis_report',review_id=review.ID) }}" method="post" data-download>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-outline" {% if not fresh %}disabled{% endif %}>Descargar diagnóstico Excel</button>
       </form>
     </div>
@@ -119,7 +119,7 @@
         <form action="{{ url_for('admin.dgi_approve',review_id=review.ID) }}" method="post">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-primary" {% if not fresh or result.bloqueantes or review.Estado!='EN_REVISION' %}disabled{% endif %}>Validar revisión interna</button>
         </form>
-        <form action="{{ url_for('admin.dgi_export',review_id=review.ID) }}" method="post">
+        <form action="{{ url_for('admin.dgi_export',review_id=review.ID) }}" method="post" data-download>
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline" type="submit" {% if not fresh or result.bloqueantes or review.Estado not in ['APROBADO','EXPORTADO'] %}disabled{% endif %}>Descargar informe validado</button>
         </form>
       </div>

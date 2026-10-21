@@ -1,137 +1,49 @@
-# 🗄️ Base de Datos — Panadería Amada
+# 🗄️ Base de Datos — Panadería y Repostería Brajher's Cake (`PanaderiaDB`)
 
 ## Descripción General
 
-Esta carpeta contiene el esquema relacional completo del sistema de gestión de la Panadería Amada. La base de datos está diseñada con **normalización en Tercera Forma Normal (3FN)** para SQL Server, garantizando integridad referencial, seguridad por roles y trazabilidad contable.
-
-**Total: 21 tablas | 9 índices | 4 CHECK constraints**
+Esta carpeta contiene el diseño relacional empresarial en **Tercera Forma Normal (3FN)** para SQL Server, estructurado en **8 esquemas de dominio**, **6 roles nativos de base de datos (RBAC)** con encadenamiento de propiedad (*Ownership Chaining*), **Procedimientos Almacenados (`sp_...`)** para consulta y operación transaccional, **Dynamic Data Masking (DDM)**, **Triggers de Inmutabilidad** y **Bitácora de Errores con Alertas SMTP**.
 
 ---
 
-## Cómo Ejecutar
+## 📂 Archivos SQL del Módulo
 
-1. Abrir **SQL Server Management Studio (SSMS)**.
-2. Abrir el archivo `esquema.sql`.
-3. Presionar **F5** para ejecutar.
+| Archivo | Propósito |
+|---------|-----------|
+| `esquema.sql` | Script base inicial de tablas maestras, relaciones e inserción de datos semilla |
+| `01_esquemas_migracion.sql` | Creación de los **8 esquemas**, tablas de seguridad (`BitacoraErrores`, `BloqueosCuenta`), transferencia idempotente de las 50 tablas a su esquema de dominio, sinónimos en `dbo` y triggers de inmutabilidad |
+| `02_roles_y_seguridad_bd.sql` | Creación de los **6 roles nativos de BD** (`CREATE ROLE`), usuarios contenidos (`WITHOUT LOGIN`), **Dynamic Data Masking (DDM)** y `DENY SELECT/INSERT/UPDATE/DELETE` directo sobre tablas |
+| `03_stored_procedures.sql` | Catálogo de **Procedimientos Almacenados (`sp_...`)** por esquema con `BEGIN TRY ... BEGIN CATCH`, registro automático en `seguridad.BitacoraErrores` y permisos granulares `GRANT EXECUTE` por rol |
 
-El script crea la base de datos `PanaderiaDB` automáticamente si no existe, elimina las tablas anteriores (si las hay) y las vuelve a crear con los datos de prueba incluidos.
-
----
-
-## Diagrama Entidad-Relación
-
-```mermaid
-erDiagram
-    Roles ||--o{ Usuarios : tiene
-    Usuarios ||--o{ TurnosCaja : abre
-    Usuarios ||--o{ Facturas : genera
-    Usuarios ||--o{ ValesEmpleados : recibe
-    Usuarios ||--o{ EgresosPrivados : registra
-
-    NivelesConfianza ||--o{ Clientes : clasifica
-    Clientes ||--o{ Facturas : realiza
-
-    Categorias ||--o{ Productos : agrupa
-    Productos ||--o{ DetalleFacturas : incluye
-
-    TurnosCaja ||--o{ Facturas : contiene
-
-    Facturas ||--|{ DetalleFacturas : tiene
-    Facturas ||--o| Encargos : extiende
-    Facturas ||--|{ Pagos : cobra
-
-    DetalleFacturas ||--o{ DetalleIngredientes : personaliza
-    Ingredientes ||--o{ DetalleIngredientes : agrega
-
-    UnidadesMedida ||--o{ MateriaPrima : mide
-    Proveedores ||--o{ ComprasMateriaPrima : surte
-    MateriaPrima ||--o{ ComprasMateriaPrima : abastece
-    MateriaPrima ||--o{ RecetaProducto : consume
-    Productos ||--o{ RecetaProducto : requiere
-    Productos ||--o{ ProduccionLotes : produce
-    ProduccionLotes ||--o{ ConsumoLote : gasta
-    MateriaPrima ||--o{ ConsumoLote : descuenta
+Para aplicar o actualizar toda la arquitectura desde línea de comandos:
+```bash
+python scripts/migrate_esquemas_roles_sp.py --connection-env DB_CONNECTION_STRING
 ```
 
 ---
 
-## Estructura de Tablas por Módulo
+## 🏛️ Arquitectura de 8 Esquemas de Dominio
 
-### 1. Tablas Catálogo (4 tablas)
-
-Centralizan valores de configuración que se referencian desde otras tablas.
-
-| Tabla | Propósito | Ejemplo de Datos |
-|-------|-----------|------------------|
-| `Roles` | Permisos del sistema (RBAC) | SuperAdmin, Admin, Estándar, Invitado |
-| `Categorias` | Clasificación de productos | Pan Salado, Pan Dulce, Repostería, Bebidas |
-| `NivelesConfianza` | Fidelidad del cliente (con umbral de compras) | Nuevo (0), Frecuente (3+), VIP (10+) |
-| `UnidadesMedida` | Unidades para materia prima | Kg, Lt, Ud, Lb, g |
-
-### 2. Seguridad y CRM (2 tablas)
-
-| Tabla | Propósito | Columnas Clave |
-|-------|-----------|----------------|
-| `Usuarios` | Login y control de acceso | `Username`, `PasswordHash`, `RolID` → Roles |
-| `Clientes` | Cartera de clientes con historial | `NivelConfianzaID`, `TotalCompras` (se incrementa automáticamente) |
-
-### 3. Ventas y Pagos (8 tablas)
-
-| Tabla | Propósito | Relaciones |
-|-------|-----------|------------|
-| `Productos` | Catálogo de lo que se vende | `CategoriaID` → Categorías. `EsFicticio` = pasteles al 70% |
-| `Ingredientes` | Extras para personalizar pasteles | Rellenos, coberturas, cake toppers |
-| `TurnosCaja` | Arqueo **100% automático** | El sistema calcula `EfectivoCalculado` y `TransferenciasCalculadas` |
-| `Facturas` | Registro principal de cada venta | `TurnoID` vincula al turno activo. `EsEncargo` / `IncluyeRUC` (BIT) |
-| `DetalleFacturas` | Líneas del carrito | `PrecioUnitario` congelado al momento de vender |
-| `DetalleIngredientes` | Qué extras se pidieron en cada línea | Tabla puente entre `DetalleFacturas` ↔ `Ingredientes` |
-| `Pagos` | Abonos por factura (soporta 50/50) | `MetodoPago` CHECK: 'Efectivo' o 'Transferencia' |
-| `Encargos` | Extensión de factura para pedidos futuros | `Estado` CHECK: Pendiente → En Proceso → Listo → Entregado |
-
-> **¿Cómo funciona el pago 50/50?** Una factura de encargo genera 2 registros en `Pagos`: uno con el 50% de anticipo (Efectivo) y otro con el 50% contra entrega (Transferencia).
-
-### 4. Contabilidad Privada (2 tablas)
-
-Solo accesibles por el rol **Admin** (Doña Amada).
-
-| Tabla | Propósito |
-|-------|-----------|
-| `EgresosPrivados` | Gastos del negocio (proveedores, servicios, gas) |
-| `ValesEmpleados` | Préstamos a empleados. `EmpleadoID` → Usuarios. `Descontado` indica si ya se cobró |
-
-### 5. Inventario y Producción (5 tablas)
-
-| Tabla | Propósito | Detalle |
-|-------|-----------|---------|
-| `Proveedores` | A quién se le compra | Nombre, Teléfono |
-| `MateriaPrima` | Stock actual de insumos | `StockMinimo` dispara alertas cuando `StockActual` baja |
-| `ComprasMateriaPrima` | Registro de compras a proveedores | Vincula `MateriaPrimaID` ↔ `ProveedorID` |
-| `RecetaProducto` | Fórmula teórica de cada producto | Ej: 1 Bolillo = 0.05 Kg Harina + 0.02 Ud Huevo |
-| `ProduccionLotes` | Lo que se horneó en cada tanda | Cantidad producida por producto |
-| `ConsumoLote` | Lo que realmente se gastó en un lote | Permite comparar consumo real vs receta teórica |
-
-> **¿Por qué RecetaProducto y ConsumoLote por separado?** `RecetaProducto` es la fórmula ideal. `ConsumoLote` es lo que realmente se usó. La diferencia entre ambos revela desperdicios o robos de materia prima.
+| # | Esquema | Propósito | Tablas Principales |
+|---|---------|-----------|--------------------|
+| 1 | `seguridad` | Autenticación, RBAC, 2FA, Auditoría, Errores y Bloqueos | `Roles`, `Usuarios`, `AuthChallenges`, `AuditLog`, `ConfiguracionSistema`, `BitacoraErrores`, `BloqueosCuenta` |
+| 2 | `crm` | Fidelización, Cartera de Clientes y Cotizaciones Web | `NivelesConfianza`, `Clientes`, `Cotizaciones` |
+| 3 | `catalogo` | Productos Comerciales, Categorías, Unidades e Ingredientes | `Categorias`, `UnidadesMedida`, `Productos`, `Ingredientes` |
+| 4 | `ventas` | Punto de Venta (POS), Facturación, Pagos, Encargos y Arqueos | `TurnosCaja`, `Facturas`, `DetalleFacturas`, `DetalleIngredientes`, `Pagos`, `FacturasRUC`, `Encargos`, `ArqueoCaja`, `ArqueoDetalleDenominacion`, `ArqueoAuditLog`, `TipoCambio`, `SecuenciasFiscales` |
+| 5 | `produccion` | Inventario de Insumos, Proveedores, Recetas, Lotes y Mermas | `Proveedores`, `MateriaPrima`, `ComprasMateriaPrima`, `RecetaProducto`, `ProduccionLotes`, `ConsumoLote`, `Mermas` |
+| 6 | `rrhh` | Recursos Humanos (Ley 185 / Ley 822 Nicaragua) y Biometría | `Empleados`, `TurnosLaborales`, `Asistencia`, `FeriadosNacionales`, `Nomina`, `DetalleNomina`, `LicenciasEmpleados`, `DeduccionesJudiciales`, `IncidentesLaborales`, `ValesEmpleados` |
+| 7 | `contabilidad` | Contabilidad NIIF por Partida Doble, CxC, CxP y Conciliación | `CatalogoCuentas`, `PeriodosContables`, `TiposComprobante`, `AsientosDiario`, `DetalleAsientos`, `EgresosPrivados`, `CuentasPorCobrar`, `CuentasPorPagar`, `PagosCxC`, `ConciliacionBancaria`, `DetalleConciliacion` |
+| 8 | `fiscal` | Trazabilidad Fiscal Inmutable y Preparación Tributaria DGI | `BitacoraFiscal`, `DGI_Periodos`, `DGI_Revisiones`, `DGI_Observaciones`, `DGI_Exportaciones` |
 
 ---
 
-## Constraints y Validaciones
+## 🔐 Matriz de 6 Roles de Base de Datos (Menor Privilegio)
 
-| Constraint | Tabla | Regla |
-|------------|-------|-------|
-| `CK_Pagos_MetodoPago` | Pagos | Solo permite 'Efectivo' o 'Transferencia' |
-| `CK_Encargos_Estado` | Encargos | Solo permite 'Pendiente', 'En Proceso', 'Listo', 'Entregado' |
-| Todas las FK | Varias | Nombradas explícitamente (ej. `FK_Productos_Categorias`) para fácil depuración |
-
----
-
-## Datos de Prueba Incluidos
-
-El script inserta automáticamente:
-- **4 roles** del sistema
-- **6 categorías** de productos
-- **3 niveles** de confianza de clientes
-- **5 unidades** de medida
-- **3 usuarios** (Doña Amada + 2 dependientas)
-- **13 productos** reales de la panadería
-- **6 ingredientes** extras para pasteles
-- **1 cliente** genérico de mostrador
+| Rol SQL Server | Rol Aplicación | Acceso a Tablas Base | Permisos sobre Stored Procedures (`EXECUTE`) |
+|----------------|----------------|----------------------|----------------------------------------------|
+| `db_rol_superadmin` | `SuperAdmin` | `DENY DELETE` en `fiscal`, `contabilidad`, `AuditLog`, `BitacoraErrores` | `GRANT EXECUTE` en los 8 esquemas + `UNMASK` |
+| `db_rol_gerencia` | `Admin` | `DENY SELECT, INSERT, UPDATE, DELETE` directo | `GRANT EXECUTE` en `crm`, `catalogo`, `ventas`, `produccion`, `rrhh`, `contabilidad`, `fiscal` (`DENY` en `sp_ListarAuditoria` y `sp_ListarBitacoraErrores`) |
+| `db_rol_cajero_pos` | `Estandar` | `DENY SELECT, INSERT, UPDATE, DELETE` directo | Solo SPs de POS (`ventas`), catálogo activo (`catalogo`), clientes/cotizaciones (`crm`), monitor y mermas (`produccion`) |
+| `db_rol_produccion` | `Operativo` | `DENY SELECT, INSERT, UPDATE, DELETE` directo | Solo SPs de `produccion` (monitor, lotes, recetas, inventario, mermas) y lectura de `catalogo` |
+| `db_rol_kiosco` | Kiosco Biométrico | `DENY SELECT, INSERT, UPDATE, DELETE` directo | Exclusivamente `rrhh.sp_ObtenerDescriptoresFacialesKiosco`, `rrhh.sp_RegistrarMarcajeKiosco` y `rrhh.sp_ObtenerResumenAsistencia` |
+| `db_rol_portal_cliente` | `Cliente` / `Invitado` | `DENY SELECT, INSERT, UPDATE, DELETE` directo | Exclusivamente `catalogo.sp_ObtenerCatalogoActivo`, SPs de cotizaciones propias en `crm` y `ventas.sp_ConsultarSeguimientoPedido` |

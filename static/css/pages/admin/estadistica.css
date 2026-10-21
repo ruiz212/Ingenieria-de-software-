@@ -1,0 +1,46 @@
+
+
+.page-estadistica .estadistica-div-spacing {
+    position: relative;
+    height: 250px;
+}
+
+.page-estadistica .estadistica-text-muted {
+    font-size: 0.85rem;
+    font-weight: normal;
+}
+
+.page-estadistica .estadistica-div-spacing-2 {
+    position: relative;
+    height: 300px;
+}
+
+.page-estadistica .estadistica-th-spacing {
+    text-align: center;
+}
+
+.page-estadistica .estadistica-th-spacing-2 {
+    text-align: right;
+}
+
+.page-estadistica .estadistica-div-spacing-3 {
+    position: relative;
+    height: 280px;
+    width: 100%;
+}
+
+.page-estadistica .estadistica-cell-muted {
+    font-size: 0.85rem;
+}
+
+/* Data-driven visual states, shared by server and client rendering. */
+.page-estadistica .statistics-stock-state {
+    text-align:center;
+    font-weight:700;
+}
+.page-estadistica .statistics-stock-alert {
+    color:var(--danger);
+}
+.page-estadistica .statistics-stock-healthy {
+    color:var(--success);
+}

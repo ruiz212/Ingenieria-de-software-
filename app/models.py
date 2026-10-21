@@ -1,13 +1,14 @@
 # app/models.py
-# Modelos de datos del sistema
+# Modelos de datos del sistema respaldados por Stored Procedures por esquema
 
+from flask import g, has_request_context
 from flask_login import UserMixin  # type: ignore
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp
 from app.extensions import login_manager
 
 
 class User(UserMixin):
-    """Modelo de usuario que representa una fila de la tabla Usuarios."""
+    """Modelo de usuario que representa una fila de la tabla seguridad.Usuarios."""
 
     def __init__(self, id, username, nombre_completo, rol_id, rol_nombre=None, totp_secret=None, totp_enabled=False):
         self.id = id
@@ -24,42 +25,54 @@ class User(UserMixin):
 
     @staticmethod
     def get_by_id(user_id):
-        """Busca un usuario activo por su ID."""
-        conn = get_db_connection()
+        """Busca un usuario activo por su ID ejecutando seguridad.sp_ObtenerUsuarioPorID."""
+        conn = get_db_connection(inject_context=False)
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT u.ID, u.Username, u.NombreCompleto, u.RolID, r.Nombre, u.TOTPSecret, u.TOTPEnabled "
-            "FROM Usuarios u JOIN Roles r ON u.RolID = r.ID "
-            "WHERE u.ID = ? AND u.Activo = 1", user_id
+        execute_sp(
+            cursor,
+            'seguridad.sp_ObtenerUsuarioPorID',
+            (user_id,),
+            fallback_sql=(
+                "SELECT u.ID, u.Username, u.NombreCompleto, u.RolID, r.Nombre AS RolNombre, u.TOTPSecret, u.TOTPEnabled "
+                "FROM Usuarios u JOIN Roles r ON u.RolID = r.ID "
+                "WHERE u.ID = ? AND u.Activo = 1"
+            ),
         )
         row = cursor.fetchone()
         conn.close()
         if row:
+            rol_nombre = getattr(row, 'RolNombre', getattr(row, 'Nombre', None))
             return User(
                 id=row.ID, username=row.Username,
                 nombre_completo=row.NombreCompleto,
-                rol_id=row.RolID, rol_nombre=row.Nombre,
+                rol_id=row.RolID, rol_nombre=rol_nombre,
                 totp_secret=row.TOTPSecret, totp_enabled=row.TOTPEnabled
             )
         return None
 
     @staticmethod
     def get_by_username(username):
-        """Busca un usuario activo por su username. Devuelve (User, password_hash) o (None, None)."""
-        conn = get_db_connection()
+        """Busca un usuario activo por su username ejecutando seguridad.sp_AutenticarUsuario."""
+        conn = get_db_connection(inject_context=False)
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT u.ID, u.Username, u.PasswordHash, u.NombreCompleto, u.RolID, r.Nombre, u.TOTPSecret, u.TOTPEnabled "
-            "FROM Usuarios u JOIN Roles r ON u.RolID = r.ID "
-            "WHERE u.Username = ? AND u.Activo = 1", username
+        execute_sp(
+            cursor,
+            'seguridad.sp_AutenticarUsuario',
+            (username,),
+            fallback_sql=(
+                "SELECT u.ID, u.Username, u.PasswordHash, u.NombreCompleto, u.RolID, r.Nombre AS RolNombre, u.TOTPSecret, u.TOTPEnabled "
+                "FROM Usuarios u JOIN Roles r ON u.RolID = r.ID "
+                "WHERE u.Username = ? AND u.Activo = 1"
+            ),
         )
         row = cursor.fetchone()
         conn.close()
         if row:
+            rol_nombre = getattr(row, 'RolNombre', getattr(row, 'Nombre', None))
             user = User(
                 id=row.ID, username=row.Username,
                 nombre_completo=row.NombreCompleto,
-                rol_id=row.RolID, rol_nombre=row.Nombre,
+                rol_id=row.RolID, rol_nombre=rol_nombre,
                 totp_secret=row.TOTPSecret, totp_enabled=row.TOTPEnabled
             )
             return user, row.PasswordHash
@@ -67,7 +80,7 @@ class User(UserMixin):
 
 
 class Cliente(UserMixin):
-    """Modelo de usuario que representa un cliente en la tabla Clientes."""
+    """Modelo de usuario que representa un cliente en la tabla crm.Clientes."""
 
     def __init__(self, id, nombre, apellidos, telefono, es_invitado, nivel_confianza_id, fecha_nacimiento=None):
         self.id = id
@@ -88,11 +101,16 @@ class Cliente(UserMixin):
 
     @staticmethod
     def get_by_id(cliente_id):
-        conn = get_db_connection()
+        conn = get_db_connection(inject_context=False)
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT ID, Nombre, Apellidos, Telefono, EsInvitado, NivelConfianzaID, FechaNacimiento "
-            "FROM Clientes WHERE ID = ?", cliente_id
+        execute_sp(
+            cursor,
+            'crm.sp_ObtenerClientePorID',
+            (cliente_id,),
+            fallback_sql=(
+                "SELECT ID, Nombre, Apellidos, Telefono, EsInvitado, NivelConfianzaID, FechaNacimiento "
+                "FROM Clientes WHERE ID = ?"
+            ),
         )
         row = cursor.fetchone()
         conn.close()
@@ -101,17 +119,22 @@ class Cliente(UserMixin):
                 id=row.ID, nombre=row.Nombre, apellidos=row.Apellidos,
                 telefono=row.Telefono, es_invitado=row.EsInvitado,
                 nivel_confianza_id=row.NivelConfianzaID,
-                fecha_nacimiento=row.FechaNacimiento
+                fecha_nacimiento=getattr(row, 'FechaNacimiento', None)
             )
         return None
 
     @staticmethod
     def get_by_telefono(telefono):
-        conn = get_db_connection()
+        conn = get_db_connection(inject_context=False)
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT ID, Nombre, Apellidos, Telefono, PasswordHash, EsInvitado, NivelConfianzaID, FechaNacimiento "
-            "FROM Clientes WHERE Telefono = ?", telefono
+        execute_sp(
+            cursor,
+            'crm.sp_ObtenerClientePorTelefono',
+            (telefono,),
+            fallback_sql=(
+                "SELECT ID, Nombre, Apellidos, Telefono, PasswordHash, EsInvitado, NivelConfianzaID, FechaNacimiento "
+                "FROM Clientes WHERE Telefono = ?"
+            ),
         )
         row = cursor.fetchone()
         conn.close()
@@ -120,7 +143,7 @@ class Cliente(UserMixin):
                 id=row.ID, nombre=row.Nombre, apellidos=row.Apellidos,
                 telefono=row.Telefono, es_invitado=row.EsInvitado,
                 nivel_confianza_id=row.NivelConfianzaID,
-                fecha_nacimiento=row.FechaNacimiento
+                fecha_nacimiento=getattr(row, 'FechaNacimiento', None)
             )
             return cliente, row.PasswordHash
         return None, None
@@ -132,15 +155,21 @@ def load_user(user_id):
     Se utiliza el prefijo en el ID para identificar si es Empleado o Cliente."""
     if not user_id:
         return None
-        
+
+    if has_request_context():
+        g._loading_auth_user = True
     try:
-        prefix, real_id = user_id.split('_', 1)
-        if prefix == 'emp':
-            return User.get_by_id(real_id)
-        elif prefix == 'cli':
-            return Cliente.get_by_id(real_id)
-    except ValueError:
-        pass
-    
-    # Manejo temporal por si hay una sesión antigua sin prefijo
-    return User.get_by_id(user_id)
+        try:
+            prefix, real_id = user_id.split('_', 1)
+            if prefix == 'emp':
+                return User.get_by_id(real_id)
+            elif prefix == 'cli':
+                return Cliente.get_by_id(real_id)
+        except ValueError:
+            pass
+
+        # Manejo temporal por si hay una sesión antigua sin prefijo
+        return User.get_by_id(user_id)
+    finally:
+        if has_request_context():
+            g._loading_auth_user = False

@@ -1,0 +1,15 @@
+@media screen {
+    :root {
+        --radius-xs: 8px;
+        --radius-sm: 14px;
+        --radius-md: 18px;
+        --radius-lg: 24px;
+        --radius-xl: 32px;
+        --bakery-panel-radius: 24px;
+        --bakery-control-radius: 14px;
+        --bakery-shadow: 0 8px 28px rgb(78 42 30 / .055);
+        --bakery-photo-scrim: rgb(35 20 12 / .58);
+    }
+
+
+}

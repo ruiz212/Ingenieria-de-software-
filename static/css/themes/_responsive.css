@@ -1,0 +1,97 @@
+
+@media screen and (max-width: 900px) {
+    .login-page {
+        padding: 12px;
+    }
+    .login-page .l-split {
+        display: block;
+        max-width: 600px;
+        min-height: calc(100dvh - 24px);
+        border-radius: 28px;
+    }
+    .login-page .l-split__right {
+        min-height: inherit;
+        align-items: center;
+        padding: 32px 28px;
+    }
+    .login-page .c-login-container {
+        max-width: 440px;
+        padding: 0;
+    }
+    .login-page .c-access-brand-mobile {
+        margin-bottom: 36px;
+    }
+    .app-container .glass-dock {
+        border-radius: 24px;
+    }
+    .dashboard-workspace .dashboard-metric {
+        padding-block: 20px;
+    }
+}
+
+@media screen and (max-width: 600px) {
+    /* The brand and purchase controls need their own rows on narrow screens. */
+    .tienda-body .tienda-nav-inner {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+    }
+    .tienda-body .nav-actions {
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 0;
+    }
+    .tienda-body .header-search-wrap {
+        min-width: 0;
+    }
+    .tienda-body .brand-logo h1 {
+        font-size: 1.7rem;
+    }
+    .tienda-body .brand-kicker {
+        font-size: .58rem;
+        letter-spacing: .12em;
+    }
+    .tienda-body .account-chip {
+        max-width: 36%;
+        min-width: 0;
+        padding-inline: 10px;
+    }
+    .tienda-body .account-chip span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .tienda-body .cart-toggle {
+        padding-inline: 12px;
+        gap: 6px;
+    }
+    .tienda-body .cart-toggle-total {
+        padding-left: 6px;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .login-page .l-split__right {
+        padding: 30px 22px;
+    }
+    .login-page .c-login-header h2 {
+        font-size: clamp(1.65rem, 7vw, 2rem);
+    }
+    .login-page .c-access-brand-mobile__name {
+        font-size: 1.25rem;
+    }
+    .dashboard-workspace .dashboard-metric {
+        padding: 20px 16px;
+    }
+    .tienda-body .store-product-card {
+        border-radius: 20px !important;
+    }
+}
+
+@media screen and (max-height: 650px) {
+    .login-page .l-split__right {
+        align-items: start;
+    }
+    .login-page .c-access-brand-mobile {
+        margin-bottom: 28px;
+    }
+}

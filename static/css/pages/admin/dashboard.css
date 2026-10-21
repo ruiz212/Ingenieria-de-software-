@@ -1,0 +1,426 @@
+/* Scoped daily overview. Shared navigation and controls retain their system styles. */
+.dashboard-workspace {
+    --dashboard-line: var(--border);
+    --dashboard-muted: var(--text-muted);
+    color: var(--text-main);
+}
+.dashboard-workspace ::selection {
+    background: var(--primary-light);
+    color: var(--text-main);
+}
+.dashboard-workspace a {
+    text-underline-offset: .2em;
+}
+.dashboard-workspace a:focus-visible {
+    outline: 2px solid var(--focus-color);
+    outline-offset: 4px;
+}
+.dashboard-workspace .dashboard-intro {
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 1.75rem;
+}
+.dashboard-workspace .dashboard-intro h2 {
+    font-size: 1.875rem;
+    line-height: 1.3;
+    letter-spacing: -.025em;
+    margin-bottom: .5rem;
+}
+.dashboard-workspace .dashboard-intro p {
+    font-size: .9375rem;
+    line-height: 1.6;
+}
+.dashboard-workspace .dashboard-actions {
+    flex-shrink: 0;
+}
+.dashboard-workspace .dashboard-actions .btn {
+    white-space: nowrap;
+}
+.dashboard-workspace .dashboard-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0 0 1.5rem;
+    padding: 1.5rem 0;
+    background: var(--card-bg);
+    border: 1px solid var(--dashboard-line);
+    border-radius: 14px;
+}
+.dashboard-workspace .dashboard-metric {
+    min-width: 0;
+    padding: 0 1.5rem;
+}
+.dashboard-workspace .dashboard-metric + .dashboard-metric {
+    border-left: 1px solid var(--dashboard-line);
+}
+.dashboard-workspace .dashboard-metric dt {
+    font-size: .8125rem;
+    line-height: 1.5;
+    font-weight: 600;
+    color: var(--dashboard-muted);
+}
+.dashboard-workspace .dashboard-metric dd {
+    margin-left: 0;
+}
+.dashboard-workspace .dashboard-metric-value {
+    margin-top: .375rem;
+    font-size: 1.875rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -.025em;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+.dashboard-workspace .dashboard-metric-detail {
+    margin-top: .375rem;
+    font-size: .75rem;
+    line-height: 1.5;
+    color: var(--dashboard-muted);
+}
+.dashboard-workspace .dashboard-positive {
+    color: var(--positive-ink);
+}
+.dashboard-workspace .dashboard-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 1.5rem;
+}
+.dashboard-workspace .dashboard-panel {
+    min-width: 0;
+    background: var(--card-bg);
+    border: 1px solid var(--dashboard-line);
+    border-radius: 14px;
+}
+.dashboard-workspace .dashboard-panel-heading {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--dashboard-line);
+}
+.dashboard-workspace .dashboard-panel-heading h3 {
+    font-size: .9375rem;
+    font-weight: 600;
+    line-height: 1.5;
+}
+.dashboard-workspace .dashboard-panel-heading p {
+    color: var(--dashboard-muted);
+    font-size: .8125rem;
+    line-height: 1.5;
+    margin-top: .25rem;
+}
+.dashboard-workspace .dashboard-period {
+    font-size: .75rem;
+    color: var(--dashboard-muted);
+    padding-top: .125rem;
+}
+.dashboard-workspace .dashboard-sales-sections {
+    padding: 0 1.5rem;
+}
+.dashboard-workspace .dashboard-sales-sections > section {
+    padding: 1.25rem 0;
+}
+.dashboard-workspace .dashboard-sales-sections > section + section {
+    border-top: 1px solid var(--dashboard-line);
+}
+.dashboard-workspace .dashboard-sales-sections h4 {
+    font-size: .875rem;
+    line-height: 1.5;
+    font-weight: 600;
+    margin: 0 0 .75rem;
+}
+.dashboard-workspace .dashboard-table-wrapper {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+}
+.dashboard-workspace .dashboard-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: .875rem;
+}
+.dashboard-workspace .dashboard-table th {
+    font-size: .75rem;
+    font-weight: 500;
+    color: var(--dashboard-muted);
+    padding: .5rem 0;
+    text-align: left;
+    line-height: 1.5;
+}
+.dashboard-workspace .dashboard-table td {
+    padding: .75rem 0;
+    vertical-align: top;
+    line-height: 1.5;
+    border-top: 1px solid var(--border-light);
+    overflow-wrap: anywhere;
+}
+.dashboard-workspace .dashboard-table th:last-child, .dashboard-workspace .dashboard-table td:last-child {
+    width: 34%;
+    text-align: right;
+    padding-left: 1rem;
+    font-variant-numeric: tabular-nums;
+}
+.dashboard-workspace .dashboard-table td:last-child {
+    font-weight: 600;
+}
+.dashboard-workspace .dashboard-category-table td:last-child {
+    white-space: nowrap;
+    overflow-wrap: normal;
+}
+.dashboard-workspace .dashboard-product {
+    display: flex;
+    align-items: baseline;
+    gap: .75rem;
+}
+.dashboard-workspace .dashboard-rank {
+    min-width: 1.125rem;
+    color: var(--dashboard-muted);
+    font-size: .75rem;
+    font-variant-numeric: tabular-nums;
+}
+.dashboard-workspace .dashboard-register-list {
+    list-style: none;
+    padding: 0 1.5rem;
+    margin: 0;
+}
+.dashboard-workspace .dashboard-register-list li {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.5rem 0;
+}
+.dashboard-workspace .dashboard-register-list li + li {
+    border-top: 1px solid var(--dashboard-line);
+}
+.dashboard-workspace .dashboard-register-list h4 {
+    font-size: .875rem;
+    line-height: 1.5;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+.dashboard-workspace .dashboard-register-list p {
+    font-size: .75rem;
+    line-height: 1.5;
+    color: var(--dashboard-muted);
+    margin-top: .375rem;
+}
+.dashboard-workspace time {
+    font-variant-numeric: tabular-nums;
+}
+.dashboard-workspace .dashboard-status {
+    display: inline-flex;
+    align-items: center;
+    gap: .375rem;
+    flex-shrink: 0;
+    border-radius: 6px;
+    padding: .25rem .5rem;
+    background: var(--success-bg);
+    color: var(--positive-ink);
+    font-size: .6875rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.dashboard-workspace .dashboard-status::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+}
+.dashboard-workspace .dashboard-note {
+    display: flex;
+    align-items: start;
+    gap: .5rem;
+    margin: 0;
+    padding: 1rem 1.5rem 1.25rem;
+    border-top: 1px solid var(--dashboard-line);
+    color: var(--dashboard-muted);
+    font-size: .75rem;
+    line-height: 1.6;
+}
+.dashboard-workspace .dashboard-note svg {
+    flex-shrink: 0;
+    margin-top: .125rem;
+}
+.dashboard-workspace .dashboard-empty {
+    padding: 1.25rem 0 1rem;
+    color: var(--dashboard-muted);
+    font-size: .8125rem;
+    line-height: 1.6;
+}
+.dashboard-workspace .dashboard-empty svg {
+    display: block;
+    margin-bottom: .75rem;
+}
+.dashboard-workspace .dashboard-empty .dashboard-empty-title {
+    color: var(--text-main);
+    font-weight: 600;
+    margin-bottom: .25rem;
+}
+.dashboard-workspace .dashboard-empty a {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    min-height: 44px;
+    margin-top: .375rem;
+    color: var(--action-ink);
+    font-weight: 600;
+}
+.dashboard-workspace .dashboard-empty-registers {
+    padding: 1.5rem;
+}
+.dashboard-workspace .dashboard-management {
+    margin-top: 2rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--dashboard-line);
+}
+.dashboard-workspace .dashboard-management h3 {
+    color: var(--dashboard-muted);
+    font-size: .8125rem;
+    font-weight: 500;
+    line-height: 1.5;
+    margin: 0 0 .5rem;
+}
+.dashboard-workspace .dashboard-management > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 1.75rem;
+}
+.dashboard-workspace .dashboard-management a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    min-height: 44px;
+    font-size: .8125rem;
+    font-weight: 600;
+    color: var(--action-ink);
+}
+.dashboard-workspace .dashboard-management a svg {
+    flex-shrink: 0;
+}
+.dashboard-workspace .dashboard-management a:hover, .dashboard-workspace .dashboard-empty a:hover {
+    color: var(--text-main);
+    text-decoration-thickness: 2px;
+}
+@media (max-width: 1200px) {
+    .dashboard-workspace .dashboard-intro {
+        align-items: start;
+        flex-direction: column;
+    }
+    .dashboard-workspace .dashboard-metric {
+        padding: 0 1.125rem;
+    }
+    .dashboard-workspace .dashboard-metric-value {
+        font-size: 1.625rem;
+    }
+    .dashboard-workspace .dashboard-columns {
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+        gap: 1rem;
+    }
+    .dashboard-workspace .dashboard-panel-heading {
+        flex-wrap: wrap;
+    }
+}
+@media (max-width: 900px) {
+    .dashboard-workspace .dashboard-columns {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .dashboard-workspace .dashboard-panel-heading {
+        flex-wrap: nowrap;
+    }
+    .dashboard-workspace .dashboard-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: 0;
+    }
+    .dashboard-workspace .dashboard-metric {
+        padding: 1.125rem 1rem;
+    }
+    .dashboard-workspace .dashboard-metric:nth-child(3) {
+        border-left: 0;
+    }
+    .dashboard-workspace .dashboard-metric:nth-child(n+3) {
+        border-top: 1px solid var(--dashboard-line);
+    }
+}
+@media (max-width: 600px) {
+    .dashboard-workspace .dashboard-intro {
+        gap: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+    .dashboard-workspace .dashboard-intro h2 {
+        font-size: 1.5rem;
+    }
+    .dashboard-workspace .dashboard-intro p {
+        font-size: .875rem;
+    }
+    .dashboard-workspace .dashboard-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: .625rem;
+    }
+    .dashboard-workspace .dashboard-actions .btn {
+        width: 100%;
+    }
+    .dashboard-workspace .dashboard-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: 0;
+        margin-bottom: 1.25rem;
+    }
+    .dashboard-workspace .dashboard-metric {
+        padding: 1.125rem 1rem;
+    }
+    .dashboard-workspace .dashboard-metric:nth-child(3) {
+        border-left: 0;
+    }
+    .dashboard-workspace .dashboard-metric:nth-child(n+3) {
+        border-top: 1px solid var(--dashboard-line);
+    }
+    .dashboard-workspace .dashboard-metric dt {
+        font-size: .75rem;
+    }
+    .dashboard-workspace .dashboard-metric-value {
+        font-size: 1.5rem;
+    }
+    .dashboard-workspace .dashboard-value-compact {
+        font-size: 1.125rem;
+        line-height: 1.667;
+    }
+    .dashboard-workspace .dashboard-metric-detail {
+        font-size: .6875rem;
+    }
+    .dashboard-workspace .dashboard-panel-heading {
+        padding: 1rem;
+        gap: .75rem;
+    }
+    .dashboard-workspace .dashboard-sales-sections, .dashboard-workspace .dashboard-register-list {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    .dashboard-workspace .dashboard-note {
+        padding: 1rem;
+    }
+    .dashboard-workspace .dashboard-empty-registers {
+        padding: 1.25rem 1rem;
+    }
+    .dashboard-workspace .dashboard-management {
+        margin-top: 1.5rem;
+    }
+    .dashboard-workspace .dashboard-management > div {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .25rem 1rem;
+    }
+    .dashboard-workspace .dashboard-management a {
+        line-height: 1.5;
+    }
+    .dashboard-workspace .dashboard-category-table th:last-child, .dashboard-workspace .dashboard-category-table td:last-child {
+        width: 44%;
+        font-size: .8125rem;
+    }
+}

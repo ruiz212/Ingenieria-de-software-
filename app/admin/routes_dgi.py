@@ -9,6 +9,7 @@ from flask_login import current_user
 
 from app.admin import admin_bp
 from app.auth.decorators import roles_required
+from app.db import execute_sp
 from app.services import dgi_repository as repo
 from app.services.dgi_engine import ENGINE_VERSION, NOTICE, fingerprint, rule_catalog, money
 from app.services.dgi_excel import export_xlsx
@@ -120,7 +121,11 @@ def dgi_dashboard():
                 review['errores'] = summary['bloqueantes']
                 review['pendientes'] = summary.get('pendientes_configuracion', 0)
                 reviews.append(review)
-        cursor.execute("SELECT TOP 30 Fecha,UsuarioID,Accion,EntidadID FROM BitacoraFiscal WHERE Accion LIKE 'DGI[_]%' ORDER BY ID DESC")
+        execute_sp(
+            cursor,
+            'fiscal.sp_ListarEventosBitacoraDGI',
+            fallback_sql="SELECT TOP 30 Fecha,UsuarioID,Accion,EntidadID FROM BitacoraFiscal WHERE Accion LIKE 'DGI[_]%' ORDER BY ID DESC",
+        )
         events = repo.rows(cursor)
     return render_template('admin/dgi/dashboard.html', profile=profile, periods=periods,
         selected=selected, reviews=reviews, events=events, notice=NOTICE,
@@ -200,11 +205,26 @@ def dgi_review(review_id):
         period = repo.get_period(cursor, review['PeriodoID'])
         fresh = review['Estado'] != 'OBSOLETO' and review['Motor'] == ENGINE_VERSION and fingerprint(
             repo.snapshot(cursor, period, review['Obligacion'])) == review['Huella']
-        cursor.execute('SELECT Hallazgo,Comentario,UsuarioID,Fecha FROM DGI_Observaciones WHERE RevisionID=? ORDER BY ID', review_id)
+        execute_sp(
+            cursor,
+            'fiscal.sp_ListarObservacionesRevisionDGI',
+            (review_id,),
+            fallback_sql='SELECT Hallazgo,Comentario,UsuarioID,Fecha FROM DGI_Observaciones WHERE RevisionID=? ORDER BY ID',
+        )
         comments = repo.rows(cursor)
-        cursor.execute('SELECT ID,Nombre,SHA256,Fecha,UsuarioID FROM DGI_Exportaciones WHERE RevisionID=? ORDER BY ID DESC', review_id)
+        execute_sp(
+            cursor,
+            'fiscal.sp_ListarExportacionesRevisionDGI',
+            (review_id,),
+            fallback_sql='SELECT ID,Nombre,SHA256,Fecha,UsuarioID FROM DGI_Exportaciones WHERE RevisionID=? ORDER BY ID DESC',
+        )
         exports = repo.rows(cursor)
-        cursor.execute("SELECT Fecha,UsuarioID,Accion FROM BitacoraFiscal WHERE Entidad='DGI_Revision' AND EntidadID=? ORDER BY ID", review_id)
+        execute_sp(
+            cursor,
+            'fiscal.sp_ListarBitacoraRevisionDGI',
+            (review_id,),
+            fallback_sql="SELECT Fecha,UsuarioID,Accion FROM BitacoraFiscal WHERE Entidad='DGI_Revision' AND EntidadID=? ORDER BY ID",
+        )
         events = repo.rows(cursor)
     return render_template('admin/dgi/review.html', review=review, data=data, result=result,
         period=period, fresh=fresh, comments=comments, exports=exports, events=events,
@@ -249,17 +269,31 @@ def dgi_export(review_id):
         repo.assert_fresh(cursor, review, current_user.id)
         if review['Estado'] not in ('APROBADO', 'EXPORTADO') or json.loads(review['ResultadoJSON'])['bloqueantes']:
             raise repo.DGIConflict('El Excel interno requiere revisión aprobada y sin errores bloqueantes.')
-        # Idempotencia: repetir la exportación devuelve exactamente el mismo archivo aprobado.
-        row = cursor.execute('SELECT TOP 1 ID FROM DGI_Exportaciones WHERE RevisionID=? ORDER BY ID', review_id).fetchone()
+        row = execute_sp(
+            cursor,
+            'fiscal.sp_ObtenerPrimeraExportacionRevisionDGI',
+            (review_id,),
+            fallback_sql='SELECT TOP 1 ID FROM DGI_Exportaciones WHERE RevisionID=? ORDER BY ID',
+        ).fetchone()
         if row:
             export_id = row[0]
         else:
             content = export_xlsx(review, json.loads(review['SnapshotJSON']), json.loads(review['ResultadoJSON']))
             digest = hashlib.sha256(content).hexdigest()
             name = f'DGI-INTERNO-NO-OFICIAL-r{review_id}-v{review["Version"]}.xlsx'
-            export_id = cursor.execute('''INSERT INTO DGI_Exportaciones(RevisionID,Nombre,SHA256,Archivo,UsuarioID)
-                OUTPUT INSERTED.ID VALUES(?,?,?,?,?)''', review_id, name, digest, content, current_user.id).fetchone()[0]
-            cursor.execute("UPDATE DGI_Revisiones SET Estado='EXPORTADO' WHERE ID=?", review_id)
+            export_id = execute_sp(
+                cursor,
+                'fiscal.sp_InsertarExportacionDGI',
+                (review_id, name, digest, content, current_user.id),
+                fallback_sql='''INSERT INTO DGI_Exportaciones(RevisionID,Nombre,SHA256,Archivo,UsuarioID)
+                OUTPUT INSERTED.ID VALUES(?,?,?,?,?)''',
+            ).fetchone()[0]
+            execute_sp(
+                cursor,
+                'fiscal.sp_MarcarRevisionDGIExportada',
+                (review_id,),
+                fallback_sql="UPDATE DGI_Revisiones SET Estado='EXPORTADO' WHERE ID=?",
+            )
             audit(cursor, current_user.id, 'DGI_EXPORTACION_INTERNA', 'DGI_Revision', review_id, {'exportacion': export_id, 'sha256': digest})
     return redirect(url_for('admin.dgi_download', export_id=export_id))
 
@@ -268,7 +302,12 @@ def dgi_export(review_id):
 @roles_required('Admin', 'SuperAdmin')
 def dgi_download(export_id):
     with repo.transaction() as cursor:
-        cursor.execute('SELECT RevisionID,Nombre,Archivo,SHA256 FROM DGI_Exportaciones WHERE ID=?', export_id)
+        execute_sp(
+            cursor,
+            'fiscal.sp_ObtenerExportacionDGIPorID',
+            (export_id,),
+            fallback_sql='SELECT RevisionID,Nombre,Archivo,SHA256 FROM DGI_Exportaciones WHERE ID=?',
+        )
         row = cursor.fetchone()
         if not row:
             raise repo.DGINotFound('Exportación no encontrada.')
@@ -307,15 +346,20 @@ def dgi_export_official(review_id):
 @roles_required('Admin', 'SuperAdmin')
 def dgi_source(kind, source_id):
     queries = {
-        'factura': ('SELECT ID,NumeroFactura,FechaHora,Subtotal,IVA,Total,EstadoFiscal,FechaAnulacion,MotivoAnulacion,DocumentoJSON FROM Facturas WHERE ID=?', 'admin.fiscal'),
-        'compra': ('''SELECT c.ID,c.Fecha,c.FacturaProveedor,p.Nombre AS Proveedor,c.MateriaPrimaID,c.Cantidad,c.CostoTotal,c.IVADocumentado
+        'factura': ('ventas.sp_ObtenerFuenteFacturaDGI', 'SELECT ID,NumeroFactura,FechaHora,Subtotal,IVA,Total,EstadoFiscal,FechaAnulacion,MotivoAnulacion,DocumentoJSON FROM Facturas WHERE ID=?', 'admin.fiscal'),
+        'compra': ('produccion.sp_ObtenerFuenteCompraDGI', '''SELECT c.ID,c.Fecha,c.FacturaProveedor,p.Nombre AS Proveedor,c.MateriaPrimaID,c.Cantidad,c.CostoTotal,c.IVADocumentado
                      FROM ComprasMateriaPrima c LEFT JOIN Proveedores p ON p.ID=c.ProveedorID WHERE c.ID=?''', 'admin.inventario'),
-        'asiento': ('SELECT ID,NumeroComprobante,Fecha,Descripcion,Estado,ReferenciaExterna FROM AsientosDiario WHERE ID=?', 'admin.contabilidad'),
+        'asiento': ('contabilidad.sp_ObtenerFuenteAsientoDGI', 'SELECT ID,NumeroComprobante,Fecha,Descripcion,Estado,ReferenciaExterna FROM AsientosDiario WHERE ID=?', 'admin.contabilidad'),
     }
     if kind not in queries:
         raise repo.DGINotFound('Tipo de documento no encontrado.')
     with repo.transaction() as cursor:
-        cursor.execute(queries[kind][0], source_id)
+        execute_sp(
+            cursor,
+            queries[kind][0],
+            (source_id,),
+            fallback_sql=queries[kind][1],
+        )
         found = repo.rows(cursor)
         if not found:
             raise repo.DGINotFound('Documento fuente no encontrado.')
@@ -328,16 +372,31 @@ def dgi_source(kind, source_id):
                 entry_id = positive_id(document['asiento_id']) if document.get('asiento_id') else None
             except (ValueError, TypeError, DGIInputError):
                 document, entry_id = {}, None
-            linked = cursor.execute('SELECT Fecha FROM AsientosDiario WHERE ID=?', entry_id).fetchone() if entry_id else None
+            linked = execute_sp(
+                cursor,
+                'contabilidad.sp_ObtenerFechaAsientoPorID',
+                (entry_id,),
+                fallback_sql='SELECT Fecha FROM AsientosDiario WHERE ID=?',
+            ).fetchone() if entry_id else None
             evidence = invoice_time_evidence(found[0]['FechaHora'], document, linked[0] if linked else None)
             found[0]['FechaComercial'] = evidence['fecha']
             found[0]['CriterioFecha'] = evidence['criterio_fecha']
-            cursor.execute('''SELECT d.ID,p.Nombre AS Producto,d.Cantidad,d.PrecioUnitario,d.Subtotal
-                FROM DetalleFacturas d LEFT JOIN Productos p ON p.ID=d.ProductoID WHERE d.FacturaID=? ORDER BY d.ID''', source_id)
+            execute_sp(
+                cursor,
+                'ventas.sp_ObtenerDetallesFuenteFacturaDGI',
+                (source_id,),
+                fallback_sql='''SELECT d.ID,p.Nombre AS Producto,d.Cantidad,d.PrecioUnitario,d.Subtotal
+                FROM DetalleFacturas d LEFT JOIN Productos p ON p.ID=d.ProductoID WHERE d.FacturaID=? ORDER BY d.ID''',
+            )
             details = repo.rows(cursor)
         elif kind == 'asiento':
-            cursor.execute('''SELECT c.Codigo,c.Nombre,d.Debe,d.Haber FROM DetalleAsientos d
-                JOIN CatalogoCuentas c ON c.ID=d.CuentaID WHERE d.AsientoID=? ORDER BY d.ID''', source_id)
+            execute_sp(
+                cursor,
+                'contabilidad.sp_ObtenerDetallesFuenteAsientoDGI',
+                (source_id,),
+                fallback_sql='''SELECT c.Codigo,c.Nombre,d.Debe,d.Haber FROM DetalleAsientos d
+                JOIN CatalogoCuentas c ON c.ID=d.CuentaID WHERE d.AsientoID=? ORDER BY d.ID''',
+            )
             details = repo.rows(cursor)
     return render_template('admin/dgi/source.html', source=found[0], kind=kind, source_id=source_id,
-                           owner=queries[kind][1], details=details)
+                           owner=queries[kind][2], details=details)

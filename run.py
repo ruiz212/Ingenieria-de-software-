@@ -12,4 +12,4 @@ app = create_app()
 if __name__ == '__main__':
     # Usar '::' (IPv6 dual-stack) en lugar de '0.0.0.0' soluciona el lag de 2 segundos 
     # al acceder vía 'localhost' en navegadores de Windows.
-    app.run(debug=os.getenv('FLASK_DEBUG', '0') == '1', host=os.getenv('FLASK_HOST', '127.0.0.1'), port=int(os.getenv('PORT', '5000')))
+    app.run(debug=os.getenv('FLASK_DEBUG', '1') == '1', host=os.getenv('FLASK_HOST', '127.0.0.1'), port=int(os.getenv('PORT', '5000')))

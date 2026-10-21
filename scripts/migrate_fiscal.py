@@ -12,48 +12,70 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _resolve_table(cursor, name, default_schema='dbo'):
+    row = cursor.execute(
+        "SELECT TOP 1 s.name + '.' + t.name FROM sys.tables t "
+        "JOIN sys.schemas s ON t.schema_id = s.schema_id WHERE t.name = ?",
+        name
+    ).fetchone()
+    if row:
+        return row[0]
+    has_schema = cursor.execute("SELECT 1 FROM sys.schemas WHERE name = ?", default_schema).fetchone()
+    return f"{default_schema}.{name}" if has_schema else f"dbo.{name}"
+
+
 def migrate(connection):
     cursor = connection.cursor()
-    cursor.execute('ALTER TABLE ConfiguracionSistema ALTER COLUMN Valor NVARCHAR(MAX) NOT NULL')
-    for table, column, definition in [
-        ('Facturas', 'EstadoFiscal', "VARCHAR(12) NOT NULL DEFAULT 'Emitida'"),
-        ('Facturas', 'DocumentoJSON', 'NVARCHAR(MAX) NULL'),
-        ('Facturas', 'AnuladaPor', 'INT NULL'),
-        ('Facturas', 'FechaAnulacion', 'DATETIME NULL'),
-        ('Facturas', 'MotivoAnulacion', 'NVARCHAR(300) NULL'),
-        ('Facturas', 'ClaveSolicitud', 'VARCHAR(64) NULL'),
-        ('Pagos', 'MonedaRegistro', "VARCHAR(6) NOT NULL DEFAULT 'Legacy'"),
-        ('Pagos', 'TipoCambioAplicado', 'DECIMAL(12,6) NULL'),
-        ('Productos', 'TasaIVA', 'DECIMAL(5,2) NULL'),
-        ('Productos', 'MotivoExencion', 'NVARCHAR(200) NULL'),
-        ('ComprasMateriaPrima', 'FacturaProveedor', 'NVARCHAR(50) NULL'),
-        ('ComprasMateriaPrima', 'IVADocumentado', 'DECIMAL(18,2) NOT NULL DEFAULT 0'),
-        ('PeriodosContables', 'CerradoPor', 'INT NULL'),
-        ('PeriodosContables', 'CerradoEn', 'DATETIME NULL'),
-        ('AsientosDiario', 'EmisorJSON', 'NVARCHAR(MAX) NULL'),
+    cfg_tbl = _resolve_table(cursor, 'ConfiguracionSistema', 'seguridad')
+    cursor.execute(f'ALTER TABLE {cfg_tbl} ALTER COLUMN Valor NVARCHAR(MAX) NOT NULL')
+    for table, schema, column, definition in [
+        ('Facturas', 'ventas', 'EstadoFiscal', "VARCHAR(12) NOT NULL DEFAULT 'Emitida'"),
+        ('Facturas', 'ventas', 'DocumentoJSON', 'NVARCHAR(MAX) NULL'),
+        ('Facturas', 'ventas', 'AnuladaPor', 'INT NULL'),
+        ('Facturas', 'ventas', 'FechaAnulacion', 'DATETIME NULL'),
+        ('Facturas', 'ventas', 'MotivoAnulacion', 'NVARCHAR(300) NULL'),
+        ('Facturas', 'ventas', 'ClaveSolicitud', 'VARCHAR(64) NULL'),
+        ('Pagos', 'ventas', 'MonedaRegistro', "VARCHAR(6) NOT NULL DEFAULT 'Legacy'"),
+        ('Pagos', 'ventas', 'TipoCambioAplicado', 'DECIMAL(12,6) NULL'),
+        ('Productos', 'catalogo', 'TasaIVA', 'DECIMAL(5,2) NULL'),
+        ('Productos', 'catalogo', 'MotivoExencion', 'NVARCHAR(200) NULL'),
+        ('ComprasMateriaPrima', 'produccion', 'FacturaProveedor', 'NVARCHAR(50) NULL'),
+        ('ComprasMateriaPrima', 'produccion', 'IVADocumentado', 'DECIMAL(18,2) NOT NULL DEFAULT 0'),
+        ('PeriodosContables', 'contabilidad', 'CerradoPor', 'INT NULL'),
+        ('PeriodosContables', 'contabilidad', 'CerradoEn', 'DATETIME NULL'),
+        ('AsientosDiario', 'contabilidad', 'EmisorJSON', 'NVARCHAR(MAX) NULL'),
     ]:
-        cursor.execute(f"IF COL_LENGTH('{table}', '{column}') IS NULL ALTER TABLE {table} ADD {column} {definition}")
-    cursor.execute("""
-        IF OBJECT_ID('SecuenciasFiscales') IS NULL
-        CREATE TABLE SecuenciasFiscales (Serie VARCHAR(10) PRIMARY KEY, Ultimo BIGINT NOT NULL DEFAULT 0);
-        IF NOT EXISTS (SELECT 1 FROM SecuenciasFiscales WHERE Serie='FAC')
-        INSERT INTO SecuenciasFiscales (Serie, Ultimo)
+        resolved = _resolve_table(cursor, table, schema)
+        cursor.execute(f"IF COL_LENGTH('{resolved}', '{column}') IS NULL ALTER TABLE {resolved} ADD {column} {definition}")
+    sec_tbl = _resolve_table(cursor, 'SecuenciasFiscales', 'ventas')
+    bit_tbl = _resolve_table(cursor, 'BitacoraFiscal', 'fiscal')
+    fac_tbl = _resolve_table(cursor, 'Facturas', 'ventas')
+    det_fac_tbl = _resolve_table(cursor, 'DetalleFacturas', 'ventas')
+    per_tbl = _resolve_table(cursor, 'PeriodosContables', 'contabilidad')
+    asi_tbl = _resolve_table(cursor, 'AsientosDiario', 'contabilidad')
+    det_asi_tbl = _resolve_table(cursor, 'DetalleAsientos', 'contabilidad')
+    nom_tbl = _resolve_table(cursor, 'Nomina', 'rrhh')
+    cursor.execute(f"""
+        IF OBJECT_ID('{sec_tbl}', 'U') IS NULL
+        CREATE TABLE {sec_tbl} (Serie VARCHAR(10) PRIMARY KEY, Ultimo BIGINT NOT NULL DEFAULT 0);
+        IF NOT EXISTS (SELECT 1 FROM {sec_tbl} WHERE Serie='FAC')
+        INSERT INTO {sec_tbl} (Serie, Ultimo)
         SELECT 'FAC', ISNULL(MAX(TRY_CONVERT(BIGINT, SUBSTRING(NumeroFactura, 5, 20))),0)
-        FROM Facturas WHERE NumeroFactura LIKE 'FAC-%';
-        IF OBJECT_ID('BitacoraFiscal') IS NULL
-        CREATE TABLE BitacoraFiscal (
+        FROM {fac_tbl} WHERE NumeroFactura LIKE 'FAC-%';
+        IF OBJECT_ID('{bit_tbl}', 'U') IS NULL
+        CREATE TABLE {bit_tbl} (
             ID BIGINT IDENTITY PRIMARY KEY, Fecha DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
             UsuarioID INT NULL, Accion NVARCHAR(50) NOT NULL,
             Entidad NVARCHAR(50) NOT NULL, EntidadID INT NULL,
             Detalle NVARCHAR(MAX) NOT NULL, IP VARCHAR(45) NULL);
     """)
-    for name, table, columns, where in [
-        ('UX_FiscalNumero', 'Facturas', 'NumeroFactura', ''),
-        ('UX_FiscalSolicitud', 'Facturas', 'ClaveSolicitud', 'WHERE ClaveSolicitud IS NOT NULL'),
-        ('UX_FiscalPeriodo', 'PeriodosContables', 'Anio, Mes', ''),
-        ('UX_FiscalComprobante', 'AsientosDiario', 'NumeroComprobante', 'WHERE NumeroComprobante IS NOT NULL'),
+    for name, resolved_table, columns, where in [
+        ('UX_FiscalNumero', fac_tbl, 'NumeroFactura', ''),
+        ('UX_FiscalSolicitud', fac_tbl, 'ClaveSolicitud', 'WHERE ClaveSolicitud IS NOT NULL'),
+        ('UX_FiscalPeriodo', per_tbl, 'Anio, Mes', ''),
+        ('UX_FiscalComprobante', asi_tbl, 'NumeroComprobante', 'WHERE NumeroComprobante IS NOT NULL'),
     ]:
-        cursor.execute(f"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='{name}') CREATE UNIQUE INDEX {name} ON {table} ({columns}) {where}")
+        cursor.execute(f"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='{name}') CREATE UNIQUE INDEX {name} ON {resolved_table} ({columns}) {where}")
     defaults = {
         'fiscal_regimen': ('Pendiente', 'Pendiente, Cuota fija o General; confirmar con la inscripción DGI'),
         'fiscal_razon_social': ('', 'Razón social del emisor'),
@@ -67,15 +89,21 @@ def migrate(connection):
         'tipo_cambio_usd': ('36.6243', 'Córdobas por dólar según el tipo de cambio oficial BCN; actualizar cuando corresponda'),
     }
     for key, (value, description) in defaults.items():
-        cursor.execute("IF NOT EXISTS(SELECT 1 FROM ConfiguracionSistema WHERE Clave=?) INSERT INTO ConfiguracionSistema(Clave,Valor,Descripcion) VALUES(?,?,?)", key,key,value,description)
-    cursor.execute("""
-        IF OBJECT_ID('CK_Nomina_Estado','C') IS NOT NULL ALTER TABLE Nomina DROP CONSTRAINT CK_Nomina_Estado;
-        ALTER TABLE Nomina WITH CHECK ADD CONSTRAINT CK_Nomina_Estado CHECK
+        cursor.execute(f"IF NOT EXISTS(SELECT 1 FROM {cfg_tbl} WHERE Clave=?) INSERT INTO {cfg_tbl}(Clave,Valor,Descripcion) VALUES(?,?,?)", key,key,value,description)
+    nom_schema = nom_tbl.split('.')[0]
+    cursor.execute(f"""
+        IF OBJECT_ID('{nom_schema}.CK_Nomina_Estado','C') IS NOT NULL ALTER TABLE {nom_tbl} DROP CONSTRAINT CK_Nomina_Estado;
+        IF OBJECT_ID('CK_Nomina_Estado','C') IS NOT NULL ALTER TABLE {nom_tbl} DROP CONSTRAINT CK_Nomina_Estado;
+        ALTER TABLE {nom_tbl} WITH CHECK ADD CONSTRAINT CK_Nomina_Estado CHECK
         (Estado IN ('Borrador','Aprobada','Pagada','Anulada','Contabilizada'));
     """)
+    fac_schema = fac_tbl.split('.')[0]
+    bit_schema = bit_tbl.split('.')[0]
+    det_fac_schema = det_fac_tbl.split('.')[0]
+    det_asi_schema = det_asi_tbl.split('.')[0]
     # Impedir alteración del contenido de facturas que ya tienen instantánea fiscal.
-    cursor.execute("""
-    CREATE OR ALTER TRIGGER TR_FiscalFacturaInmutable ON Facturas AFTER UPDATE, DELETE AS
+    cursor.execute(f"""
+    CREATE OR ALTER TRIGGER {fac_schema}.TR_FiscalFacturaInmutable ON {fac_tbl} AFTER UPDATE, DELETE AS
     BEGIN
       SET NOCOUNT ON;
       IF EXISTS(SELECT 1 FROM deleted d LEFT JOIN inserted i ON i.ID=d.ID WHERE i.ID IS NULL)
@@ -86,24 +114,24 @@ def migrate(connection):
         THROW 51002, 'No se puede alterar una factura emitida.', 1;
     END
     """)
-    cursor.execute("""
-    CREATE OR ALTER TRIGGER TR_FiscalBitacoraInmutable ON BitacoraFiscal INSTEAD OF UPDATE, DELETE AS
+    cursor.execute(f"""
+    CREATE OR ALTER TRIGGER {bit_schema}.TR_FiscalBitacoraInmutable ON {bit_tbl} INSTEAD OF UPDATE, DELETE AS
     BEGIN THROW 51003, 'La bitácora fiscal no permite edición ni borrado.', 1; END
     """)
-    cursor.execute("""
-    CREATE OR ALTER TRIGGER TR_FiscalDetalleInmutable ON DetalleFacturas AFTER UPDATE, DELETE AS
+    cursor.execute(f"""
+    CREATE OR ALTER TRIGGER {det_fac_schema}.TR_FiscalDetalleInmutable ON {det_fac_tbl} AFTER UPDATE, DELETE AS
     BEGIN
       SET NOCOUNT ON;
       IF EXISTS(SELECT 1 FROM (SELECT FacturaID FROM inserted UNION SELECT FacturaID FROM deleted) d
-                JOIN Facturas f ON f.ID=d.FacturaID WHERE f.DocumentoJSON IS NOT NULL)
+                JOIN {fac_tbl} f ON f.ID=d.FacturaID WHERE f.DocumentoJSON IS NOT NULL)
         THROW 51004, 'No se puede alterar el detalle de una factura emitida.', 1;
     END
     """)
-    cursor.execute("""
-    CREATE OR ALTER TRIGGER TR_FiscalAsientoDetalleInmutable ON DetalleAsientos AFTER UPDATE, DELETE AS
+    cursor.execute(f"""
+    CREATE OR ALTER TRIGGER {det_asi_schema}.TR_FiscalAsientoDetalleInmutable ON {det_asi_tbl} AFTER UPDATE, DELETE AS
     BEGIN
       SET NOCOUNT ON;
-      IF EXISTS(SELECT 1 FROM deleted d JOIN AsientosDiario a ON a.ID=d.AsientoID
+      IF EXISTS(SELECT 1 FROM deleted d JOIN {asi_tbl} a ON a.ID=d.AsientoID
                 WHERE a.Estado IN ('Contabilizado','Anulado'))
         THROW 51005, 'Corrija el asiento mediante reversión, no editando sus líneas.', 1;
     END

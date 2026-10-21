@@ -40,7 +40,7 @@
     border-left: 4px solid transparent;
     pointer-events: auto; /* Re-enable clicks on the toast itself */
     overflow: hidden;
-    
+
     /* Animation */
     animation: slideInRight var(--transition-smooth) forwards;
 }
@@ -97,7 +97,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all var(--transition-fast);
+    transition: var(--transition-interactive, background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease);
 }
 
 .c-toast__close:hover {
@@ -130,24 +130,48 @@
 /* ─── Variants ─── */
 
 /* Success */
-.c-toast--success { border-left-color: var(--success); }
-.c-toast--success .c-toast__icon { color: var(--success); }
-.c-toast--success .c-toast__progress-bar { background-color: var(--success); }
+.c-toast--success {
+    border-left-color: var(--success);
+}
+.c-toast--success .c-toast__icon {
+    color: var(--success);
+}
+.c-toast--success .c-toast__progress-bar {
+    background-color: var(--success);
+}
 
 /* Danger/Error */
-.c-toast--danger { border-left-color: var(--danger); }
-.c-toast--danger .c-toast__icon { color: var(--danger); }
-.c-toast--danger .c-toast__progress-bar { background-color: var(--danger); }
+.c-toast--danger {
+    border-left-color: var(--danger);
+}
+.c-toast--danger .c-toast__icon {
+    color: var(--danger);
+}
+.c-toast--danger .c-toast__progress-bar {
+    background-color: var(--danger);
+}
 
 /* Warning */
-.c-toast--warning { border-left-color: var(--warning); }
-.c-toast--warning .c-toast__icon { color: var(--warning); }
-.c-toast--warning .c-toast__progress-bar { background-color: var(--warning); }
+.c-toast--warning {
+    border-left-color: var(--warning);
+}
+.c-toast--warning .c-toast__icon {
+    color: var(--warning);
+}
+.c-toast--warning .c-toast__progress-bar {
+    background-color: var(--warning);
+}
 
 /* Info */
-.c-toast--info { border-left-color: var(--info); }
-.c-toast--info .c-toast__icon { color: var(--info); }
-.c-toast--info .c-toast__progress-bar { background-color: var(--info); }
+.c-toast--info {
+    border-left-color: var(--info);
+}
+.c-toast--info .c-toast__icon {
+    color: var(--info);
+}
+.c-toast--info .c-toast__progress-bar {
+    background-color: var(--info);
+}
 
 /* ─── Animations ─── */
 @keyframes slideInRight {
@@ -173,6 +197,10 @@
 }
 
 @keyframes progressShrink {
-    from { transform: scaleX(1); }
-    to { transform: scaleX(0); }
+    from {
+        transform: scaleX(1);
+    }
+    to {
+        transform: scaleX(0);
+    }
 }

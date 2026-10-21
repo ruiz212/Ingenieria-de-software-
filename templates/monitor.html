@@ -1,10 +1,11 @@
 {% extends 'admin_base.html' %}
+{% block body_class %}page-monitor{% endblock %}
 
 {% block title %}Monitor KDS | Brajher's Cake{% endblock %}
 {% block page_title %}Monitor de Cocina (KDS){% endblock %}
 
 {% block extra_head %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/monitor.css', v=5) }}">
+
 {% endblock %}
 
 {% block content %}
@@ -12,8 +13,8 @@
     <!-- TOOLBAR SUPERIOR DEL MONITOR -->
     <div class="kds-toolbar">
         <div class="kds-toolbar-left">
-            <input type="text" id="kds-search" class="kds-search-input" placeholder="🔍 Buscar factura o cliente..." oninput="filtrarTablero()">
-            <div class="kds-sync-status">
+            <input type="search" id="kds-search" class="kds-search-input" aria-label="Buscar factura, cliente o notas" placeholder="🔍 Buscar factura o cliente..." oninput="filtrarTablero()">
+            <div class="kds-sync-status" data-state="synced" role="status" aria-live="polite">
                 <span class="kds-sync-dot" id="sync-dot"></span>
                 <span id="sync-label">Sincronizado</span>
             </div>
@@ -29,15 +30,16 @@
         </div>
     </div>
 
+    <p class="kds-scroll-help" id="kds-scroll-help">Desplázate dentro de cada columna para ver todos los pedidos y sus acciones. Con teclado: selecciona la columna y usa las flechas o Fin.</p>
     <!-- TABLERO KANBAN DE TRES COLUMNAS -->
     <div class="kds-board">
         <!-- Columna PENDIENTES -->
         <div class="kds-column" id="col-Pendiente">
             <div class="kds-column-header header-danger">
                 <h3>🔴 Pendientes</h3>
-                <span class="badge badge-danger" id="count-Pendiente" style="font-size: 1.1rem; padding: 0.2rem 0.6rem;">0</span>
+                <span class="badge badge-danger monitor-count-pendiente" id="count-Pendiente">0</span>
             </div>
-            <div class="kds-column-body" id="list-Pendiente">
+            <div class="kds-column-body" id="list-Pendiente" tabindex="0" role="region" aria-label="Pedidos pendientes" aria-describedby="kds-scroll-help">
                 <!-- Tarjetas se inyectan dinámicamente -->
             </div>
         </div>
@@ -46,9 +48,9 @@
         <div class="kds-column" id="col-En_Proceso">
             <div class="kds-column-header header-warning">
                 <h3>🟠 Preparando</h3>
-                <span class="badge badge-warning" id="count-En_Proceso" style="font-size: 1.1rem; padding: 0.2rem 0.6rem;">0</span>
+                <span class="badge badge-warning monitor-count-pendiente" id="count-En_Proceso">0</span>
             </div>
-            <div class="kds-column-body" id="list-En_Proceso">
+            <div class="kds-column-body" id="list-En_Proceso" tabindex="0" role="region" aria-label="Pedidos en preparación" aria-describedby="kds-scroll-help">
                 <!-- Tarjetas se inyectan dinámicamente -->
             </div>
         </div>
@@ -57,9 +59,9 @@
         <div class="kds-column" id="col-Listo">
             <div class="kds-column-header header-success">
                 <h3>🟢 Listos</h3>
-                <span class="badge badge-success" id="count-Listo" style="font-size: 1.1rem; padding: 0.2rem 0.6rem;">0</span>
+                <span class="badge badge-success monitor-count-pendiente" id="count-Listo">0</span>
             </div>
-            <div class="kds-column-body" id="list-Listo">
+            <div class="kds-column-body" id="list-Listo" tabindex="0" role="region" aria-label="Pedidos listos" aria-describedby="kds-scroll-help">
                 <!-- Tarjetas se inyectan dinámicamente -->
             </div>
         </div>
@@ -74,6 +76,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/features/monitor-card.js', v='kds-20261018') }}"></script>
 <script>
     // Carga de datos inicial segura
     let encargos = [];
@@ -89,6 +92,51 @@
     let busquedaActual = '';
     let audioCtx = null;
     let totalAnterior = encargos.length;
+    const cambiosPendientes = new Set();
+    let revisionPedidos = 0;
+    let sincronizando = false;
+
+    function mostrarSincronizacion(estado, mensaje) {
+        document.querySelector('.kds-sync-status').dataset.state = estado;
+        document.getElementById('sync-label').textContent = mensaje;
+    }
+
+    async function solicitarMonitor(url, options = {}) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 10000);
+        try {
+            const response = await fetch(url, { ...options, signal: controller.signal });
+            if (response.redirected || response.status === 401 || response.status === 403) {
+                throw new Error('Sesión vencida o acceso denegado. Vuelve a iniciar sesión.');
+            }
+            const data = await response.json().catch(() => { throw new Error('Respuesta inválida del servidor. Pulsa Actualizar para reintentar.'); });
+            if (!response.ok) throw new Error(data?.error || 'No se pudo confirmar la operación. Pulsa Actualizar para reintentar.');
+            return data;
+        } finally {
+            window.clearTimeout(timeout);
+        }
+    }
+
+    function pedidosValidos(data) {
+        const estados = ['Pendiente', 'En Proceso', 'Listo', 'Entregado'];
+        const objeto = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+        const textoOpcional = value => value == null || typeof value === 'string';
+        const codigos = new Set();
+        return Array.isArray(data?.encargos) && data.encargos.every(pedido =>
+            objeto(pedido) && typeof pedido.codigo_seguimiento === 'string' && pedido.codigo_seguimiento &&
+            !codigos.has(pedido.codigo_seguimiento) && codigos.add(pedido.codigo_seguimiento) &&
+            typeof pedido.numero_factura === 'string' && pedido.encargo_detalles &&
+            objeto(pedido.encargo_detalles) &&
+            estados.includes(pedido.encargo_detalles.estado) &&
+            ['nombre_cliente', 'telefono', 'fecha_entrega', 'especificaciones', 'notas', 'ruta_imagen_referencia'].every(campo => textoOpcional(pedido.encargo_detalles[campo])) &&
+            (pedido.productos == null || Array.isArray(pedido.productos) && pedido.productos.every(item =>
+                objeto(item) && textoOpcional(item.nombre) &&
+                (item.detalle_ingredientes == null || objeto(item.detalle_ingredientes) &&
+                    (item.detalle_ingredientes.ingredientes == null || Array.isArray(item.detalle_ingredientes.ingredientes) &&
+                        item.detalle_ingredientes.ingredientes.every(ingrediente => objeto(ingrediente) && textoOpcional(ingrediente.nombre))))
+            ))
+        );
+    }
 
     // Reproducir aviso sonoro sintetizado con Web Audio API (no requiere archivos externos)
     function reproducirAlerta() {
@@ -161,6 +209,14 @@
 
         if (!listPendiente || !listEnProceso || !listListo) return;
 
+        const lists = [listPendiente, listEnProceso, listListo];
+        const scrollPositions = lists.map(list => list.scrollTop);
+        const active = document.activeElement;
+        const focusedCard = active?.closest('.kds-card');
+        const focusCode = focusedCard?.dataset.code;
+        const focusState = active?.dataset.nextState;
+        const focusList = active?.closest('.kds-column-body');
+
         listPendiente.innerHTML = '';
         listEnProceso.innerHTML = '';
         listListo.innerHTML = '';
@@ -188,7 +244,13 @@
             const col = document.getElementById(colId);
 
             if (col) {
-                col.appendChild(createCard(encargo));
+                const card = createCard(encargo);
+                if (cambiosPendientes.has(encargo.codigo_seguimiento)) {
+                    card.setAttribute('aria-busy', 'true');
+                    card.querySelectorAll('button').forEach(button => { button.disabled = true; });
+                    card.querySelector('.kds-status-line span').textContent = 'Guardando cambio…';
+                }
+                col.appendChild(card);
             }
         });
 
@@ -222,151 +284,27 @@
                 </div>
             `;
         }
-    }
-
-    function createCard(encargo) {
-        const card = document.createElement('div');
-        const detalles = encargo.encargo_detalles || {};
-        const estado = detalles.estado || 'Pendiente';
-        card.className = `kds-card card-${estado.replace(' ', '_')}`;
-        card.id = `card-${encargo.codigo_seguimiento}`;
-
-        // Renderizado de productos
-        let productosHtml = '';
-        (encargo.productos || []).forEach(item => {
-            let addonsHtml = '';
-            if (item.detalle_ingredientes && item.detalle_ingredientes.ingredientes && item.detalle_ingredientes.ingredientes.length > 0) {
-                addonsHtml = `<div class="kds-addons">` +
-                             item.detalle_ingredientes.ingredientes.map(ing => `+ ${ing.nombre || 'Extra'}`).join('<br>') +
-                             `</div>`;
-            }
-            const nombreLimpio = (item.nombre || 'Producto').split(' (')[0];
-            productosHtml += `
-                <div class="kds-product-row">
-                    <span class="kds-qty">x${item.cantidad || 1}</span>
-                    <div style="flex: 1;">
-                        <span class="kds-name">${nombreLimpio}</span>
-                        ${addonsHtml}
-                    </div>
-                </div>
-            `;
-        });
-
-        // Alerta de personalizado
-        let customCakeHtml = '';
-        if (detalles.especificaciones) {
-            customCakeHtml = `
-                <div class="kds-alert">
-                    <strong>✨ Personalizado:</strong> ${detalles.especificaciones}
-                </div>
-            `;
+        lists.forEach((list, index) => { list.scrollTop = scrollPositions[index]; });
+        if (focusedCard) {
+            const card = Array.from(document.querySelectorAll('.kds-card')).find(item => item.dataset.code === focusCode);
+            const buttons = card ? Array.from(card.querySelectorAll('button')) : [];
+            const target = buttons.find(button => button.dataset.nextState === focusState && !button.disabled) || buttons.find(button => !button.disabled) || focusList;
+            target?.focus({ preventScroll: true });
         }
-
-        // Notas del cliente
-        let notasHtml = '';
-        if (detalles.notas) {
-            notasHtml = `
-                <div class="kds-notes">
-                    <strong>📝 Nota:</strong> ${detalles.notas}
-                </div>
-            `;
-        }
-
-        // Imagen de referencia
-        let imagenHtml = '';
-        if (detalles.ruta_imagen_referencia) {
-            let imgUrl = detalles.ruta_imagen_referencia;
-            if (!imgUrl.startsWith('http')) {
-                imgUrl = '/' + (imgUrl.startsWith('static/') ? imgUrl : 'static/' + imgUrl);
-            }
-            imagenHtml = `
-                <div class="kds-image-container">
-                    <a href="${imgUrl}" target="_blank" title="Clic para ampliar foto de referencia">
-                        <img src="${imgUrl}" alt="Foto de referencia" loading="lazy">
-                        <span class="kds-image-badge">🔍 Foto de referencia</span>
-                    </a>
-                </div>
-            `;
-        }
-
-        // Botones de acción según estado
-        let nextActionHtml = `<div class="kds-status-line"><span>Estado actual</span><strong>${estado}</strong></div>`;
-        let actionButtons = '';
-
-        if (estado === 'Pendiente') {
-            actionButtons = `
-                <button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'En Proceso')" class="btn btn-warning w-100 kds-state-button">
-                    ▶ Iniciar Preparación
-                </button>
-            `;
-        } else if (estado === 'En Proceso') {
-            actionButtons = `
-                <button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'Listo')" class="btn btn-success w-100 kds-state-button">
-                    ✓ Marcar como Listo
-                </button>
-                <button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'Pendiente')" class="kds-btn-revert">
-                    ↩ Devolver a Pendiente
-                </button>
-            `;
-        } else if (estado === 'Listo') {
-            actionButtons = `
-                <button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'Entregado')" class="btn btn-primary w-100 kds-state-button" style="background: #2563eb; color: #fff;">
-                    📦 Marcar como Entregado
-                </button>
-                <button onclick="cambiarEstado('${encargo.codigo_seguimiento}', 'En Proceso')" class="kds-btn-revert">
-                    ↩ Regresar a Preparación
-                </button>
-            `;
-        }
-
-        const telefonoHtml = detalles.telefono 
-            ? `<a href="tel:${detalles.telefono}" class="kds-tel-link">📞 ${detalles.telefono}</a>` 
-            : '';
-
-        card.innerHTML = `
-            <div class="kds-card-header">
-                <span class="kds-invoice">#${encargo.numero_factura}</span>
-                <span class="kds-time">${encargo.hora || ''}</span>
-            </div>
-            <div class="kds-customer">
-                <div class="kds-customer-row">
-                    <strong>${detalles.nombre_cliente || 'Cliente'}</strong>
-                    ${telefonoHtml}
-                </div>
-                <div style="font-size: 0.85rem; color: var(--text-muted);">
-                    Para entregar: <span style="color: var(--danger); font-weight: 700;">${detalles.fecha_entrega || 'Sin fecha'}</span>
-                </div>
-            </div>
-            ${imagenHtml}
-            ${customCakeHtml}
-            ${notasHtml}
-            <div class="kds-products">
-                ${productosHtml || '<div class="kds-empty-products">Sin líneas de producto registradas</div>'}
-            </div>
-            <div class="kds-actions">
-                ${nextActionHtml}
-                <div class="kds-action-buttons">
-                    ${actionButtons}
-                </div>
-            </div>
-        `;
-        return card;
     }
 
     async function cambiarEstado(codigo, nuevoEstado) {
-        const index = encargos.findIndex(e => e.codigo_seguimiento === codigo);
-        if (index === -1) return;
-
-        encargos[index].encargo_detalles = encargos[index].encargo_detalles || {};
-        const estadoAnterior = encargos[index].encargo_detalles.estado || 'Pendiente';
-        encargos[index].encargo_detalles.estado = nuevoEstado;
-
-        // Mover la tarjeta visualmente al instante
+        const pedido = encargos.find(e => e.codigo_seguimiento === codigo);
+        if (!pedido || cambiosPendientes.has(codigo)) return;
+        const focoEnPedido = document.activeElement?.closest('.kds-card')?.dataset.code === codigo;
+        const columnaOrigen = document.activeElement?.closest('.kds-column-body');
+        cambiosPendientes.add(codigo);
+        revisionPedidos++;
         renderBoard();
-
+        mostrarSincronizacion('loading', 'Guardando cambio…');
         try {
             const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-            const response = await fetch(`/api/seguimiento/${codigo}/estado`, {
+            const data = await solicitarMonitor(`/api/seguimiento/${encodeURIComponent(codigo)}/estado`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -374,37 +312,42 @@
                 },
                 body: JSON.stringify({ estado: nuevoEstado })
             });
-
-            const data = await response.json();
-            if (!response.ok) {
-                showToast(data.error || 'Error al actualizar el estado', true);
-                // Revertir
-                encargos[index].encargo_detalles.estado = estadoAnterior;
-                renderBoard();
-            } else {
-                showToast(`Pedido #${encargos[index].numero_factura} movido a ${nuevoEstado}`);
-                // Si se entregó, retirarlo de la lista local
-                if (nuevoEstado === 'Entregado') {
-                    encargos.splice(index, 1);
-                    renderBoard();
-                }
+            if (data?.status !== 'success' || data.nuevo_estado !== nuevoEstado) {
+                throw new Error('El servidor no confirmó el cambio. Pulsa Actualizar para verificar.');
             }
+            const actual = encargos.find(e => e.codigo_seguimiento === codigo);
+            if (actual) actual.encargo_detalles.estado = nuevoEstado;
+            if (nuevoEstado === 'Entregado') encargos = encargos.filter(e => e.codigo_seguimiento !== codigo);
+            showToast(`Pedido #${pedido.numero_factura} movido a ${nuevoEstado}`);
+            mostrarSincronizacion('synced', 'Cambio guardado');
         } catch (error) {
-            console.error(error);
-            showToast('Error de conexión con el servidor', true);
-            encargos[index].encargo_detalles.estado = estadoAnterior;
+            const mensaje = error instanceof TypeError || error.name === 'AbortError' ? 'No se pudo confirmar el cambio. Pulsa Actualizar para verificar.' : error.message;
+            showToast(mensaje, true);
+            mostrarSincronizacion('error', mensaje);
+        } finally {
+            cambiosPendientes.delete(codigo);
+            revisionPedidos++;
             renderBoard();
+            const focoSigueEnPedido = document.activeElement?.closest('.kds-card')?.dataset.code === codigo;
+            if (focoEnPedido && (document.activeElement === columnaOrigen || focoSigueEnPedido)) {
+                const card = Array.from(document.querySelectorAll('.kds-card')).find(item => item.dataset.code === codigo);
+                (card?.querySelector('button:not(:disabled)') || columnaOrigen)?.focus();
+            }
         }
     }
 
     async function refrescarPedidos() {
+        if (sincronizando || cambiosPendientes.size) return;
+        sincronizando = true;
+        const revision = revisionPedidos;
+        mostrarSincronizacion('loading', 'Actualizando…');
         try {
-            const response = await fetch('/api/monitor/pedidos', {
+            const data = await solicitarMonitor('/api/monitor/pedidos', {
                 headers: { 'Accept': 'application/json' }
             });
-            if (!response.ok) return;
-            const data = await response.json();
-            const nuevosPedidos = data.encargos || [];
+            if (revision !== revisionPedidos || cambiosPendientes.size) return;
+            if (!pedidosValidos(data)) throw new Error('Respuesta inválida del servidor. Se conservan los últimos pedidos.');
+            const nuevosPedidos = data.encargos;
 
             // Si hay nuevos pedidos en pendientes, sonar alerta
             if (nuevosPedidos.length > totalAnterior) {
@@ -415,15 +358,14 @@
             encargos = nuevosPedidos;
             renderBoard();
 
-            const syncLabel = document.getElementById('sync-label');
-            if (syncLabel) {
-                const ahora = new Date();
-                syncLabel.textContent = `Actualizado ${ahora.getHours().toString().padStart(2, '0')}:${ahora.getMinutes().toString().padStart(2, '0')}:${ahora.getSeconds().toString().padStart(2, '0')}`;
-            }
+            mostrarSincronizacion('synced', `Actualizado ${new Date().toLocaleTimeString('es-NI')}`);
         } catch (error) {
-            console.warn('No se pudo sincronizar el monitor:', error);
-            const syncLabel = document.getElementById('sync-label');
-            if (syncLabel) syncLabel.textContent = 'Sin conexión';
+            if (revision === revisionPedidos && !cambiosPendientes.size) {
+                const mensaje = error instanceof TypeError || error.name === 'AbortError' ? 'Sin conexión. Se conservan los últimos pedidos. Pulsa Actualizar.' : error.message;
+                mostrarSincronizacion('error', mensaje);
+            }
+        } finally {
+            sincronizando = false;
         }
     }
 
@@ -445,3 +387,5 @@
     });
 </script>
 {% endblock %}
+
+{% block page_styles %}{{ super() }}<link rel="stylesheet" href="{{ css_url('pages/sales/monitor') }}">{% endblock %}

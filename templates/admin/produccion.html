@@ -1,4 +1,5 @@
 {% extends 'admin_base.html' %}
+{% block body_class %}page-produccion{% endblock %}
 
 {% block title %}Producción | Brajher's Cake{% endblock %}
 {% block page_title %}Producción Diaria{% endblock %}
@@ -63,21 +64,21 @@
 <!-- TAB: RECETAS -->
 <div id="recetas" class="tab-content">
     <div class="d-flex flex-between mb-3">
-        <h2 style="font-size: 1.15rem; font-weight: 700; font-family: 'Playfair Display', serif;">Fórmulas y Recetas</h2>
+        <h2 class="produccion-h2-text">Fórmulas y Recetas</h2>
         <button class="btn btn-primary" onclick="abrirModal('modal-receta')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Añadir Ingrediente
         </button>
     </div>
-    
-    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem;">
+
+    <div class="produccion-grid">
         {% for producto, ingredientes in recetas_agrupadas.items() %}
         <div class="card">
             <div class="card-header">
-                <h3 style="font-family: 'Inter', sans-serif;">{{ producto }}</h3>
+                <h3 class="produccion-h3-text">{{ producto }}</h3>
             </div>
             <div class="card-body">
-                <ul style="list-style: none; padding: 0; margin: 0;">
+                <ul class="produccion-ul-spacing">
                     {% for i in ingredientes %}
                     <li class="list-row">
                         <span class="list-row-label">{{ i.materia }}</span>
@@ -93,7 +94,7 @@
             </div>
         </div>
         {% else %}
-        <div style="grid-column: 1/-1;">
+        <div class="produccion-div-spacing">
             <div class="empty-state">
                 <div class="empty-state-icon">📋</div>
                 <p>No hay recetas definidas. Añade ingredientes a un producto para empezar.</p>
@@ -108,7 +109,7 @@
     <div class="modal-content">
         <h2>Registrar Producción Diaria</h2>
         <p class="subtitle">Ingresa la cantidad producida. Se descontará del stock automáticamente.</p>
-        
+
         <form id="form-lote">
             <div class="form-group">
                 <label class="form-label" for="lote_producto">Producto Elaborado</label>
@@ -118,18 +119,18 @@
                     <option value="{{ p.id }}">{{ p.nombre }}</option>
                     {% endfor %}
                 </select>
-                <small class="text-muted" style="display:block; margin-top:0.4rem; font-size:0.8rem;">Solo se pueden producir productos con receta definida.</small>
+                <small class="text-muted produccion-text-muted">Solo se pueden producir productos con receta definida.</small>
             </div>
             <div class="form-group">
                 <label class="form-label" for="lote_cantidad">Cantidad (Unidades/Piezas)</label>
                 <input type="number" id="lote_cantidad" class="form-input form-number" required min="1" step="1" placeholder="0">
             </div>
-            
+
             <div class="alert-box alert-info mt-3">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                 <span><strong>Importante:</strong> Al registrar este lote, el sistema automáticamente descontará del inventario todos los ingredientes necesarios según la receta.</span>
             </div>
-            
+
             <div class="modal-actions">
                 <button type="button" class="btn btn-outline" onclick="cerrarModal('modal-lote')">Cancelar</button>
                 <button type="submit" class="btn btn-primary">Horneado y Listo</button>
@@ -143,7 +144,7 @@
     <div class="modal-content">
         <h2>Añadir Ingrediente a Receta</h2>
         <p class="subtitle">Asigna materia prima para elaborar este producto.</p>
-        
+
         <form id="form-receta">
             <div class="form-group">
                 <label class="form-label" for="receta_producto">Producto (Pan/Pastel)</label>
@@ -167,7 +168,7 @@
                 <label class="form-label" for="receta_cantidad">Cantidad necesaria (por 1 unidad)</label>
                 <input type="number" id="receta_cantidad" class="form-input form-number" required min="0.0001" step="0.0001" placeholder="Ej: 0.05">
             </div>
-            
+
             <div class="modal-actions">
                 <button type="button" class="btn btn-outline" onclick="cerrarModal('modal-receta')">Cancelar</button>
                 <button type="submit" class="btn btn-primary">Guardar Ingrediente</button>
@@ -210,12 +211,12 @@
             });
             const data = await res.json();
             hideLoading();
-            if (res.ok) { 
-                showToast(data.mensaje); 
-                setTimeout(() => window.location.reload(), 1200); 
+            if (res.ok) {
+                showToast(data.mensaje);
+                setTimeout(() => window.location.reload(), 1200);
             }
-            else { 
-                showToast(data.error, true); 
+            else {
+                showToast(data.error, true);
             }
         } catch (err) {
             hideLoading();
@@ -253,9 +254,9 @@
             confirmText: 'Quitar',
             icon: '🗑️'
         });
-        
+
         if (!confirmed) return;
-        
+
         showLoading();
         try {
             const res = await fetch(`/admin/api/produccion/receta/${id}/delete`, { method: 'POST' });
@@ -269,3 +270,5 @@
     }
 </script>
 {% endblock %}
+
+{% block page_styles %}{{ super() }}<link rel="stylesheet" href="{{ css_url('pages/admin/produccion') }}">{% endblock %}

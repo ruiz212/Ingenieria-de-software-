@@ -1,12 +1,33 @@
+{% extends 'admin_base.html' %}
+{% block title %}Manual de uso · Brajher's Cake{% endblock %}
+{% block page_title %}Manual de uso{% endblock %}
+{% block content %}
+<section class="card">
+    <div class="card-header">
+        <h2>Reportes de Usuarios</h2>
+    </div>
+    <div class="card-body">
+        <p>Reportes de roles de la base de datos</p>
+        <table class="table">
+  <thead>
+    <tr>
+      <th scope="col">#</th>
+      <th scope="col">Name</th>
+      <th scope="col">Description</th>
+     
+    </tr>
+  </thead>
+  <tbody>
+   {% for r in roles %}
+    <tr>
+      <th scope="row">{{ r.ID }}</th>
+      <td>{{ r.Nombre }}</td>
+      <td>{{ r.descripcion }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    
-</body>
-</html>
+    </div>
+</section>
+{% endblock %}

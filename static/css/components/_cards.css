@@ -33,13 +33,17 @@
     box-shadow: var(--shadow-md), 0 0 0 1px rgba(212, 149, 43, 0.08);
     border-color: rgba(212, 149, 43, 0.18);
 }
-.card:hover::before { opacity: 1; }
+.card:hover::before {
+    opacity: 1;
+}
 
 /* ── Card with permanent accent ── */
 .card-accent {
     border-top: 3px solid var(--brand-dorado);
 }
-.card-accent::before { display: none; }
+.card-accent::before {
+    display: none;
+}
 
 /* ── Card Sections ── */
 .card-header {
@@ -112,7 +116,9 @@
     transform: translateY(-3px);
     box-shadow: var(--shadow-md);
 }
-.card-metric:hover::after { transform: scaleX(1); }
+.card-metric:hover::after {
+    transform: scaleX(1);
+}
 
 .card-metric-icon {
     width: 40px;
@@ -147,8 +153,12 @@
     align-items: center;
     gap: 0.2rem;
 }
-.card-metric-delta.up   { color: var(--success); }
-.card-metric-delta.down { color: var(--danger); }
+.card-metric-delta.up {
+    color: var(--success);
+}
+.card-metric-delta.down {
+    color: var(--danger);
+}
 
 /* ── Turno card ── */
 .turno-card {
@@ -190,7 +200,9 @@
     border-bottom: 1px solid var(--border-light);
     transition: background 0.15s, padding 0.15s;
 }
-.list-row:last-child { border-bottom: none; }
+.list-row:last-child {
+    border-bottom: none;
+}
 .list-row:hover {
     background: var(--surface-sunken);
     margin: 0 -1.5rem;
@@ -228,7 +240,9 @@
     font-weight: 800;
     flex-shrink: 0;
 }
-.rank:nth-child(1) { background: rgba(212,149,43,0.20); }
+.rank:nth-child(1) {
+    background: rgba(212,149,43,0.20);
+}
 
 /* ── Stat mini (legacy compat) ── */
 .stat-mini {
@@ -263,9 +277,23 @@
     border-radius: var(--radius-sm);
 }
 @keyframes skeleton-shimmer {
-    0%   { background-position: 200% center; }
-    100% { background-position: -200% center; }
+    0% {
+        background-position: 200% center;
+    }
+    100% {
+        background-position: -200% center;
+    }
 }
-.skeleton-text  { height: 1em; margin-bottom: 0.5rem; }
-.skeleton-title { height: 1.5em; width: 60%; margin-bottom: 0.75rem; }
-.skeleton-card  { height: 120px; border-radius: var(--radius-lg); }
+.skeleton-text {
+    height: 1em;
+    margin-bottom: 0.5rem;
+}
+.skeleton-title {
+    height: 1.5em;
+    width: 60%;
+    margin-bottom: 0.75rem;
+}
+.skeleton-card {
+    height: 120px;
+    border-radius: var(--radius-lg);
+}

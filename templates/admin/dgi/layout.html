@@ -1,7 +1,7 @@
 {% extends 'admin_base.html' %}
 {% block title %}DGI / Gestión tributaria | Brajher's Cake{% endblock %}
 {% block page_title %}DGI / Gestión tributaria{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/dgi.css', v='1.1') }}">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ css_url('pages/admin/dgi') }}">{% endblock %}
 {% block content %}
 <div class="dgi">
   <nav class="dgi-nav" aria-label="Gestión tributaria"><a href="{{ url_for('admin.dgi_dashboard') }}">Períodos y perfil</a><a href="{{ url_for('admin.fiscal') }}">Facturación y emisor</a><a href="{{ url_for('admin.contabilidad') }}">Contabilidad</a></nav>

@@ -14,6 +14,8 @@ Diseñado utilizando SCRUM.
 - SQL Server
 - HTML/CSS/JS (Vanilla)
 
+La organización de estilos, convenciones de clases, sistema de movimiento y comandos de compilación se explican en [docs/CSS.md](docs/CSS.md). Después de editar una fuente CSS, ejecutar `python scripts/build_css.py`; validar la entrega con `python scripts/build_css.py --check`.
+
 ## Documentación del Corte 4
 
 La entrega revisada conserva ocho módulos y desarrolla los contenidos RUP
@@ -77,6 +79,10 @@ Consulte [el manual y la demostración](docs/dgi/MANUAL.md),
 [la matriz normativa](docs/dgi/MATRIZ_NORMATIVA.md) y
 [el informe de validación](docs/dgi/ENTREGA.md).
 Dependencias de pruebas: `python -m pip install -r requirements-dev.txt`.
+
+## Correcciones de la auditoría
+
+Las correcciones de la auditoría del 17/10/2026, sus pruebas y las dos migraciones necesarias están documentadas en [el cierre de reparaciones](docs/REPARACIONES_AUDITORIA_2026-10-17.md). El entorno verificado utiliza Python 3.12 y `requirements.lock`; las pruebas requieren `requirements-dev.txt` y sólo admiten SQL con destino QA explícito.
 
 ## Distribución de Ramas y Estructuración de Versiones
 

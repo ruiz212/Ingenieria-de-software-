@@ -1,4 +1,5 @@
 {% extends 'admin_base.html' %}
+{% block body_class %}page-configuracion{% endblock %}
 
 {% block title %}Configuración | Brajher's Cake{% endblock %}
 {% block page_title %}Configuración{% endblock %}
@@ -8,7 +9,7 @@
     <p>Ajustes generales del negocio, seguridad y preferencias del sistema.</p>
 </div>
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+<div class="configuracion-grid">
 
     <!-- ========== DATOS DEL NEGOCIO ========== -->
     <div class="panel panel-accent-primary">
@@ -20,20 +21,20 @@
         </div>
         <div class="panel-body">
             <div class="form-group mb-3">
-                <label class="form-label" style="font-weight: 600;">Nombre del Negocio</label>
-                <div class="text-muted mb-1" style="font-size: 0.85rem;">Se mostrará en facturas y encabezados.</div>
+                <label class="form-label configuracion-form-label">Nombre del Negocio</label>
+                <div class="text-muted mb-1 configuracion-text-muted">Se mostrará en facturas y encabezados.</div>
                 <input type="text" class="form-input" id="cfg-nombre_negocio" value="{{ config.get('nombre_negocio', {}).get('valor', '') }}">
             </div>
-            
+
             <div class="form-group mb-3">
-                <label class="form-label" style="font-weight: 600;">Teléfono de Contacto</label>
-                <div class="text-muted mb-1" style="font-size: 0.85rem;">Número visible para los clientes.</div>
+                <label class="form-label configuracion-form-label">Teléfono de Contacto</label>
+                <div class="text-muted mb-1 configuracion-text-muted">Número visible para los clientes.</div>
                 <input type="text" class="form-input" id="cfg-telefono_negocio" value="{{ config.get('telefono_negocio', {}).get('valor', '') }}" placeholder="+505 8888-1234">
             </div>
-            
+
             <div class="form-group">
-                <label class="form-label" style="font-weight: 600;">Dirección</label>
-                <div class="text-muted mb-1" style="font-size: 0.85rem;">Ubicación física de la panadería.</div>
+                <label class="form-label configuracion-form-label">Dirección</label>
+                <div class="text-muted mb-1 configuracion-text-muted">Ubicación física de la panadería.</div>
                 <input type="text" class="form-input" id="cfg-direccion_negocio" value="{{ config.get('direccion_negocio', {}).get('valor', '') }}" placeholder="Barrio X, Calle Y">
             </div>
         </div>
@@ -49,27 +50,27 @@
         </div>
         <div class="panel-body">
             <div class="form-group mb-3">
-                <label class="form-label" style="font-weight: 600;">IVA (%)</label>
-                <div class="text-muted mb-1" style="font-size: 0.85rem;">Porcentaje de impuesto aplicado a las ventas.</div>
+                <label class="form-label configuracion-form-label">IVA (%)</label>
+                <div class="text-muted mb-1 configuracion-text-muted">Porcentaje de impuesto aplicado a las ventas.</div>
                 <input type="number" class="form-input form-number" id="cfg-iva_porcentaje" value="{{ config.get('iva_porcentaje', {}).get('valor', '15') }}" min="0" max="100" step="0.5">
             </div>
-            
+
             <div class="form-group mb-3">
-                <label class="form-label" style="font-weight: 600;">Símbolo de Moneda</label>
-                <div class="text-muted mb-1" style="font-size: 0.85rem;">Se muestra junto a los precios (ej: C$, $, L).</div>
-                <input type="text" class="form-input" id="cfg-moneda_simbolo" value="{{ config.get('moneda_simbolo', {}).get('valor', 'C$') }}" style="width: 80px; text-align: center;">
+                <label class="form-label configuracion-form-label">Símbolo de Moneda</label>
+                <div class="text-muted mb-1 configuracion-text-muted">Se muestra junto a los precios (ej: C$, $, L).</div>
+                <input type="text" class="form-input configuracion-cfg-moneda-simbolo" id="cfg-moneda_simbolo" value="{{ config.get('moneda_simbolo', {}).get('valor', 'C$') }}">
             </div>
 
             <div class="form-group mb-3 exchange-rate-field">
-                <label class="form-label" for="cfg-tipo_cambio_usd" style="font-weight: 600;">Tipo de cambio USD</label>
-                <div class="text-muted mb-1" style="font-size: 0.85rem;">Córdobas por USD. Actualice este valor según el BCN antes de cobrar dólares.</div>
+                <label class="form-label configuracion-form-label" for="cfg-tipo_cambio_usd">Tipo de cambio USD</label>
+                <div class="text-muted mb-1 configuracion-text-muted">Córdobas por USD. Actualice este valor según el BCN antes de cobrar dólares.</div>
                 <div class="input-with-prefix"><span>C$</span><input type="number" class="form-input" id="cfg-tipo_cambio_usd" value="{{ config.get('tipo_cambio_usd', {}).get('valor', '36.6243') }}" min="0.01" max="999999" step="0.0001" required></div>
                 <small class="exchange-rate-source">Referencia BCN: 36.6243 NIO/USD (13/10/2026)</small>
             </div>
-            
+
             <div class="form-group">
-                <label class="form-label" style="font-weight: 600;">Máx. líneas por factura</label>
-                <div class="text-muted mb-1" style="font-size: 0.85rem;">Límite de productos diferentes en una sola venta.</div>
+                <label class="form-label configuracion-form-label">Máx. líneas por factura</label>
+                <div class="text-muted mb-1 configuracion-text-muted">Límite de productos diferentes en una sola venta.</div>
                 <input type="number" class="form-input form-number" id="cfg-max_items_factura" value="{{ config.get('max_items_factura', {}).get('valor', '50') }}" min="1" max="200">
             </div>
         </div>
@@ -86,19 +87,19 @@
         <div class="panel-body">
             <div class="flex-between mb-4">
                 <div>
-                    <label class="form-label" style="font-weight: 600; margin-bottom: 0;">TOTP Obligatorio</label>
-                    <div class="text-muted" style="font-size: 0.85rem;">Exigir verificación en dos pasos a todos los empleados.</div>
+                    <label class="form-label configuracion-form-label-2">TOTP Obligatorio</label>
+                    <div class="text-muted configuracion-text-muted">Exigir verificación en dos pasos a todos los empleados.</div>
                 </div>
                 <label class="toggle-switch">
                     <input type="checkbox" id="cfg-totp_obligatorio" {% if config.get('totp_obligatorio', {}).get('valor', '0') == '1' %}checked{% endif %}>
                     <span class="toggle-slider"></span>
                 </label>
             </div>
-            
+
             <div class="flex-between">
                 <div>
-                    <label class="form-label" style="font-weight: 600; margin-bottom: 0;">Permitir Invitados</label>
-                    <div class="text-muted" style="font-size: 0.85rem;">Permitir que los clientes usen el POS sin crear cuenta.</div>
+                    <label class="form-label configuracion-form-label-2">Permitir Invitados</label>
+                    <div class="text-muted configuracion-text-muted">Permitir que los clientes usen el POS sin crear cuenta.</div>
                 </div>
                 <label class="toggle-switch">
                     <input type="checkbox" id="cfg-permitir_invitados" {% if config.get('permitir_invitados', {}).get('valor', '1') == '1' %}checked{% endif %}>
@@ -134,9 +135,9 @@
                     <tr id="totp-row-{{ u.id }}">
                         <td>
                             <span class="cell-bold">{{ u.nombre }}</span>
-                            <div class="cell-muted" style="font-size: 0.85rem;">@{{ u.username }}</div>
+                            <div class="cell-muted configuracion-text-muted">@{{ u.username }}</div>
                         </td>
-                        <td><span class="badge badge-neutral fw-600" style="font-family: monospace;">{{ u.rol }}</span></td>
+                        <td><span class="badge badge-neutral fw-600 configuracion-badge-neutral">{{ u.rol }}</span></td>
                         <td>
                             {% if u.totp_enabled %}
                                 <span class="badge badge-success badge-live">Activado</span>
@@ -148,7 +149,7 @@
                             {% if u.totp_enabled %}
                                 <button class="btn btn-outline btn-sm" onclick="resetTOTP({{ u.id }}, '{{ u.nombre }}')">Resetear TOTP</button>
                             {% else %}
-                                <span class="cell-muted" style="font-size: 0.8rem;">—</span>
+                                <span class="cell-muted configuracion-cell-muted">—</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -159,8 +160,60 @@
     </div>
 </div>
 
+<!-- Alertas SMTP y Bitácora de Errores (SuperAdmin) -->
+{% if current_user.rol_nombre == 'SuperAdmin' %}
+<div class="panel panel-full panel-accent-warning mb-4" id="panel-alertas-smtp">
+    <div class="panel-header flex-between">
+        <h3>
+            Alertas de Seguridad SMTP y Bitácora Técnica (seguridad.BitacoraErrores)
+        </h3>
+        <div>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-cargar-bitacora-errores" onclick="cargarBitacoraErrores()">🔄 Actualizar Bitácora</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-probar-smtp" onclick="probarAlertaSMTP()">📧 Enviar Prueba SMTP</button>
+        </div>
+    </div>
+    <div class="panel-body">
+        <div class="configuracion-grid mb-3">
+            <div class="form-group">
+                <label class="form-label configuracion-form-label" for="cfg-smtp_destinatario_alertas">Destinatario(s) de Alertas SMTP</label>
+                <div class="text-muted mb-1 configuracion-text-muted">Correos separados por coma para notificaciones críticas de BD y seguridad.</div>
+                <input type="text" class="form-input" id="cfg-smtp_destinatario_alertas" value="{{ config.get('smtp_destinatario_alertas', {}).get('valor', '') }}" placeholder="seguridad@brajhers.local">
+            </div>
+            <div class="form-group">
+                <label class="form-label configuracion-form-label" for="cfg-smtp_bloqueo_intentos_max">Umbral de Bloqueo (Intentos)</label>
+                <div class="text-muted mb-1 configuracion-text-muted">Intentos fallidos antes de bloquear temporalmente cuenta/IP.</div>
+                <input type="number" class="form-input form-number" id="cfg-smtp_bloqueo_intentos_max" value="{{ config.get('smtp_bloqueo_intentos_max', {}).get('valor', '5') }}" min="3" max="20">
+            </div>
+            <div class="form-group">
+                <label class="form-label configuracion-form-label" for="cfg-smtp_bloqueo_minutos">Duración de Bloqueo (Minutos)</label>
+                <div class="text-muted mb-1 configuracion-text-muted">Tiempo de enfriamiento automático en [seguridad].[BloqueosCuenta].</div>
+                <input type="number" class="form-input form-number" id="cfg-smtp_bloqueo_minutos" value="{{ config.get('smtp_bloqueo_minutos', {}).get('valor', '15') }}" min="1" max="1440">
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="data-table" id="tabla-bitacora-errores">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Fecha/Hora</th>
+                        <th>Severidad</th>
+                        <th>Origen / SP</th>
+                        <th>Usuario / Rol</th>
+                        <th>Mensaje</th>
+                        <th>SMTP</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-bitacora-errores">
+                    <tr><td colspan="7" class="text-muted">Pulse «Actualizar Bitácora» para consultar los eventos recientes.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Save bar -->
-<div class="card p-3 mb-4 flex-between" style="background: var(--surface-hover); border-color: var(--primary-color);">
+<div class="card p-3 mb-4 flex-between configuracion-p-3">
     <p class="mb-0 text-muted">Los cambios no se guardan automáticamente.</p>
     <button class="btn btn-primary" onclick="guardarConfiguracion()">💾 Guardar Cambios</button>
 </div>
@@ -210,7 +263,7 @@
             confirmText: 'Resetear',
             icon: '🔐'
         });
-        
+
         if (!confirmed) return;
 
         showLoading();
@@ -229,7 +282,7 @@
                     const statusCell = row.cells[2];
                     const actionCell = row.cells[3];
                     statusCell.innerHTML = '<span class="badge badge-neutral">No configurado</span>';
-                    actionCell.innerHTML = '<span class="cell-muted" style="font-size: 0.8rem;">—</span>';
+                    actionCell.innerHTML = '<span class="cell-muted configuracion-cell-muted">—</span>';
                 }
             } else {
                 showToast(data.error || 'Desconocido', true);
@@ -239,5 +292,67 @@
             showToast('Error de red', true);
         }
     }
+    async function probarAlertaSMTP() {
+        showLoading();
+        try {
+            const res = await fetch('/admin/api/seguridad/smtp-test', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+                body: JSON.stringify({mensaje: 'Prueba manual de alertas SMTP desde panel de configuración SuperAdmin'})
+            });
+            const data = await res.json();
+            hideLoading();
+            if (data.success) {
+                showToast('Prueba SMTP registrada (ID #' + (data.resultado?.error_id || '') + ')');
+                cargarBitacoraErrores();
+            } else {
+                showToast(data.error || 'No se pudo procesar la prueba SMTP', true);
+            }
+        } catch (err) {
+            hideLoading();
+            showToast('Error de red al probar SMTP', true);
+        }
+    }
+
+    async function cargarBitacoraErrores() {
+        const tbody = document.getElementById('tbody-bitacora-errores');
+        if (!tbody) return;
+        try {
+            const res = await fetch('/admin/api/seguridad/bitacora-errores?top=25');
+            const data = await res.json();
+            if (!data.success || !Array.isArray(data.errores) || data.errores.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-muted">Sin eventos registrados.</td></tr>';
+                return;
+            }
+            const rows = document.createDocumentFragment();
+            data.errores.forEach(e => {
+                const row = document.createElement('tr');
+                const values = [
+                    `#${e.id}`, e.fecha_hora || '—', e.severidad || '',
+                    e.procedimiento || e.origen || '—',
+                    `${e.usuario || 'Anónimo'} (${e.rol || 'N/A'})`,
+                    e.mensaje || '', e.notificado_smtp ? '✅ Enviado' : '⏳ Pendiente'
+                ];
+                values.forEach((value, index) => {
+                    const cell = document.createElement('td');
+                    if (index === 2) {
+                        const badge = document.createElement('span');
+                        badge.className = `badge ${e.severidad === 'CRITICAL' ? 'badge-danger' : 'badge-neutral'}`;
+                        badge.textContent = value;
+                        cell.append(badge);
+                    } else {
+                        cell.textContent = value;
+                    }
+                    row.append(cell);
+                });
+                rows.append(row);
+            });
+            tbody.replaceChildren(rows);
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-muted">Error al consultar bitácora.</td></tr>';
+        }
+    }
 </script>
 {% endblock %}
+
+{% block page_styles %}{{ super() }}<link rel="stylesheet" href="{{ css_url('pages/admin/configuracion') }}">{% endblock %}

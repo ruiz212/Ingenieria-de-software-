@@ -3,11 +3,13 @@
 
 from flask import render_template, request, jsonify
 from app.kiosco import kiosco_bp
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp
 from app.extensions import csrf
 from flask_login import login_required
 from app.auth.decorators import roles_required
 from datetime import datetime, timedelta
+from app.services.business_time import business_now
+from app.services.hr_calculations import can_mark_exit
 import logging
 
 # Importamos el servicio de reconocimiento facial (se inicializa al cargar el módulo)
@@ -46,9 +48,11 @@ def registrar_rostro():
         import json
         descriptor_str = json.dumps(descriptor)
         
-        cursor.execute(
-            "UPDATE Empleados SET FaceDescriptor = ? WHERE ID = ?",
-            descriptor_str, int(empleado_id)
+        execute_sp(
+            cursor,
+            'rrhh.sp_ActualizarDescriptorFacialEmpleado',
+            (descriptor_str, int(empleado_id)),
+            fallback_sql="UPDATE Empleados SET FaceDescriptor = ? WHERE ID = ?",
         )
         conn.commit()
         
@@ -66,7 +70,12 @@ def registrar_rostro():
 @kiosco_bp.route('/api/kiosco/reconocer', methods=['POST'])
 def reconocer():
     """Recibe un frame base64 del kiosco, busca coincidencias y marca asistencia automáticamente."""
-    datos = request.json
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        return jsonify(status='error', message='Datos inválidos'), 400
+    accion = datos.get('accion', 'entrada')
+    if accion not in ('entrada', 'salida'):
+        return jsonify(status='error', message='Acción inválida'), 400
     base64_img = datos.get('image')
     
     if not base64_img:
@@ -77,96 +86,102 @@ def reconocer():
     
     if resultado['status'] == 'match':
         # Hay coincidencia, procedemos a marcar asistencia
-        return _procesar_marcaje(resultado['empleado_id'])
+        return _procesar_marcaje(resultado['empleado_id'], accion)
     
     # Devuelve 'no_face' o 'unknown' con status 200 para que el frontend siga iterando sin errores HTTP
     return jsonify(resultado), 200
 
-def _procesar_marcaje(empleado_id):
-    """Lógica interna para registrar entrada/salida de un empleado."""
-    fecha = datetime.now().strftime('%Y-%m-%d')
-    hora = datetime.now().strftime('%H:%M:%S')
-    
+def _procesar_marcaje(empleado_id, accion='entrada'):
+    """Operaciones idempotentes; una nueva lectura nunca alterna entrada/salida."""
+    if accion not in ('entrada', 'salida'):
+        return jsonify(status='error', message='Acción inválida'), 400
+    ahora = business_now()
+    fecha, hora = ahora.date().isoformat(), ahora.strftime('%H:%M:%S')
     conn = get_db_connection()
-    cursor = conn.cursor()
     try:
-        # Verificar que el empleado existe y está activo
-        cursor.execute(
-            "SELECT ID, NombreCompleto FROM Empleados "
-            "WHERE ID = ? AND EstadoEmpleado = 'Activo'", int(empleado_id)
+        cursor = conn.cursor()
+        # Serializar las operaciones por empleado, incluso cuando aún no hay marca.
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerEmpleadoActivoPorIDBloqueo',
+            (int(empleado_id),),
+            fallback_sql=(
+                "SELECT ID, NombreCompleto FROM Empleados WITH (UPDLOCK, HOLDLOCK) "
+                "WHERE ID = ? AND EstadoEmpleado = 'Activo'"
+            ),
         )
         empleado = cursor.fetchone()
         if not empleado:
-            return jsonify({'status': 'error', 'message': 'Empleado no encontrado o inactivo'}), 404
-        
+            return jsonify(status='error', message='Empleado no encontrado o inactivo'), 404
         nombre = empleado.NombreCompleto
-        
-        # Obtener turno activo para verificar tolerancia
-        cursor.execute(
-            "SELECT TOP 1 ID, HoraEntrada, ToleranciaMinutos "
-            "FROM TurnosLaborales WHERE Activo = 1"
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerTurnoLaboralActivoDefecto',
+            fallback_sql="SELECT TOP 1 ID, HoraEntrada, ToleranciaMinutos FROM TurnosLaborales WHERE Activo = 1",
         )
         turno = cursor.fetchone()
         turno_id = turno.ID if turno else 1
-        
-        # Verificar registro de asistencia de hoy
-        cursor.execute(
-            "SELECT ID, HoraEntrada, HoraSalida FROM Asistencia "
-            "WHERE EmpleadoID = ? AND Fecha = ?", int(empleado_id), fecha
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerAsistenciaPorEmpleadoFechaBloqueo',
+            (int(empleado_id), fecha),
+            fallback_sql=(
+                "SELECT ID, HoraEntrada, HoraSalida FROM Asistencia WITH (UPDLOCK, HOLDLOCK) "
+                "WHERE EmpleadoID = ? AND Fecha = ?"
+            ),
         )
         asistencia = cursor.fetchone()
-        
-        if not asistencia:
-            # ═══ PRIMERA MARCA DEL DÍA → ENTRADA ═══
-            estado_entrada = 'A Tiempo'
+        if accion == 'entrada':
+            if asistencia and asistencia.HoraEntrada:
+                return jsonify(status='success', tipo='entrada', empleado=nombre, repetido=True,
+                               mensaje=f'{nombre}, tu entrada ya está registrada hoy.')
+            if asistencia and asistencia.HoraSalida:
+                return jsonify(status='error', message='Registro de asistencia incompleto; solicita revisión.'), 409
+            estado = 'A Tiempo'
             if turno and turno.HoraEntrada:
-                hora_limite = (
-                    datetime.combine(datetime.today(), turno.HoraEntrada) +
-                    timedelta(minutes=turno.ToleranciaMinutos or 0)
-                ).time()
-                if datetime.now().time() > hora_limite:
-                    estado_entrada = 'Llegada Tardia'
-            
-            cursor.execute("""
-                INSERT INTO Asistencia (EmpleadoID, TurnoID, Fecha, HoraEntrada, EstadoEntrada, RegistradoPor)
-                VALUES (?, ?, ?, ?, ?, NULL)
-            """, int(empleado_id), turno_id, fecha, hora, estado_entrada)
-            
+                limite = datetime.combine(ahora.date(), turno.HoraEntrada) + timedelta(minutes=turno.ToleranciaMinutos or 0)
+                if ahora > limite:
+                    estado = 'Llegada Tardia'
+            if asistencia:
+                execute_sp(
+                    cursor,
+                    'rrhh.sp_ActualizarEntradaAsistenciaKiosco',
+                    (hora, estado, turno_id, asistencia.ID),
+                    fallback_sql="UPDATE Asistencia SET HoraEntrada = ?, EstadoEntrada = ?, TurnoID = ? WHERE ID = ?",
+                )
+            else:
+                execute_sp(
+                    cursor,
+                    'rrhh.sp_InsertarEntradaAsistenciaKiosco',
+                    (int(empleado_id), turno_id, fecha, hora, estado),
+                    fallback_sql=(
+                        "INSERT INTO Asistencia (EmpleadoID, TurnoID, Fecha, HoraEntrada, EstadoEntrada, RegistradoPor) "
+                        "VALUES (?, ?, ?, ?, ?, NULL)"
+                    ),
+                )
             conn.commit()
-            return jsonify({
-                'status': 'success',
-                'tipo': 'entrada',
-                'empleado': nombre,
-                'mensaje': f'¡Bienvenido {nombre}! Entrada registrada a las {hora}.',
-                'estado': estado_entrada
-            })
-        
-        elif asistencia.HoraEntrada and not asistencia.HoraSalida:
-            # ═══ YA TIENE ENTRADA, NO SALIDA → SALIDA ═══
-            cursor.execute(
-                "UPDATE Asistencia SET HoraSalida = ? WHERE ID = ?",
-                hora, asistencia.ID
-            )
-            conn.commit()
-            return jsonify({
-                'status': 'success',
-                'tipo': 'salida',
-                'empleado': nombre,
-                'mensaje': f'¡Hasta mañana {nombre}! Salida registrada a las {hora}.'
-            })
-        
-        else:
-            # ═══ YA TIENE ENTRADA Y SALIDA → JORNADA COMPLETADA ═══
-            return jsonify({
-                'status': 'completado',
-                'empleado': nombre,
-                'mensaje': f'{nombre}, ya completaste tu jornada hoy.'
-            })
-    
-    except Exception as e:
+            return jsonify(status='success', tipo='entrada', empleado=nombre, estado=estado,
+                           mensaje=f'¡Bienvenido {nombre}! Entrada registrada a las {hora}.')
+        if not asistencia or not asistencia.HoraEntrada:
+            return jsonify(status='error', message='Debes registrar entrada antes de la salida.'), 409
+        if asistencia.HoraSalida:
+            return jsonify(status='success', tipo='salida', empleado=nombre, repetido=True,
+                           mensaje=f'{nombre}, tu salida ya está registrada hoy.')
+        if not can_mark_exit(asistencia.HoraEntrada, ahora):
+            return jsonify(status='error', message='Espera al menos un minuto desde la entrada para marcar salida.'), 409
+        execute_sp(
+            cursor,
+            'rrhh.sp_ActualizarSalidaAsistenciaKiosco',
+            (hora, asistencia.ID),
+            fallback_sql="UPDATE Asistencia SET HoraSalida = ? WHERE ID = ? AND HoraSalida IS NULL",
+        )
+        conn.commit()
+        return jsonify(status='success', tipo='salida', empleado=nombre,
+                       mensaje=f'¡Hasta mañana {nombre}! Salida registrada a las {hora}.')
+    except Exception:
         conn.rollback()
-        logging.error(f"Error en kiosco marcaje: {e}")
-        return jsonify({'status': 'error', 'message': 'Error interno del servidor'}), 500
+        logging.exception('Error en kiosco marcaje')
+        return jsonify(status='error', message='Error interno del servidor'), 500
     finally:
         conn.close()
 
@@ -175,8 +190,10 @@ def _procesar_marcaje(empleado_id):
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def marcar_asistencia():
-    datos = request.json
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        return jsonify(error='Datos inválidos'), 400
     empleado_id = datos.get('empleado_id')
     if not empleado_id:
         return jsonify({'error': 'Falta el ID del empleado'}), 400
-    return _procesar_marcaje(empleado_id)
+    return _procesar_marcaje(empleado_id, datos.get('accion', 'entrada'))

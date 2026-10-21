@@ -134,6 +134,67 @@ def test_unbalanced_journal_blocks(snapshot):
     assert 'PARTIDA_DOBLE' in codes(analyze(snapshot))
 
 
+@pytest.mark.parametrize('amounts', [
+    [('10', '10')],
+    [('0', '0'), ('0', '0')],
+    [('10', '10'), ('10', '10')],
+    [('10', '0'), ('0', '10'), ('0', '0')],
+    [('-10', '0'), ('0', '-10')],
+    [],
+])
+def test_structurally_invalid_balanced_journal_blocks_even_with_pending_profile(snapshot, amounts):
+    snapshot.update(perfil={}, ventas=[], compras=[])
+    snapshot['asientos'][0]['detalles'] = [dict(cuenta=f'C-{i}', nombre='Sintética', clase='Activo',
+        debe=debit, haber=credit) for i, (debit, credit) in enumerate(amounts)]
+    before = copy.deepcopy(snapshot)
+    result = analyze(snapshot)
+    finding = next((f for f in result['hallazgos'] if f['codigo'] == 'PARTIDA_DOBLE'), None)
+    assert finding is not None
+    assert finding['severidad'] == 'ERROR_BLOQUEANTE' and finding['origen_id'] == 1
+    assert not result['datos_consistentes']
+    assert result['pendientes_configuracion'] == 1
+    assert result == analyze(snapshot) and snapshot == before
+
+
+def test_journal_validation_preserves_exact_decimal_precision(snapshot):
+    snapshot.update(perfil={}, ventas=[], compras=[])
+    snapshot['asientos'][0]['detalles'] = [
+        dict(cuenta='A', nombre='Caja', clase='Activo', debe='0.00001', haber='0'),
+        dict(cuenta='B', nombre='Pasivo', clase='Pasivo', debe='0', haber='0.00001')]
+    assert analyze(snapshot)['datos_consistentes']
+    snapshot['asientos'][0]['detalles'][1]['haber'] = '0.00002'
+    assert 'PARTIDA_DOBLE' in codes(analyze(snapshot))
+
+
+def test_review_from_engine_accepting_invalid_journals_must_be_regenerated():
+    from app.services import dgi_repository as repository
+
+    class EmptyPeriodCursor:
+        def __init__(self):
+            self.invalidated = False
+
+        def execute(self, sql, *params):
+            self.description, self.result = [], []
+            if 'SELECT ID,Desde,Hasta,Estado FROM DGI_Periodos' in sql:
+                self.description = [(name,) for name in ('ID', 'Desde', 'Hasta', 'Estado')]
+                self.result = [(1, date(2026, 10, 1), date(2026, 10, 31), 'Abierto')]
+            elif "UPDATE DGI_Revisiones SET Estado='OBSOLETO'" in sql:
+                self.invalidated = True
+            return self
+
+        def fetchall(self):
+            return self.result
+
+    cursor = EmptyPeriodCursor()
+    period = {'Desde': date(2026, 10, 1), 'Hasta': date(2026, 10, 31)}
+    source = repository.snapshot(cursor, period, 'Diagnóstico interno')
+    review = dict(ID=8, PeriodoID=1, Obligacion='Diagnóstico interno', Estado='EN_REVISION',
+        Motor='dgi-interno-1.1', Huella=fingerprint(source))
+    with pytest.raises(repository.DGIStale):
+        repository.assert_fresh(cursor, review, 9)
+    assert cursor.invalidated
+
+
 def test_draft_journal_is_not_counted(snapshot):
     snapshot['asientos'][0]['estado'] = 'Borrador'
     result = analyze(snapshot)

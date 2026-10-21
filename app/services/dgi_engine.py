@@ -4,8 +4,9 @@ import hashlib
 import json
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from app.services.accounting_validation import validate_double_entry
 
-ENGINE_VERSION = 'dgi-interno-1.1'
+ENGINE_VERSION = 'dgi-interno-1.2'
 NOTICE = 'SIMULACIÓN ACADÉMICA — NO VÁLIDA PARA PRESENTACIÓN ANTE LA DGI'
 BLOCK = 'ERROR_BLOQUEANTE'
 WARN = 'ADVERTENCIA'
@@ -235,11 +236,14 @@ def analyze(snapshot):
             add('SIN_CONTABILIDAD', 'El asiento tiene un estado desconocido.', 'Revise el registro contable.', 'asiento', row['id'])
             continue
         try:
-            debit = sum((money(d['debe']) for d in row['detalles']), Decimal('0'))
-            credit = sum((money(d['haber']) for d in row['detalles']), Decimal('0'))
-            if not row['detalles'] or debit != credit or any(
-                    min(money(d['debe']), money(d['haber'])) < 0 for d in row['detalles']):
-                add('PARTIDA_DOBLE', f'Debe {debit}; Haber {credit}.', 'Revise y corrija mediante ajuste o reversión.', 'asiento', row['id'])
+            amounts = [(money(d['debe']), money(d['haber'])) for d in row['detalles']]
+            debit = sum((value for value, _ in amounts), Decimal('0'))
+            credit = sum((value for _, value in amounts), Decimal('0'))
+            try:
+                validate_double_entry(amounts)
+            except ValueError as error:
+                add('PARTIDA_DOBLE', f'{error} Debe {debit}; Haber {credit}.',
+                    'Revise y corrija mediante ajuste o reversión.', 'asiento', row['id'])
             totals['ingresos_contables'] += sum((money(d['haber']) - money(d['debe'])
                 for d in row['detalles'] if d['clase'] == 'Ingreso'), Decimal('0'))
             posted += 1

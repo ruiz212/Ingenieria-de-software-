@@ -51,7 +51,9 @@
     letter-spacing: -0.02em;
 }
 
-.mobile-menu-btn { display: none; }
+.mobile-menu-btn {
+    display: none;
+}
 
 .admin-nav-links {
     display: flex;
@@ -76,7 +78,7 @@
     font-weight: 600;
     font-size: 0.85rem;
     border-radius: var(--radius-md);
-    transition: all var(--transition-fast);
+    transition: var(--transition-interactive, background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease);
     position: relative;
     white-space: nowrap;
 }
@@ -175,8 +177,14 @@
 }
 
 @keyframes dropIn {
-    from { opacity: 0; transform: translateY(-6px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .nav-dropdown-item {
@@ -188,7 +196,7 @@
     color: var(--text-muted);
     font-weight: 600;
     font-size: 0.85rem;
-    transition: all var(--transition-fast);
+    transition: var(--transition-interactive, background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease);
     border-radius: var(--radius-sm);
 }
 

@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import cv2
 import os
-from app.db import get_db_connection
+from app.db import get_db_connection, execute_sp
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +46,13 @@ class FaceRecognitionService:
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute(
-                "SELECT ID, FaceDescriptor FROM Empleados "
-                "WHERE EstadoEmpleado = 'Activo' AND FaceDescriptor IS NOT NULL"
+            execute_sp(
+                cursor,
+                'rrhh.sp_ObtenerDescriptoresFacialesKiosco',
+                fallback_sql=(
+                    "SELECT ID, FaceDescriptor FROM Empleados "
+                    "WHERE EstadoEmpleado = 'Activo' AND FaceDescriptor IS NOT NULL"
+                ),
             )
             count = 0
             for row in cursor.fetchall():

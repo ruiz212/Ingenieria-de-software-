@@ -1,0 +1,108 @@
+/* ==========================================================================
+   CONFIRMACIÓN DE REGISTRO EXITOSO — Brajher's Cake / Panadería Amada
+   Alineado con la estética editorial cálida del acceso principal.
+   ========================================================================== */
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-body, #f7f1e7);
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    color: var(--text-main, #251913);
+}
+
+.success-wrapper {
+    width: 100%;
+    max-width: 500px;
+    padding: 2rem;
+}
+
+.success-card {
+    background: var(--surface, #fffaf3);
+    border: 1px solid var(--border, rgba(93, 62, 46, 0.14));
+    border-radius: 24px;
+    padding: 2.5rem;
+    box-shadow: 0 24px 60px rgba(45, 26, 18, 0.08);
+    text-align: center;
+    animation: ui-enter var(--motion-enter, 260ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+.success-icon {
+    font-size: 3.5rem;
+    margin-bottom: 1rem;
+    display: inline-block;
+}
+
+.success-card h1 {
+    font-family: 'Fraunces', 'Outfit', Georgia, serif;
+    font-size: 1.9rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--success, #2d6a4f);
+}
+
+.success-card p {
+    color: var(--text-secondary, #5f4c42);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+}
+
+.qr-box {
+    background: #ffffff;
+    padding: 1.5rem;
+    border-radius: 16px;
+    border: 1px solid var(--border, #e2d5c4);
+    display: inline-block;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.qr-box img {
+    max-width: 200px;
+    height: auto;
+    display: block;
+}
+
+.secret-code {
+    background: var(--surface-sunken, #f3ece2);
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--primary, #6b3a2a);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    margin-bottom: 2rem;
+    display: inline-block;
+    border: 1px dashed var(--border-strong, #cbb89f);
+}
+
+.btn-primary {
+    background: var(--primary, #6b3a2a);
+    color: #fffaf3;
+    border: 1px solid var(--primary, #6b3a2a);
+    padding: 0.95rem 1.5rem;
+    border-radius: 999px;
+    font-size: 0.98rem;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    transition: var(--transition-interactive);
+    text-decoration: none;
+    display: inline-block;
+    box-sizing: border-box;
+}
+
+.btn-primary:hover {
+    background: var(--primary-hover, #4e2a1e);
+    transform: translate3d(0, -1px, 0);
+}
+
+.page-registro-exitoso .registro-exitoso-p-text {
+    font-size: 0.85rem;
+    color: var(--text-muted, #6f5b50);
+    margin-bottom: 0.5rem;
+}

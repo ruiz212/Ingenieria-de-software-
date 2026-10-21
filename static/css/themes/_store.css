@@ -1,0 +1,47 @@
+@media screen {
+    /* Customer shop: keep the existing products, prices, filters and cart. */
+    .tienda-body {
+        --ink-muted: #735b4d;
+        --terracotta: #6b3a2a;
+        --terracotta-dark: #4e2a1e;
+    }
+    .tienda-body .showcase-grid {
+        border-radius: 32px;
+    }
+    .tienda-body .showcase-stamp-card,
+    .tienda-body .atelier-banner,
+    .tienda-body .modal-content {
+        border-radius: 24px;
+    }
+    .tienda-body .store-product-card {
+        border-radius: 24px !important;
+        box-shadow: 0 6px 24px rgb(78 42 30 / .045) !important;
+    }
+    .tienda-body .store-product-card .product-visual {
+        width: calc(100% - 20px) !important;
+        margin: 10px 10px 0;
+        border-radius: 18px;
+        border-bottom: 0;
+    }
+    .tienda-body .filter-btn,
+    .tienda-body .btn-atelier-primary,
+    .tienda-body .btn-atelier-outline,
+    .tienda-body #btn-realizar-pedido,
+    .tienda-body .btn-add,
+    .tienda-body .floating-cart-btn {
+        border-radius: 999px;
+        min-height: 44px;
+    }
+    .tienda-body .header-search-input,
+    .tienda-body .store-search-input,
+    .tienda-body .tracking-input {
+        border-radius: 16px;
+    }
+    .tienda-body .account-chip,
+    .tienda-body .cart-toggle {
+        border-radius: 999px;
+    }
+    .tienda-body .floating-cart-bar {
+        border-radius: 24px;
+    }
+}

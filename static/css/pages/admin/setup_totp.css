@@ -1,0 +1,33 @@
+
+
+.page-setup-totp .setup-totp-alert {
+    background: var(--danger-bg);
+    color: var(--danger);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+}
+
+.page-setup-totp .setup-totp-panel-body {
+    text-align: center;
+}
+
+.page-setup-totp .setup-totp-img-spacing {
+    max-width: 200px;
+}
+
+.page-setup-totp .setup-totp-p-text {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.page-setup-totp .setup-totp-p-spacing {
+    margin-bottom: 1rem;
+}
+
+.page-setup-totp .setup-totp-btn-primary {
+    margin-top: 0.5rem;
+    padding-left: 2rem;
+    padding-right: 2rem;
+}

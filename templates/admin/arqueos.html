@@ -1,4 +1,5 @@
 {% extends 'admin_base.html' %}
+{% block body_class %}page-arqueos{% endblock %}
 
 {% block title %}Arqueos de Caja | Brajher's Cake{% endblock %}
 {% block page_title %}Arqueos de Caja{% endblock %}
@@ -54,7 +55,7 @@
 
 <!-- Turnos Abiertos (Pendientes de Arqueo) -->
 {% if turnos_abiertos %}
-<div class="panel panel-accent-warning" style="margin-bottom: 1.5rem;">
+<div class="panel panel-accent-warning arqueos-panel-accent-warning">
     <div class="panel-header">
         <h3>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -63,7 +64,7 @@
         <span class="badge badge-warning badge-live">{{ turnos_abiertos|length }} abierto{{ 's' if turnos_abiertos|length != 1 }}</span>
     </div>
     <div class="panel-body">
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;">
+        <div class="arqueos-grid">
             {% for t in turnos_abiertos %}
             <div class="turno-card">
                 <div class="turno-info">
@@ -74,7 +75,7 @@
             </div>
             {% endfor %}
         </div>
-        <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 1rem;">
+        <p class="arqueos-p-text">
             Los cajeros deben cerrar su turno desde el Punto de Venta. Los arqueos pendientes aparecerán aquí para verificación de gerencia.
         </p>
     </div>
@@ -84,7 +85,7 @@
 <!-- Arqueos Pendientes de Verificación -->
 {% set pendientes = arqueos | selectattr('estado', 'equalto', 'Pendiente') | list %}
 {% if pendientes %}
-<div class="panel panel-accent-primary" style="margin-bottom: 1.5rem;">
+<div class="panel panel-accent-primary arqueos-panel-accent-warning">
     <div class="panel-header">
         <h3>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
@@ -94,13 +95,13 @@
     </div>
     <div class="panel-body">
         {% for a in pendientes %}
-        <div class="turno-card" style="margin-bottom: 0.75rem; flex-direction: column; align-items: stretch; gap: 1rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="turno-card arqueos-turno-card">
+            <div class="arqueos-row">
                 <div>
-                    <h4 style="font-family: 'Inter', sans-serif;">Cajero: {{ a.cajero }}</h4>
-                    <span style="font-size: 0.8rem; color: var(--text-muted);">{{ a.fecha }} — Turno #{{ a.turno_id }}</span>
+                    <h4 class="arqueos-h4-text">Cajero: {{ a.cajero }}</h4>
+                    <span class="arqueos-span-text">{{ a.fecha }} — Turno #{{ a.turno_id }}</span>
                 </div>
-                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <div class="arqueos-row-2">
                     {% if a.requiere_justificacion %}
                     <span class="badge badge-danger">⚠ Discrepancia</span>
                     {% endif %}
@@ -109,7 +110,7 @@
             </div>
 
             <!-- Resumen rápido -->
-            <div class="comparison-grid" style="margin: 0;">
+            <div class="comparison-grid arqueos-comparison-grid">
                 <div class="comparison-item">
                     <div class="comparison-item-label">Efectivo Contado</div>
                     <div class="comparison-item-value">C${{ "%.2f"|format(a.efectivo_contado) }}</div>
@@ -118,7 +119,7 @@
                     <div class="comparison-item-label">Efectivo Sistema</div>
                     <div class="comparison-item-value">C${{ "%.2f"|format(a.efectivo_sistema) }}</div>
                 </div>
-                <div class="comparison-item {% if a.dif_efectivo == 0 %}highlight{% endif %}" style="{% if a.dif_efectivo < 0 %}border-color: var(--danger); background: var(--danger-bg);{% elif a.dif_efectivo > 0 %}border-color: var(--info); background: var(--info-bg);{% endif %}">
+                <div class="comparison-item {% if a.dif_efectivo == 0 %}highlight{% endif %} {% if a.dif_efectivo < 0 %}arqueos-balance-negative{% elif a.dif_efectivo > 0 %}arqueos-balance-positive{% endif %}">
                     <div class="comparison-item-label">Diferencia</div>
                     <div class="comparison-item-value {% if a.dif_efectivo < 0 %}text-danger{% elif a.dif_efectivo > 0 %}text-info{% else %}text-success{% endif %}">
                         {% if a.dif_efectivo > 0 %}+{% endif %}C${{ "%.2f"|format(a.dif_efectivo) }}
@@ -127,9 +128,9 @@
             </div>
 
             <!-- Verificar Form -->
-            <div style="border-top: 1px solid var(--border-light); padding-top: 1rem;">
+            <div class="arqueos-div-surface">
                 {% if a.requiere_justificacion %}
-                <div class="alert-box alert-warning" style="margin-bottom: 0.75rem;">
+                <div class="alert-box alert-warning arqueos-alert-box">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                     <span>Discrepancia superior a C${{ "%.2f"|format(umbral) }}. Se requiere justificación obligatoria.</span>
                 </div>
@@ -140,10 +141,10 @@
                 {% else %}
                 <div class="form-group">
                     <label class="form-label">Notas (Opcional)</label>
-                    <textarea class="form-input form-textarea" id="notas-{{ a.id }}" placeholder="Observaciones adicionales..." style="min-height: 50px;"></textarea>
+                    <textarea class="form-input form-textarea arqueos-form-textarea" id="notas-{{ a.id }}" placeholder="Observaciones adicionales..."></textarea>
                 </div>
                 {% endif %}
-                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                <div class="arqueos-row-3">
                     <button class="btn btn-outline btn-sm" onclick="verDetalleArqueo({{ a.id }})">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         Ver Detalle
@@ -167,7 +168,7 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             Historial de Arqueos
         </h3>
-        <div class="form-search" style="width: 240px;">
+        <div class="form-search arqueos-form-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="text" class="form-input" id="search-arqueos" placeholder="Buscar por cajero...">
         </div>
@@ -232,9 +233,9 @@
         <h3>Detalle del Arqueo</h3>
         <p class="subtitle">Conteo por denominación y registro de auditoría.</p>
 
-        <div id="detalle-denominaciones" style="margin-bottom: 1.5rem;"></div>
+        <div id="detalle-denominaciones" class="arqueos-panel-accent-warning"></div>
 
-        <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.75rem;">Registro de Auditoría</h4>
+        <h4 class="arqueos-h4-text-2">Registro de Auditoría</h4>
         <div id="detalle-audit-log"></div>
 
         <div class="modal-actions">
@@ -310,14 +311,14 @@
                     const label = d.tipo === 'USD' ? `$${d.denominacion.toFixed(2)} USD` : `C$${d.denominacion.toFixed(2)}`;
                     denomHtml += `
                         <div class="denomination-cell">${label}</div>
-                        <div class="denomination-cell" style="text-align: center;">${d.cantidad}</div>
+                        <div class="denomination-cell arqueos-denomination-cell">${d.cantidad}</div>
                         <div class="denomination-cell denomination-subtotal">${d.tipo === 'USD' ? '$' : 'C$'}${d.subtotal.toFixed(2)}</div>
                     `;
                     total += d.subtotal;
                 }
                 denomHtml += '</div>';
             } else {
-                denomHtml = '<p style="color: var(--text-muted); font-size: 0.875rem;">Sin detalle de denominaciones (arqueo rápido).</p>';
+                denomHtml = '<p class="arqueos-p-text-2">Sin detalle de denominaciones (arqueo rápido).</p>';
             }
             document.getElementById('detalle-denominaciones').innerHTML = denomHtml;
 
@@ -328,13 +329,13 @@
                     <div class="list-row">
                         <span class="list-row-label">
                             <span class="badge badge-neutral">${log.accion}</span>
-                            <span style="font-size: 0.8rem;">${log.usuario}</span>
+                            <span class="arqueos-span-text-2">${log.usuario}</span>
                         </span>
                         <span class="cell-muted">${log.fecha}</span>
                     </div>
                 `;
             }
-            if (!logHtml) logHtml = '<p style="color: var(--text-muted); font-size: 0.875rem;">Sin registros de auditoría.</p>';
+            if (!logHtml) logHtml = '<p class="arqueos-p-text-2">Sin registros de auditoría.</p>';
             document.getElementById('detalle-audit-log').innerHTML = logHtml;
 
             document.getElementById('modal-detalle').classList.remove('hidden');
@@ -345,3 +346,5 @@
     }
 </script>
 {% endblock %}
+
+{% block page_styles %}{{ super() }}<link rel="stylesheet" href="{{ css_url('pages/admin/arqueos') }}">{% endblock %}

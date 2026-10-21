@@ -1,0 +1,143 @@
+/* ==========================================================================
+   VERIFICACIÓN TOTP (2FA) — Brajher's Cake / Panadería Amada
+   Alineado con la estética editorial cálida del acceso principal.
+   ========================================================================== */
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-body, #f7f1e7);
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    color: var(--text-main, #251913);
+}
+
+.login-wrapper {
+    width: 100%;
+    max-width: 440px;
+    padding: 2rem;
+}
+
+.login-card {
+    background: var(--surface, #fffaf3);
+    border: 1px solid var(--border, rgba(93, 62, 46, 0.14));
+    border-radius: 24px;
+    padding: 2.5rem;
+    box-shadow: 0 24px 60px rgba(45, 26, 18, 0.08);
+    text-align: center;
+    animation: ui-enter var(--motion-enter, 260ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+
+.logo-area h1 {
+    font-family: 'Fraunces', 'Outfit', Georgia, serif;
+    font-size: 1.85rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+    color: var(--text-main, #251913);
+}
+
+.logo-area p {
+    color: var(--text-secondary, #5f4c42);
+    font-size: 0.92rem;
+    margin-bottom: 1.75rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+    text-align: left;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--text-secondary, #5f4c42);
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+.totp-input {
+    width: 100%;
+    padding: 1rem;
+    border-radius: 14px;
+    border: 1.5px solid var(--border-strong, #d8cab8);
+    background: #ffffff;
+    color: var(--text-main, #251913);
+    font-size: 1.8rem;
+    font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.45em;
+    text-align: center;
+    transition:
+        border-color var(--motion-fast, 160ms) var(--ease-out, ease),
+        box-shadow var(--motion-fast, 160ms) var(--ease-out, ease);
+    box-sizing: border-box;
+}
+
+.totp-input:focus {
+    outline: none;
+    border-color: var(--primary, #6b3a2a);
+    box-shadow: 0 0 0 3px rgba(107, 58, 42, 0.14);
+}
+
+.btn-primary {
+    background: var(--primary, #6b3a2a);
+    color: #fffaf3;
+    border: 1px solid var(--primary, #6b3a2a);
+    padding: 0.9rem 1.5rem;
+    border-radius: 999px;
+    font-size: 0.96rem;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    transition: var(--transition-interactive);
+}
+
+.btn-primary:hover {
+    background: var(--primary-hover, #4e2a1e);
+    transform: translate3d(0, -1px, 0);
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--border-strong, #d8cab8);
+    color: var(--text-secondary, #5f4c42);
+    padding: 0.75rem 1.5rem;
+    border-radius: 999px;
+    cursor: pointer;
+    width: 100%;
+    font-weight: 600;
+    margin-top: 1rem;
+    transition: var(--transition-interactive);
+    text-decoration: none;
+    display: inline-block;
+    box-sizing: border-box;
+}
+
+.btn-outline:hover {
+    background: rgba(107, 58, 42, 0.06);
+    color: var(--text-main, #251913);
+}
+
+.error-msg {
+    background: var(--danger-bg, rgba(196, 69, 54, 0.1));
+    color: var(--danger, #b42318);
+    padding: 0.8rem 1rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border: 1px solid var(--danger-border, rgba(196, 69, 54, 0.25));
+}
+
+.page-verify-totp .verify-totp-div-text {
+    font-size: 2.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.page-totp-login .totp-login-div-text {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}

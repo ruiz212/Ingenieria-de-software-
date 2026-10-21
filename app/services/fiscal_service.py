@@ -1,25 +1,43 @@
 """Facturación calculada en servidor e instantáneas para reimpresión."""
 import json
 from decimal import Decimal
+from app.db import execute_sp, is_sqlserver_cursor
 from app.services.validation import amount, positive_int, required_text
 
 
 def audit(cursor, user_id, action, entity, entity_id, detail, ip=None):
-    cursor.execute('INSERT INTO BitacoraFiscal(UsuarioID,Accion,Entidad,EntidadID,Detalle,IP) VALUES(?,?,?,?,?,?)',
-                   user_id, action, entity, entity_id, json.dumps(detail, ensure_ascii=False, default=str), ip)
+    detail_json = json.dumps(detail, ensure_ascii=False, default=str)
+    execute_sp(
+        cursor,
+        'ventas.sp_RegistrarEventoFiscalOperacion',
+        (user_id, action, entity, entity_id, detail_json, ip),
+        fallback_sql='INSERT INTO BitacoraFiscal(UsuarioID,Accion,Entidad,EntidadID,Detalle,IP) VALUES(?,?,?,?,?,?)',
+    )
 
 
 def configuration(cursor):
-    cursor.execute('SELECT Clave, Valor FROM ConfiguracionSistema')
+    execute_sp(
+        cursor,
+        'seguridad.sp_ObtenerConfiguracionGlobal',
+        fallback_sql='SELECT Clave, Valor FROM ConfiguracionSistema',
+    )
     return {r[0]: r[1] for r in cursor.fetchall()}
 
 
 def next_invoice(cursor, serie='FAC'):
-    cursor.execute('UPDATE SecuenciasFiscales WITH (UPDLOCK,HOLDLOCK) SET Ultimo=Ultimo+1 OUTPUT INSERTED.Ultimo WHERE Serie=?', serie)
+    execute_sp(
+        cursor,
+        'ventas.sp_SiguienteNumeroFactura',
+        (serie,),
+        fallback_sql='UPDATE SecuenciasFiscales WITH (UPDLOCK,HOLDLOCK) SET Ultimo=Ultimo+1 OUTPUT INSERTED.Ultimo WHERE Serie=?',
+    )
     row = cursor.fetchone()
     if not row:
         raise ValueError('La serie fiscal no está configurada. Ejecute la migración fiscal.')
-    return f'{serie}-{row[0]:08d}'
+    seq_val = getattr(row, 'Ultimo', None)
+    if seq_val is None:
+        seq_val = row[0] if str(row[0]).isdigit() else row[1]
+    return f'{serie}-{int(seq_val):08d}'
 
 
 def calculate_sale(cursor, items, config):
@@ -38,17 +56,25 @@ def calculate_sale(cursor, items, config):
         cotizacion_id = None
         if raw_id.startswith('custom_'):
             cotizacion_id = positive_int(raw_id.split('_', 1)[1], 'Cotización')
-            cursor.execute(
-                "SELECT ID, Especificaciones, PrecioCotizado FROM Cotizaciones "
-                "WHERE ID=? AND Estado IN ('Cotizada', 'Aceptada') AND PrecioCotizado IS NOT NULL",
-                cotizacion_id
+            execute_sp(
+                cursor,
+                'crm.sp_ObtenerCotizacionParaCalculoVenta',
+                (cotizacion_id,),
+                fallback_sql=(
+                    "SELECT ID, Especificaciones, PrecioCotizado FROM Cotizaciones "
+                    "WHERE ID=? AND Estado IN ('Cotizada', 'Aceptada') AND PrecioCotizado IS NOT NULL"
+                ),
             )
             cot_row = cursor.fetchone()
             if not cot_row:
                 raise ValueError('La cotización personalizada no existe o aún no tiene precio autorizado.')
-            cursor.execute(
-                "SELECT TOP 1 ID, TasaIVA, MotivoExencion FROM Productos "
-                "WHERE Activo=1 ORDER BY EsFicticio DESC, ID ASC"
+            execute_sp(
+                cursor,
+                'catalogo.sp_ObtenerProductoBaseParaCotizacion',
+                fallback_sql=(
+                    "SELECT TOP 1 ID, TasaIVA, MotivoExencion FROM Productos "
+                    "WHERE Activo=1 ORDER BY EsFicticio DESC, ID ASC"
+                ),
             )
             base_prod = cursor.fetchone()
             if not base_prod:
@@ -61,7 +87,12 @@ def calculate_sale(cursor, items, config):
             reason = base_prod[2]
         else:
             product_id = positive_int(raw_id.split('_')[0], 'Producto')
-            cursor.execute('SELECT Nombre,PrecioBase,PorcentajeDescuento,TasaIVA,MotivoExencion,EsFicticio FROM Productos WHERE ID=? AND Activo=1', product_id)
+            execute_sp(
+                cursor,
+                'catalogo.sp_ObtenerProductoParaCalculoVenta',
+                (product_id,),
+                fallback_sql='SELECT Nombre,PrecioBase,PorcentajeDescuento,TasaIVA,MotivoExencion,EsFicticio FROM Productos WHERE ID=? AND Activo=1',
+            )
             row = cursor.fetchone()
             if not row:
                 raise ValueError('El producto ya no está disponible. Actualice el carrito.')
@@ -78,7 +109,13 @@ def calculate_sale(cursor, items, config):
         for extra in detail.get('ingredientes', []):
             if not isinstance(extra, dict):
                 raise ValueError('Ingrediente inválido.')
-            cursor.execute('SELECT ID,Nombre,PrecioAdicional FROM Ingredientes WHERE Nombre=? AND Activo=1', required_text(extra.get('nombre'), 'Ingrediente',100))
+            ing_name = required_text(extra.get('nombre'), 'Ingrediente', 100)
+            execute_sp(
+                cursor,
+                'catalogo.sp_ObtenerIngredientePorNombreActivo',
+                (ing_name,),
+                fallback_sql='SELECT ID,Nombre,PrecioAdicional FROM Ingredientes WHERE Nombre=? AND Activo=1',
+            )
             ingredient = cursor.fetchone()
             if not ingredient:
                 raise ValueError('Ingrediente no disponible.')

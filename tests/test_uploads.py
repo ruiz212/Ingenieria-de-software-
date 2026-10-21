@@ -66,25 +66,33 @@ def test_upload_rejects_unsupported_extension(app, endpoint, field):
 def test_profile_photo_uses_served_static_folder(app, monkeypatch):
     from pathlib import Path
     from app.auth import routes
+    from PIL import Image
+
+    payload = BytesIO()
+    Image.new('RGB', (4, 4), 'red').save(payload, format='PNG')
 
     class Cursor:
-        def execute(self, *args):
+        def execute(self, sql, *args):
             return self
 
-    connection = SimpleNamespace(cursor=lambda: Cursor(), commit=lambda: None, close=lambda: None)
+        def fetchone(self):
+            return ('opaque-test-grant', 'sms', '+50555550000', '', '', '',
+                    9999999999, 1, 1, 0)
+
+    connection = SimpleNamespace(cursor=lambda: Cursor(), commit=lambda: None,
+                                 rollback=lambda: None, close=lambda: None)
     monkeypatch.setattr(routes, 'get_db_connection', lambda: connection)
     monkeypatch.setattr(routes.Cliente, 'get_by_telefono', lambda _: (None, None))
     client = app.test_client()
-    import time
     with client.session_transaction() as session:
-        session['sms_phone'] = '55550000'
-        session['telefono_verificado'] = True
-        session['sms_expires_at'] = time.time() + 600
+        session['sms_challenge_id'] = 'opaque-test-grant'
     response = client.post('/cliente/registro', data={
         'nombre': 'QA', 'apellidos': 'Cliente', 'telefono': '55550000',
-        'password': 'only-test-password', 'foto': (BytesIO(b'profile-fixture'), 'perfil.png'),
+        'password': 'only-test-password', 'foto': (BytesIO(payload.getvalue()), 'perfil.png'),
     })
     assert response.status_code == 302
-    path = Path(app.static_folder) / 'uploads' / 'perfiles' / 'perfil.png'
-    assert path.read_bytes() == b'profile-fixture'
-    assert client.get('/static/uploads/perfiles/perfil.png').data == b'profile-fixture'
+    saved = list((Path(app.static_folder) / 'uploads' / 'perfiles').glob('*.jpg'))
+    assert len(saved) == 1
+    with Image.open(saved[0]) as decoded:
+        assert decoded.format == 'JPEG' and decoded.size == (4, 4)
+    assert client.get('/static/uploads/perfiles/' + saved[0].name).data == saved[0].read_bytes()
