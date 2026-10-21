@@ -88,3 +88,8 @@ def web_manifest():
         'theme_color': '#6B3A2A',
         'lang': 'es-NI',
     })
+
+
+@hub_bp.route('/google-site-verification')
+def google_verification_txt():
+    return Response('google-site-verification=BCiu1Rhy4tzrQXvp-WJ8FVEawiEc1kYeV_M5LDN0PNg', mimetype='text/plain; charset=utf-8')
