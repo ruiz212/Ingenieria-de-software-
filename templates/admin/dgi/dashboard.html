@@ -42,7 +42,7 @@
     <p class="dgi-muted">Estos pendientes no son errores de ventas o contabilidad. Puede analizar, descargar un diagnóstico y validar una revisión interna sin inventar datos tributarios.</p>
     <details {% if request.args.get('editar')=='1' %}open{% endif %}><summary>Completar o guardar avance del perfil</summary>
       <p class="dgi-muted">Razón social, RUC y régimen se comparten con Facturación. Mantenga el régimen Pendiente mientras no haya información verificada. Un cambio a régimen activo conserva los requisitos del POS.</p>
-      <form method="post" action="{{ url_for('admin.dgi_profile') }}" class="dgi-fields">
+      <form method="post" action="{{ url_for('admin.dgi_profile') }}" class="dgi-fields" data-draft-key="perfil-dgi" data-native-draft-submit>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% if selected %}<input type="hidden" name="periodo_id" value="{{ selected.ID }}">{% endif %}
         {% for key,label in [('fiscal_razon_social','Razón social'),('fiscal_ruc','RUC según inscripción'),('dgi_responsable','Responsable de revisión')] %}
         <label>{{ label }} (puede quedar pendiente)<input name="{{ key }}" value="{{ profile[key] }}" maxlength="{{ 255 if key.startswith('fiscal_') else 200 }}"></label>
@@ -55,18 +55,71 @@
     </details>
   </section>
 </div>
+{% if selected %}
+<section class="dgi-card dgi-invoices" id="facturas-periodo" data-period="{{ selected.ID }}" data-search-url="{{ url_for('admin.dgi_invoices') }}">
+  <div class="dgi-heading"><div><h3>Facturas del período</h3><p class="dgi-muted">Busca sin cargar toda la aplicación. Los registros recientes se distinguen durante 24 horas.</p></div><button type="button" class="btn btn-outline" id="dgi-invoices-refresh">Actualizar facturas</button></div>
+  <div class="dgi-invoice-filters">
+    <label>Factura o cliente<input id="dgi-invoices-query" type="search" placeholder="FAC-00000030 o nombre" maxlength="100" autocomplete="off"></label>
+    <label>Estado<select id="dgi-invoices-state"><option value="">Todos</option><option>Emitida</option><option>Anulada</option></select></label>
+    <label>Tipo<select id="dgi-invoices-type"><option value="">Todos</option><option>Mostrador</option><option>Encargo</option></select></label>
+    <label>Desde<input id="dgi-invoices-from" type="date" min="{{ selected.Desde.isoformat() }}" max="{{ selected.Hasta.isoformat() }}"></label>
+    <label>Hasta<input id="dgi-invoices-to" type="date" min="{{ selected.Desde.isoformat() }}" max="{{ selected.Hasta.isoformat() }}"></label>
+    <label>Por página<select id="dgi-invoices-size"><option>10</option><option>25</option><option>50</option></select></label>
+  </div>
+  <p id="dgi-invoices-status" class="dgi-muted" role="status" aria-live="polite">Cargando facturas…</p>
+  <div class="dgi-table"><table><thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th>Tipo</th><th>Estado</th><th>Total</th><th>Documento</th></tr></thead><tbody id="dgi-invoices-body"></tbody></table></div>
+  <nav class="dgi-invoice-pages" aria-label="Páginas de facturas"><button type="button" class="btn btn-outline" id="dgi-invoices-prev" disabled>Anterior</button><span id="dgi-invoices-page">Página 1</span><button type="button" class="btn btn-outline" id="dgi-invoices-next" disabled>Siguiente</button></nav>
+</section>
+<script src="{{ url_for('static', filename='js/dgi_invoices.js', v=1) }}" defer></script>
+{% endif %}
 <section class="dgi-card">
   <div class="dgi-heading"><h3>Revisiones{% if selected %} · {{ selected.Desde.strftime('%m/%Y') }}{% endif %}</h3>
     {% if selected %}<a href="{{ url_for('admin.dgi_dashboard',periodo=selected.ID,historial='0' if show_history else '1') }}">{{ 'Ver solo las últimas revisiones' if show_history else 'Mostrar también versiones anteriores' }}</a>{% endif %}
   </div>
-  <div class="dgi-table"><table><thead><tr><th>Revisión</th><th>Propósito</th><th>Estado interno</th><th>Resultado</th><th>Fecha (Nicaragua)</th><th>Responsables</th></tr></thead><tbody>
-  {% for r in reviews %}<tr>
+  {% if reviews %}
+  <div class="dgi-revision-toolbar">
+    <input type="search" id="dgi-revisions-filter-query" class="dgi-revision-search" placeholder="Filtrar por propósito o versión..." autocomplete="off" oninput="filtrarRevisionesDGI()">
+    <select id="dgi-revisions-filter-state" class="dgi-revision-filter-select" onchange="filtrarRevisionesDGI()">
+      <option value="ALL">Todos los estados</option>
+      <option value="Validada">Validadas</option>
+      <option value="Borrador">Borradores</option>
+    </select>
+    <span id="dgi-revisions-counter" class="dgi-muted" style="margin-left: auto;">{{ reviews|length }} revisión(es)</span>
+  </div>
+  {% endif %}
+  <div class="dgi-table"><table id="dgi-revisions-table"><thead><tr><th>Revisión</th><th>Propósito</th><th>Estado interno</th><th>Resultado</th><th>Fecha (Nicaragua)</th><th>Responsables</th></tr></thead><tbody>
+  {% for r in reviews %}<tr class="dgi-revision-item" data-proposito="{{ (r.Obligacion or '')|lower }}" data-version="{{ r.Version }}" data-estado="{{ r.Estado }}">
     <td><a href="{{ url_for('admin.dgi_review',review_id=r.ID) }}">#{{ r.ID }} · versión {{ r.Version }}</a></td><td>{{ r.Obligacion }}</td><td><span class="dgi-badge">{{ r.Estado }}</span></td>
     <td>{% if not r.actual %}Reglas anteriores; abra y revalide{% elif r.errores %}{{ r.errores }} {{ 'error' if r.errores==1 else 'errores' }} en los datos{% else %}Sin errores bloqueantes{% if r.pendientes %}<br><small>Configuración fiscal pendiente</small>{% endif %}{% endif %}</td>
     <td>{{ r.CreadoEn|dgi_time }}</td><td>Elaboró #{{ r.CreadoPor }}{% if r.AprobadoPor %}<br>Validó #{{ r.AprobadoPor }}{% endif %}</td>
   </tr>{% else %}<tr><td colspan="6">Aún no hay un diagnóstico en este mes. Use Analizar período.</td></tr>{% endfor %}
+  <tr id="dgi-revisions-no-match" class="hidden"><td colspan="6" class="dgi-muted" style="text-align: center; padding: 20px;">No se encontraron revisiones con los filtros seleccionados.</td></tr>
   </tbody></table></div>
 </section>
+<script>
+function filtrarRevisionesDGI() {
+  const query = (document.getElementById('dgi-revisions-filter-query')?.value || '').trim().toLowerCase();
+  const estado = document.getElementById('dgi-revisions-filter-state')?.value || 'ALL';
+  const rows = document.querySelectorAll('.dgi-revision-item');
+  const noMatch = document.getElementById('dgi-revisions-no-match');
+  const counter = document.getElementById('dgi-revisions-counter');
+  let visibles = 0;
+
+  rows.forEach(row => {
+    const prop = row.dataset.proposito || '';
+    const ver = row.dataset.version || '';
+    const est = row.dataset.estado || '';
+    const matchQuery = !query || prop.includes(query) || ver.includes(query) || row.textContent.toLowerCase().includes(query);
+    const matchEstado = (estado === 'ALL' || est === estado);
+    const show = matchQuery && matchEstado;
+    row.style.display = show ? '' : 'none';
+    if (show) visibles++;
+  });
+
+  if (counter) counter.textContent = `${visibles} de ${rows.length} revisión(es)`;
+  if (noMatch) noMatch.classList.toggle('hidden', visibles > 0);
+}
+</script>
 <details class="dgi-card"><summary>Actividad reciente</summary><p class="dgi-muted">Últimos 30 eventos; hora de Nicaragua.</p>
 <div class="dgi-table"><table><thead><tr><th>Fecha</th><th>Acción</th><th>Usuario</th><th>Referencia</th></tr></thead><tbody>{% for e in events %}<tr><td>{{ e.Fecha|dgi_time }}</td><td>{{ e.Accion }}</td><td>#{{ e.UsuarioID }}</td><td>{{ e.EntidadID or 'Perfil' }}</td></tr>{% else %}<tr><td colspan="4">Sin actividad DGI todavía.</td></tr>{% endfor %}</tbody></table></div>
 </details>

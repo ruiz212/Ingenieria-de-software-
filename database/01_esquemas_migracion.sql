@@ -701,6 +701,35 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('ventas.Pagos
     CREATE INDEX IX_Pagos_TurnoReceptor ON [ventas].[Pagos](TurnoReceptorID) INCLUDE (MetodoPago,Monto,MonedaRegistro);
 GO
 
+-- La búsqueda fiscal siempre empieza por el rango mensual y pagina en SQL Server.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('ventas.Facturas') AND name='IX_Facturas_FiscalFecha')
+    CREATE INDEX IX_Facturas_FiscalFecha ON [ventas].[Facturas](FechaHora DESC, ID DESC)
+        INCLUDE (NumeroFactura, ClienteID, EstadoFiscal, EsEncargo, Total);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('ventas.Facturas') AND name='IX_Facturas_FiscalNumero')
+    CREATE INDEX IX_Facturas_FiscalNumero ON [ventas].[Facturas](NumeroFactura, FechaHora DESC)
+        INCLUDE (ClienteID, EstadoFiscal, EsEncargo, Total);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('ventas.Facturas') AND name='IX_Facturas_FiscalCliente')
+    CREATE INDEX IX_Facturas_FiscalCliente ON [ventas].[Facturas](ClienteID, FechaHora DESC)
+        INCLUDE (NumeroFactura, EstadoFiscal, EsEncargo, Total);
+GO
+
+-- Cargo permanece en Empleados por compatibilidad; el catálogo describe el rol, no su salario.
+IF OBJECT_ID('rrhh.PerfilesPuesto', 'U') IS NULL
+    CREATE TABLE [rrhh].[PerfilesPuesto] (
+        Cargo NVARCHAR(100) NOT NULL PRIMARY KEY,
+        PerfilPuesto NVARCHAR(1000) NOT NULL CONSTRAINT DF_PerfilesPuesto_Perfil DEFAULT N'',
+        Obligaciones NVARCHAR(2000) NOT NULL CONSTRAINT DF_PerfilesPuesto_Obligaciones DEFAULT N'',
+        RequisitosCompetencias NVARCHAR(1000) NOT NULL CONSTRAINT DF_PerfilesPuesto_Requisitos DEFAULT N'',
+        ActualizadoEn DATETIME2 NOT NULL CONSTRAINT DF_PerfilesPuesto_Fecha DEFAULT SYSUTCDATETIME(),
+        ActualizadoPor INT NULL REFERENCES [seguridad].[Usuarios](ID)
+    );
+GO
+INSERT INTO [rrhh].[PerfilesPuesto](Cargo)
+SELECT DISTINCT LTRIM(RTRIM(e.Cargo)) FROM [rrhh].[Empleados] e
+WHERE NULLIF(LTRIM(RTRIM(e.Cargo)),N'') IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM [rrhh].[PerfilesPuesto] p WHERE p.Cargo=LTRIM(RTRIM(e.Cargo)));
+GO
+
 EXEC('
 CREATE OR ALTER TRIGGER [TR_DDL_ProteccionEsquemas]
 ON DATABASE

@@ -1,13 +1,13 @@
 /* Contrato común para formularios y APIs del mismo origen. */
 (() => {
-    const token = document.querySelector('meta[name="csrf-token"]')?.content;
+    const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.content;
     const originalFetch = window.fetch.bind(window);
     window.fetch = (input, options = {}) => {
         const url = new URL(input instanceof Request ? input.url : input, location.href);
         const method = (options.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
         if (url.origin === location.origin && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
             const headers = new Headers(options.headers || (input instanceof Request ? input.headers : {}));
-            if (token) headers.set('X-CSRFToken', token);
+            if (csrfToken()) headers.set('X-CSRFToken', csrfToken());
             options = {...options, headers};
         }
         return originalFetch(input, options);
@@ -16,7 +16,7 @@
         const form = event.target;
         if (form.method.toLowerCase() === 'post' && new URL(form.action).origin === location.origin && !form.querySelector('[name="csrf_token"]')) {
             const hidden = document.createElement('input');
-            hidden.type = 'hidden'; hidden.name = 'csrf_token'; hidden.value = token || '';
+            hidden.type = 'hidden'; hidden.name = 'csrf_token'; hidden.value = csrfToken() || '';
             form.append(hidden);
         }
     }, true);

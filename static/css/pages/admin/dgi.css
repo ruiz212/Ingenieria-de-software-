@@ -5,6 +5,11 @@
     margin:auto;
     color:var(--text-main);
 }
+.dgi-invoice-filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:16px 0; }
+.dgi-invoice-filters label { display:flex; flex-direction:column; gap:6px; font-size:.84rem; font-weight:650; }
+.dgi-invoice-filters input,.dgi-invoice-filters select { min-height:42px; width:100%; padding:8px 10px; border:1px solid var(--border,#bda999); border-radius:9px; background:var(--surface-card,#fff); color:var(--text-main); }
+.dgi-invoice-recent { background:color-mix(in srgb,#e8ae50 18%,transparent); box-shadow:inset 3px 0 #c4842e; }
+.dgi-invoice-pages { display:flex; align-items:center; justify-content:flex-end; gap:12px; margin-top:14px; }
 .dgi-nav,.dgi-actions,.dgi-form {
     display:flex;
     flex-wrap:wrap;
@@ -51,3 +56,31 @@
 @media(max-width:1100px){.dgi-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dgi-columns{grid-template-columns:1fr}}
 @media(max-width:700px){.dgi-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.dgi-card{padding:16px}.dgi-notice{padding:14px}.dgi-metrics{gap:10px}.dgi-metric{padding:14px}.dgi-actions>*{width:100%}.dgi-source{grid-template-columns:1fr}.dgi-source dd{margin-bottom:12px}.dgi-nav{gap:12px}.dgi-form .btn{width:100%}}
+
+/* ── Toolbar de Filtros para Revisiones DGI ── */
+.dgi-revision-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 12px 0 16px;
+}
+.dgi-revision-search {
+    flex: 1 1 200px;
+    max-width: 320px;
+    padding: 8px 12px;
+    font-size: 0.84rem;
+    border: 1px solid var(--border-color, #c6b3a5);
+    border-radius: 9px;
+    background: var(--surface-input, #fff);
+    color: var(--text-main);
+}
+.dgi-revision-filter-select {
+    padding: 8px 12px;
+    font-size: 0.84rem;
+    border: 1px solid var(--border-color, #c6b3a5);
+    border-radius: 9px;
+    background: var(--surface-input, #fff);
+    color: var(--text-main);
+    font-weight: 600;
+}

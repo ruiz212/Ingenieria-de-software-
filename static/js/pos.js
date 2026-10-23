@@ -396,6 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     showToast('¡Cotización enviada a recepción!');
                 }
                 pastelPersonalizadoModal.classList.add('hidden');
+                window.clearFormDraft?.(formPastel);
                 formPastel.reset();
             } catch (error) {
                 showToast(error.message || 'No se pudo enviar la cotización.', true);

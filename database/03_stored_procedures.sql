@@ -1168,6 +1168,54 @@ GO
 -- 6. ESQUEMA [rrhh]: EMPLEADOS, KIOSCO BIOMÉTRICO, ASISTENCIA Y NÓMINA
 -- ============================================================================
 
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarPerfilesPuesto]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT Cargo, PerfilPuesto, Obligaciones, RequisitosCompetencias, ActualizadoEn
+    FROM [rrhh].[PerfilesPuesto] ORDER BY Cargo;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerPerfilPuestoPorCargo]
+    @Cargo NVARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT Cargo FROM [rrhh].[PerfilesPuesto] WHERE Cargo=@Cargo;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_GuardarPerfilPuesto]
+    @Cargo NVARCHAR(100),
+    @PerfilPuesto NVARCHAR(1000),
+    @Obligaciones NVARCHAR(2000),
+    @RequisitosCompetencias NVARCHAR(1000),
+    @ActorID INT,
+    @IP VARCHAR(50)=NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET @Cargo=NULLIF(LTRIM(RTRIM(@Cargo)),N'');
+    IF @Cargo IS NULL OR NULLIF(LTRIM(RTRIM(@PerfilPuesto)),N'') IS NULL
+       OR NULLIF(LTRIM(RTRIM(@Obligaciones)),N'') IS NULL
+       OR NULLIF(LTRIM(RTRIM(@RequisitosCompetencias)),N'') IS NULL
+       OR @ActorID IS NULL
+        THROW 51052, 'Complete el perfil, las obligaciones y las competencias.', 1;
+    IF EXISTS(SELECT 1 FROM [rrhh].[PerfilesPuesto] WITH (UPDLOCK,HOLDLOCK) WHERE Cargo=@Cargo)
+        UPDATE [rrhh].[PerfilesPuesto]
+           SET PerfilPuesto=@PerfilPuesto, Obligaciones=@Obligaciones,
+               RequisitosCompetencias=@RequisitosCompetencias,
+               ActualizadoEn=SYSUTCDATETIME(), ActualizadoPor=@ActorID
+         WHERE Cargo=@Cargo;
+    ELSE
+        INSERT INTO [rrhh].[PerfilesPuesto](Cargo,PerfilPuesto,Obligaciones,RequisitosCompetencias,ActualizadoPor)
+        VALUES(@Cargo,@PerfilPuesto,@Obligaciones,@RequisitosCompetencias,@ActorID);
+    EXEC [seguridad].[sp_RegistrarAuditoria] @ActorID, 'PERFIL_PUESTO', 'PerfilPuesto', NULL,
+         NULL, @Cargo, @IP;
+END
+GO
+
 CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarEmpleadosActivos]
 AS
 BEGIN
@@ -4912,6 +4960,59 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT TOP 100 ID,NumeroFactura,FechaHora,Total,EstadoFiscal,DocumentoJSON FROM[ventas].[Facturas] ORDER BY ID DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [fiscal].[sp_ListarFacturasPeriodo]
+    @PeriodoID INT,
+    @Buscar NVARCHAR(100) = NULL,
+    @Estado NVARCHAR(12) = NULL,
+    @EsEncargo BIT = NULL,
+    @Desde DATE = NULL,
+    @Hasta DATE = NULL,
+    @Pagina INT = 1,
+    @Tamano INT = 10,
+    @RecienteDesde DATETIME = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @Pagina < 1 OR @Tamano NOT IN (10,25,50) OR @PeriodoID < 1
+        THROW 51050, 'Parámetros de paginación fiscal inválidos.', 1;
+    DECLARE @Inicio DATE, @Fin DATE;
+    SELECT @Inicio=Desde, @Fin=Hasta FROM [fiscal].[DGI_Periodos] WHERE ID=@PeriodoID;
+    IF @Inicio IS NULL
+        THROW 51051, 'Período DGI inexistente.', 1;
+    IF @Desde IS NOT NULL AND @Desde > @Inicio SET @Inicio=@Desde;
+    IF @Hasta IS NOT NULL AND @Hasta < @Fin SET @Fin=@Hasta;
+    DECLARE @FinExclusivo DATE=DATEADD(day,1,@Fin);
+    DECLARE @Patron NVARCHAR(220)=NULL;
+    IF NULLIF(LTRIM(RTRIM(@Buscar)),N'') IS NOT NULL
+        SET @Patron=N'%' + REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(@Buscar)), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]') + N'%';
+
+    SELECT COUNT_BIG(*) AS Total
+    FROM [ventas].[Facturas] f
+    LEFT JOIN [crm].[Clientes] c ON c.ID=f.ClienteID
+    LEFT JOIN [ventas].[FacturasRUC] r ON r.FacturaID=f.ID
+    WHERE f.FechaHora>=@Inicio AND f.FechaHora<@FinExclusivo
+      AND (@Estado IS NULL OR f.EstadoFiscal=@Estado)
+      AND (@EsEncargo IS NULL OR f.EsEncargo=@EsEncargo)
+      AND (@Patron IS NULL OR f.NumeroFactura LIKE @Patron
+           OR c.Nombre LIKE @Patron OR c.Apellidos LIKE @Patron OR r.RazonSocial LIKE @Patron);
+
+    SELECT f.ID, f.NumeroFactura, f.FechaHora, f.Total, f.EstadoFiscal, f.EsEncargo,
+           COALESCE(NULLIF(r.RazonSocial,N''), NULLIF(LTRIM(RTRIM(CONCAT(c.Nombre,N' ',c.Apellidos))),N''), N'Consumidor final') AS Cliente,
+           CONVERT(bit,CASE WHEN @RecienteDesde IS NOT NULL AND f.FechaHora>=@RecienteDesde
+                  AND f.FechaHora<=DATEADD(hour,24,@RecienteDesde) THEN 1 ELSE 0 END) AS EsReciente
+    FROM [ventas].[Facturas] f
+    LEFT JOIN [crm].[Clientes] c ON c.ID=f.ClienteID
+    LEFT JOIN [ventas].[FacturasRUC] r ON r.FacturaID=f.ID
+    WHERE f.FechaHora>=@Inicio AND f.FechaHora<@FinExclusivo
+      AND (@Estado IS NULL OR f.EstadoFiscal=@Estado)
+      AND (@EsEncargo IS NULL OR f.EsEncargo=@EsEncargo)
+      AND (@Patron IS NULL OR f.NumeroFactura LIKE @Patron
+           OR c.Nombre LIKE @Patron OR c.Apellidos LIKE @Patron OR r.RazonSocial LIKE @Patron)
+    ORDER BY f.FechaHora DESC, f.ID DESC
+    OFFSET (CONVERT(bigint,@Pagina)-1)*@Tamano ROWS FETCH NEXT @Tamano ROWS ONLY;
 END
 GO
 

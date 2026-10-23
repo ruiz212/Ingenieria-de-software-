@@ -204,7 +204,7 @@ def login():
                 session['next_page'] = request.args.get('next')
                 return redirect(url_for('auth.enroll_totp' if enroll else 'auth.login_totp'))
             else:
-                login_user(user, remember=True)
+                login_user(user, remember=False)
                 next_page = request.args.get('next')
                 return redirect(safe_next(next_page))
 
@@ -219,7 +219,7 @@ def login():
                 cliente, password_hash_cli = _customer_by_normalized_phone(normalized)
         if cliente and password_hash_cli and check_password_hash(password_hash_cli, password):
             _record_login_attempt(identificador, client_ip, True)
-            login_user(cliente, remember=True)
+            login_user(cliente, remember=False)
             return redirect('/pos')
 
         # Si ninguno coincide
@@ -260,7 +260,7 @@ def _totp_page(kind, cookie_key, authenticated=False):
             next_page = session.get('next_page')
             _clear_totp_session()
             if not authenticated:
-                login_user(User.get_by_id(verified_id), remember=True)
+                login_user(User.get_by_id(verified_id), remember=False)
             flash('Autenticación verificada.', 'success')
             return redirect(safe_next(next_page))
         flash('Código incorrecto o verificación expirada.', 'error')
@@ -318,6 +318,22 @@ def logout():
     if es_cliente:
         return redirect(url_for('auth.cliente_bienvenida'))
     return redirect(url_for('auth.login'))
+
+
+@auth_bp.route('/auth/ping', methods=['GET', 'POST'])
+def session_ping():
+    """GET informa el tiempo restante; POST renueva tras una acción humana."""
+    from app.services.session_guard import SESSION_ACTIVITY_KEY, lifetime_seconds, renew_session
+    from flask_wtf.csrf import generate_csrf
+    from time import time
+    if not current_user.is_authenticated:
+        return jsonify(error='Inicia sesión de nuevo.'), 401
+    lifetime = lifetime_seconds(current_app)
+    if request.method == 'POST':
+        renew_session()
+    remaining = max(0, lifetime - (int(time()) - int(session[SESSION_ACTIVITY_KEY])))
+    return jsonify(expires_in_seconds=remaining, lifetime_seconds=lifetime,
+                   csrf_token=generate_csrf())
 
 
 @auth_bp.route('/cliente/bienvenida')

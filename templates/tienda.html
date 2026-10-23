@@ -98,8 +98,11 @@
     <link rel="stylesheet" href="{{ css_url('theme') }}">
     <link rel="stylesheet" href="{{ css_url('pages/customer/store') }}">
     <link rel="stylesheet" href="{{ css_url('motion') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/session-guard.css', v=1) }}">
+    <script src="{{ url_for('static', filename='js/form_drafts.js', v=1) }}" defer></script>
+    {% if current_user.is_authenticated %}<script src="{{ url_for('static', filename='js/session_guard.js', v=1) }}" defer></script>{% endif %}
 </head>
-<body class="tienda-body pos-body page-tienda">
+<body class="tienda-body pos-body page-tienda" data-draft-user="{{ (current_user.rol_nombre ~ ':' ~ current_user.id) if current_user.is_authenticated else 'publico' }}" {% if current_user.is_authenticated %}data-session-guard{% endif %}>
 
     <!-- 1. Barra Superior Editorial -->
     <div class="utility-bar">
@@ -425,7 +428,7 @@
                 Describe el diseño, sabores y porciones que deseas. Nuestro equipo revisará tu solicitud y te asignará el precio en línea.
             </p>
 
-            <form id="form-pastel-personalizado">
+            <form id="form-pastel-personalizado" data-draft-key="cotizacion-pastel">
                 <label for="pastel-especificaciones">Especificaciones (Sabores, porciones, dedicatoria, decoración):</label>
                 <textarea id="pastel-especificaciones" class="form-control" rows="3" required placeholder="Ej: Pastel para 25 personas, sabor vainilla con relleno de dulce de leche y cobertura crema marfil..."></textarea>
 
