@@ -117,6 +117,15 @@ def test_native_saldo_attributes_receiver_and_count_not_invoice_shift(sql_cash):
     assert cur.fetchone()[0] == 20
 
 
+def test_native_advance_enters_open_shift_before_order_delivery(sql_cash):
+    conn, cur, user, shift, invoice, marker = sql_cash
+    with as_db_role(cur, 'Estandar'):
+        cur.execute('EXEC ventas.sp_InsertarPagoFactura ?,?,?,?,?', invoice, 'Efectivo', 20, marker, None)
+    assert cur.execute('SELECT Estado FROM ventas.Encargos WHERE FacturaID=?', invoice).fetchone()[0] == 'Listo'
+    cur.execute('EXEC ventas.sp_CalcularValoresSistemaTurno ?', shift)
+    assert cur.fetchone()[0] == 20
+
+
 def test_native_operativo_must_wait_for_cashier_then_deliver_prepaid(sql_cash):
     conn, cur, user, shift, invoice, marker = sql_cash
     with as_db_role(cur,'Operativo'):

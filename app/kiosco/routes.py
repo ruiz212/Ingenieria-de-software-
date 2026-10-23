@@ -5,12 +5,13 @@ from flask import render_template, request, jsonify
 from app.kiosco import kiosco_bp
 from app.db import get_db_connection, execute_sp
 from app.extensions import csrf
-from flask_login import login_required
+from flask_login import login_required, current_user
 from app.auth.decorators import roles_required
 from datetime import datetime, timedelta
 from app.services.business_time import business_now
 from app.services.hr_calculations import can_mark_exit
 import logging
+import json
 
 # Importamos el servicio de reconocimiento facial (se inicializa al cargar el módulo)
 from app.services.face_service import face_service
@@ -91,7 +92,7 @@ def reconocer():
     # Devuelve 'no_face' o 'unknown' con status 200 para que el frontend siga iterando sin errores HTTP
     return jsonify(resultado), 200
 
-def _procesar_marcaje(empleado_id, accion='entrada'):
+def _procesar_marcaje(empleado_id, accion='entrada', *, exception_reason=None, supervisor_id=None):
     """Operaciones idempotentes; una nueva lectura nunca alterna entrada/salida."""
     if accion not in ('entrada', 'salida'):
         return jsonify(status='error', message='Acción inválida'), 400
@@ -159,6 +160,9 @@ def _procesar_marcaje(empleado_id, accion='entrada'):
                         "VALUES (?, ?, ?, ?, ?, NULL)"
                     ),
                 )
+            if exception_reason:
+                _audit_attendance_exception(cursor, empleado_id, accion, fecha, hora,
+                                            exception_reason, supervisor_id)
             conn.commit()
             return jsonify(status='success', tipo='entrada', empleado=nombre, estado=estado,
                            mensaje=f'¡Bienvenido {nombre}! Entrada registrada a las {hora}.')
@@ -175,6 +179,9 @@ def _procesar_marcaje(empleado_id, accion='entrada'):
             (hora, asistencia.ID),
             fallback_sql="UPDATE Asistencia SET HoraSalida = ? WHERE ID = ? AND HoraSalida IS NULL",
         )
+        if exception_reason:
+            _audit_attendance_exception(cursor, empleado_id, accion, fecha, hora,
+                                        exception_reason, supervisor_id)
         conn.commit()
         return jsonify(status='success', tipo='salida', empleado=nombre,
                        mensaje=f'¡Hasta mañana {nombre}! Salida registrada a las {hora}.')
@@ -184,6 +191,19 @@ def _procesar_marcaje(empleado_id, accion='entrada'):
         return jsonify(status='error', message='Error interno del servidor'), 500
     finally:
         conn.close()
+
+
+def _audit_attendance_exception(cursor, empleado_id, accion, fecha, hora, motivo, supervisor_id):
+    """El motivo se confirma en la misma transacción que el marcaje."""
+    detail = json.dumps({'accion': accion, 'fecha': fecha, 'hora': hora,
+                         'motivo': motivo, 'metodo': 'Autorización supervisor'}, ensure_ascii=False)
+    execute_sp(
+        cursor, 'seguridad.sp_RegistrarAuditoria',
+        (supervisor_id, 'ASISTENCIA_EXCEPCION', 'Asistencia', int(empleado_id),
+         None, detail, request.remote_addr),
+        fallback_sql='''INSERT INTO AuditLog(UsuarioID,Accion,Entidad,EntidadID,DatosAntes,DatosDespues,IP)
+                        VALUES(?,?,?,?,?,?,?)''',
+    )
 
 # Mantenemos el endpoint de /api/marcar antiguo por compatibilidad o pruebas manuales
 @kiosco_bp.route('/api/marcar', methods=['POST'])
@@ -196,4 +216,14 @@ def marcar_asistencia():
     empleado_id = datos.get('empleado_id')
     if not empleado_id:
         return jsonify({'error': 'Falta el ID del empleado'}), 400
-    return _procesar_marcaje(empleado_id, datos.get('accion', 'entrada'))
+    motivo = str(datos.get('motivo') or '').strip()
+    if len(motivo) < 10 or len(motivo) > 300 or '\x00' in motivo:
+        return jsonify(error='Indica un motivo de contingencia entre 10 y 300 caracteres.'), 400
+    try:
+        empleado_id = int(empleado_id)
+        if empleado_id <= 0:
+            raise ValueError()
+    except (TypeError, ValueError):
+        return jsonify(error='Empleado inválido.'), 400
+    return _procesar_marcaje(empleado_id, datos.get('accion', 'entrada'),
+                            exception_reason=motivo, supervisor_id=current_user.id)

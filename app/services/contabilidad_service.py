@@ -421,14 +421,17 @@ class ContabilidadService:
         if es_encargo:
             descripcion += " (Encargo)"
             restante = amount(total) - amount(adelanto)
+            porcentaje = (amount(adelanto) * 100 / amount(total)) if amount(total) else 0
+            porcentaje_texto = f'{porcentaje:g}%'
 
             # Débito: adelanto a la cuenta según método de pago
             if float(adelanto) > 0:
                 for pago in pagos:
                     cuenta_debito = cls.METODO_PAGO_CUENTA.get(pago['metodo'], cls.CAJA_GENERAL_CS)
+                    destino = 'Caja' if cuenta_debito in (cls.CAJA_GENERAL_CS, cls.CAJA_GENERAL_USD) else 'Banco'
                     detalles.append((
                         cuenta_debito, amount(pago['monto']), 0,
-                        f"Adelanto encargo {numero_factura}"
+                        f"Adelanto Encargo {numero_factura} ({porcentaje_texto}) - Recibido en {destino}"
                     ))
 
             # Débito: restante a Encargos por Cobrar
@@ -495,7 +498,7 @@ class ContabilidadService:
             return None
         cuenta_debito = cls.METODO_PAGO_CUENTA.get(metodo_pago, cls.CAJA_GENERAL_CS)
         detalles = [
-            (cuenta_debito, saldo, 0, f"Cobro saldo encargo {numero_factura} ({metodo_pago})"),
+            (cuenta_debito, saldo, 0, f"Liquidación Saldo Encargo {numero_factura} - Entrega de Producto ({metodo_pago})"),
             (cls.ENCARGOS_POR_COBRAR, 0, saldo, f"Liquidación CxC encargo {numero_factura}"),
         ]
         return cls.crear_asiento(

@@ -20,6 +20,8 @@ class Config:
     SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'False').lower() in ['true', '1', 't']
     SESSION_COOKIE_SAMESITE = 'Lax'
     PERMANENT_SESSION_LIFETIME = 28800  # 8 horas de turno
+    WTF_CSRF_TIME_LIMIT = 28800  # 8 horas de turno (evita vencimientos prematuros)
+    SESSION_REFRESH_EACH_REQUEST = False  # Solo el ping posterior a actividad renueva el vencimiento.
 
     # Configure the actual reverse-proxy peer ranges in staging/production.
     # Empty means forwarded headers cannot override the socket peer.

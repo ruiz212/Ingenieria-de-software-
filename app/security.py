@@ -42,9 +42,13 @@ def init_security(app):
 
     @app.errorhandler(CSRFError)
     def csrf_error(error):
-        if request.is_json or '/api/' in request.path:
+        if request.is_json or '/api/' in request.path or request.accept_mimetypes.best == 'application/json':
             return jsonify(error='La sesión del formulario venció. Recargue la página e intente de nuevo.'), 400
-        return 'La sesión del formulario venció. Recargue la página e intente de nuevo.', 400
+        from flask import flash, redirect, url_for
+        flash('La sesión del formulario venció. Por favor, ingrese sus datos de nuevo.', 'warning')
+        if request.path == '/login':
+            return redirect(url_for('auth.login'))
+        return redirect(request.referrer or url_for('hub.main_hub'))
 
     @app.errorhandler(ValueError)
     def validation_error(error):

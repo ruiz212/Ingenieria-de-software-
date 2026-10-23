@@ -892,3 +892,201 @@ body.dark-theme .page-rrhh .dossier-btn-suspend:hover {
     font-size: 0.82rem;
     color: var(--text-main);
 }
+.rrhh-profiles { margin-bottom: 1.5rem; }
+.rrhh-profile-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin:16px 0; }
+.rrhh-profile-card { border:1px solid var(--border,#d6c4b6); border-radius:12px; padding:16px; background:var(--surface-card,#fffaf5); }
+.rrhh-profile-card h4 { margin:0 0 8px; }
+.rrhh-profile-card p,.dossier-profile-details p { white-space:pre-line; }
+.rrhh-profile-editor form,.rrhh-contingency form { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; padding-top:12px; }
+.rrhh-profile-editor label,.rrhh-contingency label { display:flex; flex-direction:column; gap:6px; font-weight:600; }
+.rrhh-profile-editor input,.rrhh-profile-editor textarea,.rrhh-contingency textarea,.rrhh-contingency select { width:100%; border:1px solid var(--border,#d6c4b6); border-radius:9px; padding:10px; background:var(--surface-card,#fff); color:var(--text-main); }
+.dossier-profile-details { margin:0 18px 16px; border-top:1px solid var(--border,#d6c4b6); padding-top:12px; }
+.rrhh-contingency { border-top:1px solid var(--border,#d6c4b6); }
+
+/* ── Dropdown de Operaciones de Nómina ── */
+.page-rrhh .rrhh-payroll-dropdown {
+    position: relative;
+    display: inline-block;
+}
+.page-rrhh .rrhh-payroll-dropdown-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+}
+.page-rrhh .rrhh-payroll-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 100;
+    min-width: 270px;
+    background: var(--surface-card, #fff);
+    border: 1px solid var(--border, #d6c4b6);
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(101, 63, 37, 0.15);
+    padding: 6px;
+    display: none;
+}
+.page-rrhh .rrhh-payroll-menu.show {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.page-rrhh .rrhh-payroll-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-main);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    width: 100%;
+}
+.page-rrhh .rrhh-payroll-menu .dropdown-item:hover,
+.page-rrhh .rrhh-payroll-menu .dropdown-item:focus {
+    background: var(--surface-sunken, #f7efe7);
+}
+.page-rrhh .rrhh-payroll-menu .dropdown-icon {
+    font-size: 1.15rem;
+    flex-shrink: 0;
+}
+.page-rrhh .rrhh-payroll-menu strong {
+    display: block;
+    font-size: 0.88rem;
+    line-height: 1.25;
+}
+.page-rrhh .rrhh-payroll-menu small {
+    display: block;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* ── Toolbar de Búsqueda y Filtrado de Colaboradores ── */
+.page-rrhh .rrhh-dossier-toolbar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    background: var(--surface-sunken, #fbf7f2);
+    border-bottom: 1px solid var(--border-light, #ebe0d6);
+    border-radius: 12px 12px 0 0;
+}
+.page-rrhh .rrhh-search-wrapper {
+    position: relative;
+    flex: 1 1 260px;
+    max-width: 420px;
+}
+.page-rrhh .rrhh-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+}
+.page-rrhh .rrhh-search-input {
+    width: 100%;
+    padding: 9px 12px 9px 36px;
+    border-radius: 9px;
+    border: 1px solid var(--border, #d6c4b6);
+    background: var(--surface, #fff);
+    font-size: 0.88rem;
+    color: var(--text-main);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.page-rrhh .rrhh-search-input:focus {
+    outline: none;
+    border-color: var(--brand-cafe, #8d4f27);
+    box-shadow: 0 0 0 3px rgba(141, 79, 39, 0.15);
+}
+.page-rrhh .rrhh-toolbar-filters {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.page-rrhh .rrhh-filter-chips {
+    display: inline-flex;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #d6c4b6);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 3px;
+}
+.page-rrhh .rrhh-chip {
+    border: none;
+    background: transparent;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.page-rrhh .rrhh-chip.active {
+    background: var(--brand-cafe, #8d4f27);
+    color: #fff;
+}
+.page-rrhh .rrhh-chip-count {
+    font-size: 0.72rem;
+    background: rgba(0, 0, 0, 0.08);
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+.page-rrhh .rrhh-chip.active .rrhh-chip-count {
+    background: rgba(255, 255, 255, 0.25);
+    color: #fff;
+}
+.page-rrhh .rrhh-cargo-select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border, #d6c4b6);
+    background: var(--surface, #fff);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-main);
+}
+.page-rrhh .rrhh-filter-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 18px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    background: var(--surface-sunken, #fbf7f2);
+    border-bottom: 1px solid var(--border-light, #ebe0d6);
+}
+.page-rrhh .rrhh-clear-filters-btn {
+    border: none;
+    background: none;
+    color: var(--brand-cafe, #8d4f27);
+    font-weight: 600;
+    font-size: 0.82rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.page-rrhh .rrhh-nomina-search-box {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+.page-rrhh .rrhh-nomina-search-input {
+    padding: 6px 10px 6px 28px;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    border: 1px solid var(--border, #d6c4b6);
+    width: 170px;
+    background: var(--surface, #fff);
+    color: var(--text-main);
+}

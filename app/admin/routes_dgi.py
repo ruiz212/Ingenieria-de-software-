@@ -4,7 +4,7 @@ import io
 import json
 from datetime import date, datetime, timedelta, timezone
 
-from flask import flash, redirect, render_template, request, send_file, url_for
+from flask import flash, redirect, render_template, request, send_file, url_for, jsonify
 from flask_login import current_user
 
 from app.admin import admin_bp
@@ -132,6 +132,36 @@ def dgi_dashboard():
         month=today.strftime('%Y-%m'), show_history=show_history, engine=ENGINE_VERSION)
 
 
+@admin_bp.route('/dgi/facturas')
+@roles_required('Admin', 'SuperAdmin')
+def dgi_invoices():
+    """Consulta asincrónica, acotada y autorizada para el período visible."""
+    try:
+        period_id = positive_id(request.args.get('periodo'))
+        page = int(request.args.get('pagina', '1'))
+        size = int(request.args.get('tamano', '10'))
+        text = request.args.get('buscar', '').strip()
+        state = request.args.get('estado', '').strip()
+        sale_type = request.args.get('tipo', '').strip()
+        start = date.fromisoformat(request.args['desde']) if request.args.get('desde') else None
+        end = date.fromisoformat(request.args['hasta']) if request.args.get('hasta') else None
+        if page < 1 or page > 100000 or size not in (10, 25, 50) or len(text) > 100:
+            raise ValueError()
+        if state not in ('', 'Emitida', 'Anulada') or sale_type not in ('', 'Mostrador', 'Encargo'):
+            raise ValueError()
+        if start and end and start > end:
+            raise ValueError()
+    except (ValueError, TypeError, DGIInputError):
+        return jsonify(error='Revise el período y los filtros de búsqueda.'), 400
+    try:
+        result = repo.search_invoices(period_id=period_id, text=text, state=state,
+                                      sale_type=sale_type, start=start, end=end,
+                                      page=page, size=size)
+    except repo.DGINotFound as error:
+        return jsonify(error=str(error)), 404
+    return jsonify(result)
+
+
 @admin_bp.route('/dgi/perfil', methods=['POST'])
 @roles_required('Admin', 'SuperAdmin')
 def dgi_profile():
@@ -156,7 +186,8 @@ def dgi_profile():
             repo.get_period(cursor, period_id)
         repo.save_profile(cursor, data, current_user.id)
     flash('Avance del perfil guardado. Los campos fiscales pendientes no bloquean el diagnóstico interno. Revalide las revisiones que utilizaban el perfil anterior.', 'success')
-    return redirect(url_for('admin.dgi_dashboard', periodo=period_id) + '#perfil')
+    return redirect(url_for('admin.dgi_dashboard', periodo=period_id,
+                            borrador_guardado='perfil-dgi') + '#perfil')
 
 
 @admin_bp.route('/dgi/periodos', methods=['POST'])

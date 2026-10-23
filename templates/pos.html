@@ -85,8 +85,11 @@
     <link rel="stylesheet" href="{{ css_url('theme') }}">
     <link rel="stylesheet" href="{{ css_url('pages/sales/pos') }}">
     <link rel="stylesheet" href="{{ css_url('motion') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/session-guard.css', v=1) }}">
+    <script src="{{ url_for('static', filename='js/form_drafts.js', v=1) }}" defer></script>
+    <script src="{{ url_for('static', filename='js/session_guard.js', v=1) }}" defer></script>
 </head>
-<body class="pos-body page-pos">
+<body class="pos-body page-pos" data-session-guard data-draft-user="{{ current_user.rol_nombre }}:{{ current_user.id }}">
     <!-- Header para el Vendedor -->
     <header class="app-header">
         <div>
@@ -471,7 +474,7 @@
         <button id="btn-pastel-personalizado"></button>
         <button id="btn-mis-cotizaciones"></button>
         <div id="pastel-personalizado-modal">
-            <form id="form-pastel-personalizado">
+            <form id="form-pastel-personalizado" data-draft-key="cotizacion-pastel">
                 <textarea id="pastel-especificaciones"></textarea>
                 <input id="pastel-fecha">
                 <input id="pastel-foto">

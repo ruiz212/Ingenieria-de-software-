@@ -29,8 +29,11 @@
     <link rel="stylesheet" href="{{ css_url('theme') }}">
     {% block page_styles %}{% endblock %}
     <link rel="stylesheet" href="{{ css_url('motion') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/session-guard.css', v=1) }}">
+    <script src="{{ url_for('static', filename='js/form_drafts.js', v=1) }}" defer></script>
+    <script src="{{ url_for('static', filename='js/session_guard.js', v=1) }}" defer></script>
 </head>
-<body class="app-container {% block body_class %}{% endblock %}">
+<body class="app-container {% block body_class %}{% endblock %}" data-session-guard data-draft-user="{{ current_user.rol_nombre }}:{{ current_user.id }}">
     <a class="skip-link" href="#main-content">Ir al contenido</a>
     <button class="nav-backdrop" type="button" aria-label="Cerrar menú" tabindex="-1" hidden></button>
     <!-- Global Loading Bar -->

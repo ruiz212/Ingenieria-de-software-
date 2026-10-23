@@ -25,7 +25,7 @@
   },
   "pages/admin/dgi": {
     "file": "dist/pages/admin/dgi.css",
-    "version": "f56e43b74094"
+    "version": "8517053bbc70"
   },
   "pages/sales/monitor": {
     "file": "dist/pages/sales/monitor.css",
@@ -141,7 +141,7 @@
   },
   "pages/admin/rrhh": {
     "file": "dist/pages/admin/rrhh.css",
-    "version": "88f36932d685"
+    "version": "462cd727424b"
   },
   "pages/admin/setup_totp": {
     "file": "dist/pages/admin/setup_totp.css",

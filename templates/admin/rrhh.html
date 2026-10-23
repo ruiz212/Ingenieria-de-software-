@@ -15,10 +15,42 @@
             Nuevo Empleado
         </button>
         <a href="{{ url_for('kiosco.kiosco_vista') }}" target="_blank" class="btn btn-outline rrhh-btn-outline">⏱️ Kiosco Asistencia</a>
-        <button class="btn btn-outline rrhh-btn-outline-2" onclick="abrirModalPlanilla()">📝 Generar Planilla Batch</button>
-        <button class="btn btn-outline rrhh-btn-outline-3" onclick="abrirModalNomina()">💰 Indiv.</button>
-        <button class="btn btn-outline rrhh-btn-outline-4" onclick="abrirModalAguinaldo()">🎄 Aguinaldo</button>
-        <button class="btn btn-outline rrhh-btn-outline-5" onclick="abrirModalLiquidacion()">📋 Liquidación</button>
+        <div class="dropdown rrhh-payroll-dropdown">
+            <button class="btn btn-outline rrhh-payroll-dropdown-btn" type="button" aria-expanded="false" onclick="togglePayrollMenu(event)">
+                <span>💳 Operaciones de Nómina</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="dropdown-menu rrhh-payroll-menu" id="payrollDropdownMenu">
+                <button type="button" class="dropdown-item" onclick="abrirModalPlanilla(); togglePayrollMenu();">
+                    <span class="dropdown-icon">📝</span>
+                    <div>
+                        <strong>Planilla Mensual (Batch)</strong>
+                        <small>Calcular nómina masiva del mes</small>
+                    </div>
+                </button>
+                <button type="button" class="dropdown-item" onclick="abrirModalNomina(); togglePayrollMenu();">
+                    <span class="dropdown-icon">💵</span>
+                    <div>
+                        <strong>Nómina Individual</strong>
+                        <small>Calcular pago específico por colaborador</small>
+                    </div>
+                </button>
+                <button type="button" class="dropdown-item" onclick="abrirModalAguinaldo(); togglePayrollMenu();">
+                    <span class="dropdown-icon">🎄</span>
+                    <div>
+                        <strong>Décimo Tercer Mes (Aguinaldo)</strong>
+                        <small>Cálculo de ley Art. 93 Ley 185</small>
+                    </div>
+                </button>
+                <button type="button" class="dropdown-item" onclick="abrirModalLiquidacion(); togglePayrollMenu();">
+                    <span class="dropdown-icon">📋</span>
+                    <div>
+                        <strong>Liquidación Laboral</strong>
+                        <small>Finiquito por renuncia o despido</small>
+                    </div>
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -53,6 +85,35 @@
     </div>
 </div>
 
+<section class="panel panel-full rrhh-profiles" aria-labelledby="rrhh-profiles-title">
+    <div class="panel-header"><h3 id="rrhh-profiles-title">Perfiles de puesto</h3></div>
+    <div class="panel-body">
+        <p>Describe el rol, sus obligaciones y las competencias del contrato. Los cargos históricos pueden completarse aquí.</p>
+        <div class="rrhh-profile-list">
+            {% for p in perfiles %}
+            <article class="rrhh-profile-card">
+                <h4>{{ p.cargo }}</h4>
+                {% if p.perfil or p.obligaciones or p.competencias %}
+                <p>{{ p.perfil or 'Descripción pendiente' }}</p>
+                <details><summary>Obligaciones y competencias</summary><p><strong>Obligaciones</strong><br>{{ p.obligaciones or 'Pendiente' }}</p><p><strong>Competencias</strong><br>{{ p.competencias or 'Pendiente' }}</p></details>
+                {% else %}<p>Perfil contractual pendiente de completar.</p>{% endif %}
+                <button type="button" class="btn btn-outline btn-sm" data-edit-profile="{{ loop.index0 }}">Editar perfil</button>
+            </article>
+            {% else %}<p>No hay perfiles registrados. Agrega el primero antes de crear un empleado.</p>{% endfor %}
+        </div>
+        <details class="rrhh-profile-editor" id="rrhh-profile-editor"><summary>Registrar o actualizar un perfil</summary>
+            <form id="form-perfil-puesto" data-draft-key="perfil-puesto">
+                <label>Cargo<input id="perfil-cargo" maxlength="100" required></label>
+                <label>Perfil general<textarea id="perfil-descripcion" maxlength="1000" rows="2" required></textarea></label>
+                <label>Obligaciones contractuales<textarea id="perfil-obligaciones" maxlength="2000" rows="3" required></textarea></label>
+                <label>Requisitos y competencias<textarea id="perfil-competencias" maxlength="1000" rows="2" required></textarea></label>
+                <button type="submit" class="btn btn-primary">Guardar perfil</button>
+            </form>
+        </details>
+        <script id="rrhh-profiles-data" type="application/json">{{ perfiles|tojson }}</script>
+    </div>
+</section>
+
 <!-- Empleados Grid -->
 <div class="panel panel-full panel-accent-primary mb-3">
     <div class="panel-header">
@@ -61,11 +122,46 @@
             Expedientes de Empleados
         </h3>
     </div>
+    {% if empleados %}
+    <div class="rrhh-dossier-toolbar">
+        <div class="rrhh-search-wrapper">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="rrhh-search-icon" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" id="filtro-empleados-busqueda" placeholder="Buscar por nombre, cédula o cargo..." class="form-input rrhh-search-input" autocomplete="off" oninput="filtrarEmpleadosDossier()">
+        </div>
+        <div class="rrhh-toolbar-filters">
+            <div class="rrhh-filter-chips" role="radiogroup" aria-label="Filtrar por estado">
+                <button type="button" class="rrhh-chip active" data-estado="ALL" onclick="cambiarEstadoFiltroDossier('ALL', this)">
+                    Todos <span class="rrhh-chip-count" id="count-total-empleados">{{ empleados|length }}</span>
+                </button>
+                <button type="button" class="rrhh-chip" data-estado="Activo" onclick="cambiarEstadoFiltroDossier('Activo', this)">
+                    Activos <span class="rrhh-chip-count" id="count-activos-empleados">0</span>
+                </button>
+                <button type="button" class="rrhh-chip" data-estado="Liquidado" onclick="cambiarEstadoFiltroDossier('Liquidado', this)">
+                    Inactivos <span class="rrhh-chip-count" id="count-liquidados-empleados">0</span>
+                </button>
+            </div>
+            <select id="filtro-cargo-dossier" class="form-select rrhh-cargo-select" onchange="filtrarEmpleadosDossier()" aria-label="Filtrar por cargo">
+                <option value="ALL">Todos los cargos</option>
+                {% set cargos_unicos = [] %}
+                {% for e in empleados %}
+                    {% if e.cargo and e.cargo not in cargos_unicos %}
+                        {% set _ = cargos_unicos.append(e.cargo) %}
+                        <option value="{{ e.cargo }}">{{ e.cargo }}</option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="rrhh-filter-status-bar">
+        <span id="rrhh-dossier-counter" class="rrhh-results-text">Mostrando {{ empleados|length }} colaboradores</span>
+        <button type="button" id="btn-limpiar-filtros-dossier" class="btn-link rrhh-clear-filters-btn hidden" onclick="limpiarFiltrosDossier()">Limpiar filtros</button>
+    </div>
+    {% endif %}
     <div class="panel-body">
         {% if empleados %}
-        <div class="rrhh-grid">
+        <div class="rrhh-grid" id="grid-expedientes-empleados">
             {% for e in empleados %}
-            <article class="card rrhh-card dossier-card">
+            <article class="card rrhh-card dossier-card" data-nombre="{{ (e.nombre or '')|lower }}" data-cedula="{{ (e.cedula or '')|lower }}" data-cargo="{{ (e.cargo or '')|lower }}" data-estado="{{ e.estado }}">
                 <header class="dossier-header">
                     <div class="dossier-profile">
                         <div class="dossier-avatar" aria-hidden="true">
@@ -117,6 +213,14 @@
                     </div>
                 </div>
 
+                {% if e.perfil_puesto %}
+                <details class="dossier-profile-details"><summary>Perfil y obligaciones del puesto</summary>
+                    <p>{{ e.perfil_puesto.perfil or 'Descripción pendiente' }}</p>
+                    <p><strong>Obligaciones</strong><br>{{ e.perfil_puesto.obligaciones or 'Pendiente' }}</p>
+                    <p><strong>Competencias</strong><br>{{ e.perfil_puesto.competencias or 'Pendiente' }}</p>
+                </details>
+                {% endif %}
+
                 <footer class="dossier-footer">
                     <div class="dossier-legal-status">
                         {% if e.consentimiento %}
@@ -144,6 +248,11 @@
                 </footer>
             </article>
             {% endfor %}
+            <div id="dossier-no-results" class="empty-state hidden" style="grid-column: 1 / -1; padding: 30px;">
+                <div class="empty-state-icon">🔍</div>
+                <p>No se encontraron colaboradores que coincidan con los filtros aplicados.</p>
+                <button type="button" class="btn btn-outline btn-sm" onclick="limpiarFiltrosDossier()">Restablecer búsqueda</button>
+            </div>
         </div>
         {% else %}
         <div class="empty-state">
@@ -161,6 +270,17 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             Monitor de Asistencia Hoy
         </h3>
+    </div>
+    <div class="panel-body rrhh-contingency">
+        <details><summary>Marcaje de contingencia autorizado</summary>
+            <p>Úsalo si el reconocimiento facial falla o el empleado no puede usarlo. El motivo y el supervisor quedan auditados.</p>
+            <form id="form-asistencia-contingencia" data-draft-key="asistencia-contingencia">
+                <label>Empleado<select id="contingencia-empleado" required><option value="">Seleccionar</option>{% for e in empleados if e.estado == 'Activo' %}<option value="{{ e.id }}">{{ e.nombre }} · {{ e.cargo }}</option>{% endfor %}</select></label>
+                <label>Acción<select id="contingencia-accion"><option value="entrada">Entrada</option><option value="salida">Salida</option></select></label>
+                <label>Motivo de la excepción<textarea id="contingencia-motivo" minlength="10" maxlength="300" required></textarea></label>
+                <button type="submit" class="btn btn-outline">Registrar con mi autorización</button>
+            </form>
+        </details>
     </div>
     <div class="panel-body panel-body-flush">
         <div class="table-responsive {% if not monitor_hoy %}rrhh-initially-hidden{% endif %}" id="monitor-table-container">
@@ -216,6 +336,10 @@
                 <option value="2026-09">Septiembre 2026</option>
                 <option value="2026-11">Ciclo Aguinaldo 2026</option>
             </select>
+            <div class="rrhh-nomina-search-box">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="rrhh-search-icon" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="search" id="filtro-nomina-colaborador" placeholder="Buscar colaborador..." class="form-input rrhh-nomina-search-input" oninput="aplicarFiltroNominasRRHH()" autocomplete="off">
+            </div>
             <button class="btn btn-outline btn-sm" onclick="window.location.href='/admin/rrhh/reportes/inss_patronal'">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Reporte INSS Mensual
             </button>
@@ -302,7 +426,7 @@
     <div class="modal-content rrhh-modal-content">
         <h2>Nuevo Empleado</h2>
         <p class="subtitle">Registrar un nuevo colaborador en el sistema.</p>
-        <form id="form-nuevo-empleado">
+        <form id="form-nuevo-empleado" data-draft-key="nuevo-empleado">
             <div class="form-group">
                 <label class="form-label">Nombre Completo</label>
                 <input type="text" id="ne-nombre" class="form-input" required>
@@ -320,11 +444,11 @@
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">Cargo</label>
-                    <input type="text" id="ne-cargo" class="form-input" required>
+                    <select id="ne-cargo" class="form-select" required><option value="">Selecciona un perfil</option>{% for p in perfiles %}<option value="{{ p.cargo }}">{{ p.cargo }}</option>{% endfor %}</select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Fecha de Ingreso</label>
-                    <input type="date" id="ne-ingreso" class="form-input" required>
+                    <input type="date" id="ne-ingreso" class="form-input" value="{{ fecha_hoy }}" required>
                 </div>
             </div>
             <div class="form-row">
@@ -661,6 +785,8 @@
 
     function aplicarFiltroNominasRRHH() {
         const selectMes = document.getElementById('filtro-periodo-rrhh');
+        const inputBuscar = document.getElementById('filtro-nomina-colaborador');
+        const query = inputBuscar ? inputBuscar.value.trim().toLowerCase() : '';
         const mesFiltro = selectMes ? selectMes.value : 'ALL';
         const filas = document.querySelectorAll('.fila-nomina-rrhh');
         let dev = 0, ded = 0, neto = 0, pat = 0, visibles = 0;
@@ -668,7 +794,9 @@
         filas.forEach(tr => {
             const coincideTipo = (tr.dataset.tipo === tipoNominaFiltroActual);
             const coincideMes = (mesFiltro === 'ALL' || tr.dataset.mes === mesFiltro);
-            const mostrar = coincideTipo && coincideMes;
+            const textoFila = tr.textContent.toLowerCase();
+            const coincideQuery = !query || textoFila.includes(query);
+            const mostrar = coincideTipo && coincideMes && coincideQuery;
             tr.style.display = mostrar ? '' : 'none';
             if (mostrar) {
                 visibles += 1;
@@ -1062,11 +1190,6 @@
     document.getElementById('form-nuevo-empleado').addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        if (!capturedFaceBase64) {
-            showToast('Debe capturar un rostro válido con la cámara para registrar al empleado', true);
-            return;
-        }
-
         showLoading();
         let fotoBase64 = capturedFaceBase64;
 
@@ -1093,6 +1216,7 @@
             });
             hideLoading();
             if (res.ok) {
+                window.clearFormDraft?.(e.currentTarget);
                 showToast('Empleado registrado exitosamente');
                 setTimeout(() => location.reload(), 1000);
             } else {
@@ -1295,6 +1419,86 @@
             console.error('Error polling asistencia:', e);
         }
     }
+</script>
+<script src="{{ url_for('static', filename='js/rrhh_corte5.js', v=1) }}" defer>
+    let estadoFiltroDossierActual = 'ALL';
+
+    function togglePayrollMenu(e) {
+        if (e) e.stopPropagation();
+        const menu = document.getElementById('payrollDropdownMenu');
+        if (menu) menu.classList.toggle('show');
+    }
+
+    document.addEventListener('click', function(e) {
+        const dropdown = document.querySelector('.rrhh-payroll-dropdown');
+        const menu = document.getElementById('payrollDropdownMenu');
+        if (menu && menu.classList.contains('show') && (!dropdown || !dropdown.contains(e.target))) {
+            menu.classList.remove('show');
+        }
+    });
+
+    function cambiarEstadoFiltroDossier(estado, btn) {
+        estadoFiltroDossierActual = estado;
+        document.querySelectorAll('.rrhh-filter-chips .rrhh-chip').forEach(c => c.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        filtrarEmpleadosDossier();
+    }
+
+    function filtrarEmpleadosDossier() {
+        const inputBuscar = document.getElementById('filtro-empleados-busqueda');
+        const query = inputBuscar ? inputBuscar.value.trim().toLowerCase() : '';
+        const selectCargo = document.getElementById('filtro-cargo-dossier');
+        const cargoFiltro = selectCargo ? selectCargo.value.toLowerCase() : 'all';
+        const cards = document.querySelectorAll('#grid-expedientes-empleados .dossier-card');
+        const btnLimpiar = document.getElementById('btn-limpiar-filtros-dossier');
+        const noResults = document.getElementById('dossier-no-results');
+        const counter = document.getElementById('rrhh-dossier-counter');
+
+        let visibles = 0;
+        cards.forEach(card => {
+            const nombre = card.dataset.nombre || '';
+            const cedula = card.dataset.cedula || '';
+            const cargo = card.dataset.cargo || '';
+            const estado = card.dataset.estado || '';
+
+            const coincideQuery = !query || nombre.includes(query) || cedula.includes(query) || cargo.includes(query);
+            const coincideEstado = (estadoFiltroDossierActual === 'ALL' || estado === estadoFiltroDossierActual);
+            const coincideCargo = (cargoFiltro === 'all' || cargo === cargoFiltro);
+
+            const mostrar = coincideQuery && coincideEstado && coincideCargo;
+            card.style.display = mostrar ? '' : 'none';
+            if (mostrar) visibles++;
+        });
+
+        if (counter) counter.textContent = `Mostrando ${visibles} de ${cards.length} colaboradores`;
+        if (noResults) noResults.classList.toggle('hidden', visibles > 0);
+        if (btnLimpiar) btnLimpiar.classList.toggle('hidden', !query && estadoFiltroDossierActual === 'ALL' && cargoFiltro === 'all');
+    }
+
+    function limpiarFiltrosDossier() {
+        const inputBuscar = document.getElementById('filtro-empleados-busqueda');
+        if (inputBuscar) inputBuscar.value = '';
+        const selectCargo = document.getElementById('filtro-cargo-dossier');
+        if (selectCargo) selectCargo.value = 'ALL';
+        const firstChip = document.querySelector('.rrhh-filter-chips .rrhh-chip[data-estado="ALL"]');
+        cambiarEstadoFiltroDossier('ALL', firstChip);
+    }
+
+    function actualizarContadoresDossier() {
+        const cards = document.querySelectorAll('#grid-expedientes-empleados .dossier-card');
+        let activos = 0, liquidados = 0;
+        cards.forEach(card => {
+            if (card.dataset.estado === 'Activo') activos++;
+            else liquidados++;
+        });
+        const elActivos = document.getElementById('count-activos-empleados');
+        const elLiquidados = document.getElementById('count-liquidados-empleados');
+        if (elActivos) elActivos.textContent = activos;
+        if (elLiquidados) elLiquidados.textContent = liquidados;
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        actualizarContadoresDossier();
+    });
 </script>
 {% endblock %}
 

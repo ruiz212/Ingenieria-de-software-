@@ -87,6 +87,19 @@ def rrhh():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    try:
+        execute_sp(
+            cursor, 'rrhh.sp_ListarPerfilesPuesto',
+            fallback_sql='SELECT Cargo,PerfilPuesto,Obligaciones,RequisitosCompetencias,ActualizadoEn FROM rrhh.PerfilesPuesto ORDER BY Cargo',
+        )
+        perfiles = [{
+            'cargo': row.Cargo, 'perfil': row.PerfilPuesto,
+            'obligaciones': row.Obligaciones, 'competencias': row.RequisitosCompetencias,
+        } for row in cursor.fetchall()]
+    except Exception:
+        perfiles = []
+    perfil_por_cargo = {row['cargo'].casefold(): row for row in perfiles}
+
     # Empleados activos
     execute_sp(
         cursor,
@@ -109,7 +122,8 @@ def rrhh():
             'numero_inss': r.NumeroINSS or '', 'username': r.Username or '',
             'consentimiento': bool(r.ConsentimientoDatos),
             'hora_entrada': r.HoraEntrada.strftime('%H:%M') if r.HoraEntrada else '',
-            'hora_salida': r.HoraSalida.strftime('%H:%M') if r.HoraSalida else ''
+            'hora_salida': r.HoraSalida.strftime('%H:%M') if r.HoraSalida else '',
+            'perfil_puesto': perfil_por_cargo.get(r.Cargo.casefold()),
         })
 
     # Nóminas recientes
@@ -196,7 +210,38 @@ def rrhh():
 
     return render_template('admin/rrhh.html', user=current_user,
         empleados=empleados, nominas=nominas, tasas=tasas, total_activos=total_activos,
-        monitor_hoy=monitor_hoy, datetime=datetime)
+        monitor_hoy=monitor_hoy, datetime=datetime, perfiles=perfiles,
+        fecha_hoy=business_now().strftime('%Y-%m-%d'))
+
+
+@admin_bp.route('/api/rrhh/puestos', methods=['POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def guardar_perfil_puesto():
+    """Mantiene obligaciones contractuales sin intervenir la remuneración."""
+    data = request.get_json(silent=True) or {}
+    limits = {'cargo': 100, 'perfil_puesto': 1000,
+              'obligaciones': 2000, 'requisitos_competencias': 1000}
+    fields = {}
+    for key, limit in limits.items():
+        value = str(data.get(key) or '').strip()
+        if not value or len(value) > limit or '\x00' in value:
+            return jsonify(error=f'Complete {key} (máximo {limit} caracteres).'), 400
+        fields[key] = value
+    conn = get_db_connection()
+    try:
+        execute_sp(
+            conn.cursor(), 'rrhh.sp_GuardarPerfilPuesto',
+            (fields['cargo'], fields['perfil_puesto'], fields['obligaciones'],
+             fields['requisitos_competencias'], current_user.id, request.remote_addr),
+        )
+        conn.commit()
+        return jsonify(status='success', cargo=fields['cargo'])
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 @admin_bp.route('/api/rrhh/asistencia_hoy_json', methods=['GET'])
@@ -242,14 +287,26 @@ def rrhh_asistencia_hoy_json():
 @roles_required('Admin', 'SuperAdmin')
 def crear_empleado():
     """Crea un nuevo empleado en el expediente."""
-    datos = request.json
+    datos = request.get_json(silent=True) or {}
+    datos['fecha_ingreso'] = datos.get('fecha_ingreso') or business_now().strftime('%Y-%m-%d')
     campos_requeridos = ['nombre', 'cedula', 'cargo', 'fecha_ingreso', 'salario_base']
     if not all(datos.get(c) for c in campos_requeridos):
         return jsonify({'error': 'Faltan campos requeridos'}), 400
+    try:
+        date.fromisoformat(str(datos['fecha_ingreso']))
+    except ValueError:
+        return jsonify(error='Fecha de ingreso inválida.'), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        execute_sp(
+            cursor, 'rrhh.sp_ObtenerPerfilPuestoPorCargo',
+            (str(datos['cargo']).strip(),),
+            fallback_sql='SELECT Cargo FROM rrhh.PerfilesPuesto WHERE Cargo=?',
+        )
+        if not cursor.fetchone():
+            return jsonify(error='Seleccione un perfil de puesto registrado.'), 400
         foto_path = None
         descriptor_str = None
         if 'foto' in datos and datos['foto']:

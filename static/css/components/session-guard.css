@@ -1,0 +1,9 @@
+.session-guard-dialog { border: 0; border-radius: 1.2rem; padding: 0; max-width: min(28rem, calc(100vw - 2rem)); color: #f8f2eb; background: #29201b; box-shadow: 0 24px 80px #120d0baa; }
+.session-guard-dialog::backdrop { background: #1b120cc0; }
+.session-guard-panel { padding: 1.8rem; }
+.session-guard-kicker { color: #e6af56; letter-spacing: .08em; text-transform: uppercase; font-size: .75rem; font-weight: 700; }
+.session-guard-panel h2 { font-size: 1.55rem; margin: .4rem 0 .8rem; }
+.session-guard-panel p { line-height: 1.5; }
+.session-guard-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1.3rem; }
+.draft-restored-note { padding: .7rem .9rem; border: 1px solid #c98b3c; border-radius: .7rem; background: #fff8e9; color: #50351b; }
+.draft-restored-note button { margin-left: .4rem; border: 0; background: none; color: #754116; font-weight: 700; text-decoration: underline; cursor: pointer; }

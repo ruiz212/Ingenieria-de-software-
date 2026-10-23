@@ -1,5 +1,6 @@
 """Adaptador SQL Server y flujo transaccional de preparación DGI."""
 import json
+import pyodbc
 from contextlib import contextmanager
 from datetime import date, timedelta
 
@@ -70,6 +71,42 @@ def transaction():
 def rows(cursor):
     names = [c[0] for c in cursor.description]
     return [dict(zip(names, row)) for row in cursor.fetchall()]
+
+
+def search_invoices(*, period_id, text='', state='', sale_type='', start=None, end=None, page=1, size=10):
+    """Devuelve solo una página de facturas del período; no carga documentos JSON."""
+    from app.services.business_time import business_now
+    cursor_connection = get_db_connection()
+    try:
+        cursor = cursor_connection.cursor()
+        try:
+            execute_sp(
+                cursor,
+                'fiscal.sp_ListarFacturasPeriodo',
+                (period_id, text or None, state or None,
+                 {'Mostrador': 0, 'Encargo': 1}.get(sale_type),
+                 start, end, page, size, business_now() - timedelta(hours=24)),
+            )
+        except pyodbc.Error as error:
+            if '(51051)' in str(error):
+                raise DGINotFound('Período DGI no encontrado.') from error
+            raise
+        total_row = cursor.fetchone()
+        total = int(total_row[0]) if total_row else 0
+        if not cursor.nextset():
+            raise RuntimeError('La consulta fiscal no devolvió la página solicitada.')
+        invoices = []
+        for row in rows(cursor):
+            invoices.append({
+                'id': row['ID'], 'numero': row['NumeroFactura'],
+                'fecha': row['FechaHora'].isoformat(), 'total': f"{row['Total']:.2f}",
+                'estado': row['EstadoFiscal'],
+                'tipo': 'Encargo' if row['EsEncargo'] else 'Mostrador',
+                'cliente': row['Cliente'], 'reciente': bool(row['EsReciente']),
+            })
+        return {'total': total, 'facturas': invoices}
+    finally:
+        cursor_connection.close()
 
 
 def profile(cursor):

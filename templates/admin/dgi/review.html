@@ -75,10 +75,60 @@
   <div class="dgi-heading"><h3>Ventas del período</h3><a href="{{ url_for('admin.fiscal') }}">Abrir facturación</a></div>
   <p class="dgi-muted">Los importes se toman de los documentos. Las anulaciones y ajustes se conservan en su fuente.</p>
   {% if result.get('fechas_normalizadas',0) %}<p class="dgi-notice">Se interpretaron {{ result.fechas_normalizadas }} fechas históricas usando el comprobante y la evidencia contable. La fecha original de la base permanece disponible en cada fila; no se editaron documentos.</p>{% endif %}
-  <div class="dgi-table"><table><thead><tr><th>Documento</th><th>Fecha comercial</th><th>Base C$</th><th>IVA registrado C$</th><th>Total C$</th><th>Estado</th><th>Incluida</th></tr></thead><tbody>
-  {% for r in result.ventas %}<tr><td><a href="{{ url_for('admin.dgi_source',kind='factura',source_id=r.id) }}">{{ r.numero or 'Sin número' }} (#{{ r.id }})</a></td><td>{{ r.fecha|dgi_date }}{% if r.get('fecha_normalizada') %}<br><small>Original BD: {{ r.fecha_bd|dgi_date }}</small>{% endif %}</td><td>{{ r.base|dgi_money }}</td><td>{{ r.iva|dgi_money }}</td><td>{{ r.total|dgi_money }}</td><td>{{ r.estado }}{% if r.anulada_en %}<br>{{ r.anulada_en|dgi_date }}{% endif %}</td><td>{{ 'Sí' if r.incluida else 'No' }}</td></tr>
+  
+  {% if result.ventas %}
+  <div class="dgi-revision-toolbar" role="search" aria-label="Búsqueda y filtros de ventas del período">
+    <div style="position:relative; flex:1 1 240px; max-width:360px;">
+      <input type="search" id="dgi-ventas-search" class="dgi-revision-search" style="max-width:100%; width:100%;" placeholder="Buscar por factura, #ID o fecha..." aria-label="Buscar venta por documento, ID o fecha">
+    </div>
+    <select id="dgi-ventas-estado" class="dgi-revision-filter-select" aria-label="Filtrar por estado">
+      <option value="">Estado: Todos</option>
+      <option value="Emitida">Emitida</option>
+      <option value="Anulada">Anulada</option>
+    </select>
+    <select id="dgi-ventas-incluida" class="dgi-revision-filter-select" aria-label="Filtrar por inclusión fiscal">
+      <option value="">Inclusión: Todas</option>
+      <option value="Sí">Incluidas (Sí)</option>
+      <option value="No">Excluidas (No)</option>
+    </select>
+    <select id="dgi-ventas-size" class="dgi-revision-filter-select" aria-label="Filas por página">
+      <option value="10">10 por pág.</option>
+      <option value="25" selected>25 por pág.</option>
+      <option value="50">50 por pág.</option>
+      <option value="all">Todas</option>
+    </select>
+    <button type="button" id="dgi-ventas-reset" class="btn btn-outline" style="min-height:38px; padding:6px 14px; font-size:0.84rem;">Limpiar</button>
+    <span id="dgi-ventas-count" class="dgi-muted" aria-live="polite" style="margin-left:auto; font-weight:600; font-size:0.86rem;"></span>
+  </div>
+  {% endif %}
+
+  <div class="dgi-table"><table id="dgi-ventas-table"><thead><tr><th>Documento</th><th>Fecha comercial</th><th>Base C$</th><th>IVA registrado C$</th><th>Total C$</th><th>Estado</th><th>Incluida</th></tr></thead><tbody>
+  {% for r in result.ventas %}
+  <tr class="dgi-venta-row" data-search="{{ (r.numero or '')|lower }} #{{ r.id }} {{ (r.fecha|dgi_date)|lower }}" data-estado="{{ r.estado }}" data-incluida="{{ 'Sí' if r.incluida else 'No' }}">
+    <td><a href="{{ url_for('admin.dgi_source',kind='factura',source_id=r.id) }}">{{ r.numero or 'Sin número' }} (#{{ r.id }})</a></td>
+    <td>{{ r.fecha|dgi_date }}{% if r.get('fecha_normalizada') %}<br><small>Original BD: {{ r.fecha_bd|dgi_date }}</small>{% endif %}</td>
+    <td>{{ r.base|dgi_money }}</td>
+    <td>{{ r.iva|dgi_money }}</td>
+    <td>{{ r.total|dgi_money }}</td>
+    <td>{{ r.estado }}{% if r.anulada_en %}<br>{{ r.anulada_en|dgi_date }}{% endif %}</td>
+    <td>{{ 'Sí' if r.incluida else 'No' }}</td>
+  </tr>
   {% else %}<tr><td colspan="7">No hay ventas ni anulaciones en este período.</td></tr>{% endfor %}
-  </tbody></table></div><p><strong>Total registrado: {{ result.totales.ventas_total|dgi_money }}</strong> · IVA registrado: {{ result.totales.ventas_iva|dgi_money }}</p>
+  <tr id="dgi-ventas-no-match" hidden><td colspan="7" style="text-align:center; padding:24px; color:var(--text-muted); font-style:italic;">No hay ventas que coincidan con la búsqueda o filtros seleccionados.</td></tr>
+  </tbody></table></div>
+
+  {% if result.ventas %}
+  <div id="dgi-ventas-pagination" class="dgi-invoice-pages" style="display:flex; justify-content:space-between; align-items:center; margin:12px 0 16px;">
+    <span id="dgi-ventas-page-info" class="dgi-muted" style="font-size:0.86rem; font-weight:600;"></span>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button type="button" id="dgi-ventas-prev" class="btn btn-outline" style="min-height:36px; padding:4px 12px; font-size:0.84rem;">&larr; Anterior</button>
+      <span id="dgi-ventas-page-num" style="font-weight:700; font-size:0.86rem; padding:0 8px; min-width:80px; text-align:center;">Página 1</span>
+      <button type="button" id="dgi-ventas-next" class="btn btn-outline" style="min-height:36px; padding:4px 12px; font-size:0.84rem;">Siguiente &rarr;</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <p><strong>Total registrado: {{ result.totales.ventas_total|dgi_money }}</strong> · IVA registrado: {{ result.totales.ventas_iva|dgi_money }}</p>
 </section>
 <section class="dgi-card">
   <div class="dgi-heading"><h3>Compras y soportes</h3><a href="{{ url_for('admin.inventario') }}">Consultar o registrar compras</a></div>
@@ -140,4 +190,4 @@
   <a href="{{ url_for('admin.dgi_dashboard',periodo=period.ID,historial=1) }}">Consultar versiones anteriores del período</a>
 </details>
 {% endblock %}
-{% block extra_scripts %}<script src="{{ url_for('static',filename='js/dgi.js',v='1.1') }}" defer></script>{% endblock %}
+{% block extra_scripts %}<script src="{{ url_for('static',filename='js/dgi.js',v='1.2') }}" defer></script>{% endblock %}
