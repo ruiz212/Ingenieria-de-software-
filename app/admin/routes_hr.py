@@ -90,11 +90,12 @@ def rrhh():
     try:
         execute_sp(
             cursor, 'rrhh.sp_ListarPerfilesPuesto',
-            fallback_sql='SELECT Cargo,PerfilPuesto,Obligaciones,RequisitosCompetencias,ActualizadoEn FROM rrhh.PerfilesPuesto ORDER BY Cargo',
+            fallback_sql='SELECT Cargo,PerfilPuesto,Obligaciones,RequisitosCompetencias,ActualizadoEn,Activo FROM rrhh.PerfilesPuesto ORDER BY Cargo',
         )
         perfiles = [{
             'cargo': row.Cargo, 'perfil': row.PerfilPuesto,
             'obligaciones': row.Obligaciones, 'competencias': row.RequisitosCompetencias,
+            'activo': bool(getattr(row, 'Activo', 1)) if (hasattr(row, 'Activo') and getattr(row, 'Activo') is not None) else True,
         } for row in cursor.fetchall()]
     except Exception:
         perfiles = []
@@ -244,6 +245,32 @@ def guardar_perfil_puesto():
         conn.close()
 
 
+@admin_bp.route('/api/rrhh/puestos/estado', methods=['POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def cambiar_estado_perfil_puesto():
+    """Activa o desactiva un perfil de puesto (Soft Delete)."""
+    data = request.get_json(silent=True) or {}
+    cargo = str(data.get('cargo') or '').strip()
+    if not cargo:
+        return jsonify(error='Debe especificar un cargo.'), 400
+    activo = 1 if data.get('activo') in (True, 1, '1', 'true', 'True') else 0
+    conn = get_db_connection()
+    try:
+        execute_sp(
+            conn.cursor(), 'rrhh.sp_CambiarEstadoPerfilPuesto',
+            (cargo, activo, current_user.id, request.remote_addr),
+            fallback_sql="UPDATE rrhh.PerfilesPuesto SET Activo=?, ActualizadoEn=SYSUTCDATETIME() WHERE Cargo=?",
+        )
+        conn.commit()
+        return jsonify(status='success', cargo=cargo, activo=bool(activo))
+    except Exception as e:
+        conn.rollback()
+        return jsonify(error=str(e)), 500
+    finally:
+        conn.close()
+
+
 @admin_bp.route('/api/rrhh/asistencia_hoy_json', methods=['GET'])
 @login_required
 @roles_required('Admin', 'SuperAdmin')
@@ -280,6 +307,33 @@ def rrhh_asistencia_hoy_json():
         return jsonify({'error': 'Error interno'}), 500
     finally:
         conn.close()
+
+
+@admin_bp.route('/api/rrhh/escala-salarial', methods=['GET'])
+@admin_bp.route('/api/rrhh/escala-salarial/<path:cargo>', methods=['GET'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def obtener_salario_escala(cargo=None):
+    """Consulta la escala salarial por cargo para autocompletar el salario base."""
+    target_cargo = cargo or request.args.get('cargo', '')
+    target_cargo = str(target_cargo).strip()
+    if not target_cargo:
+        return jsonify({'status': 'error', 'message': 'Debe especificar un cargo.'}), 400
+
+    from app.models import EscalaSalarial
+    escala = EscalaSalarial.get_by_cargo(target_cargo)
+    if not escala:
+        return jsonify({'status': 'error', 'message': f'Cargo "{target_cargo}" no encontrado en la escala salarial.'}), 404
+
+    return jsonify({
+        'status': 'success',
+        'id': escala.id,
+        'nivel': escala.nivel,
+        'cargo': escala.cargo,
+        'limite_inferior': escala.limite_inferior,
+        'limite_superior': escala.limite_superior,
+        'salario_base': escala.salario_base,
+    })
 
 
 @admin_bp.route('/api/rrhh/empleado', methods=['POST'])

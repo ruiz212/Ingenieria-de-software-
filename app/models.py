@@ -173,3 +173,102 @@ def load_user(user_id):
     finally:
         if has_request_context():
             g._loading_auth_user = False
+
+
+class EscalaSalarial:
+    """Modelo que representa una fila de la tabla escala_salarial (valuación por puntos)."""
+
+    def __init__(self, id, nivel, cargo, limite_inferior, limite_superior, salario_base):
+        self.id = id
+        self.nivel = nivel
+        self.cargo = cargo
+        self.limite_inferior = int(limite_inferior) if limite_inferior is not None else None
+        self.limite_superior = int(limite_superior) if limite_superior is not None else None
+        self.salario_base = float(salario_base) if salario_base is not None else 0.0
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nivel': self.nivel,
+            'cargo': self.cargo,
+            'limite_inferior': self.limite_inferior,
+            'limite_superior': self.limite_superior,
+            'salario_base': self.salario_base,
+        }
+
+    @staticmethod
+    def get_by_cargo(cargo):
+        """Busca la escala salarial por cargo ejecutando rrhh.sp_ObtenerEscalaSalarialPorCargo."""
+        if not cargo:
+            return None
+        conn = get_db_connection(inject_context=False)
+        cursor = conn.cursor()
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerEscalaSalarialPorCargo',
+            (str(cargo).strip(),),
+            fallback_sql=(
+                "SELECT id, nivel, cargo, limite_inferior, limite_superior, salario_base "
+                "FROM escala_salarial WHERE LOWER(cargo) = LOWER(?) OR LOWER(?) LIKE '%' + LOWER(cargo) + '%'"
+            ),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            def _val(name, fallback_name, idx):
+                if hasattr(row, name):
+                    return getattr(row, name)
+                if hasattr(row, fallback_name):
+                    return getattr(row, fallback_name)
+                try:
+                    return row[idx]
+                except Exception:
+                    return None
+
+            return EscalaSalarial(
+                id=_val('id', 'ID', 0),
+                nivel=_val('nivel', 'Nivel', 1),
+                cargo=_val('cargo', 'Cargo', 2),
+                limite_inferior=_val('limite_inferior', 'LimiteInferior', 3),
+                limite_superior=_val('limite_superior', 'LimiteSuperior', 4),
+                salario_base=_val('salario_base', 'SalarioBase', 5),
+            )
+        return None
+
+    @staticmethod
+    def get_all():
+        """Obtiene toda la escala salarial ordenada por ID/Nivel."""
+        conn = get_db_connection(inject_context=False)
+        cursor = conn.cursor()
+        execute_sp(
+            cursor,
+            'rrhh.sp_ListarEscalaSalarial',
+            fallback_sql=(
+                "SELECT id, nivel, cargo, limite_inferior, limite_superior, salario_base "
+                "FROM escala_salarial ORDER BY id"
+            ),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        result = []
+        for r in rows:
+            def _val_r(name, fallback_name, idx):
+                if hasattr(r, name):
+                    return getattr(r, name)
+                if hasattr(r, fallback_name):
+                    return getattr(r, fallback_name)
+                try:
+                    return r[idx]
+                except Exception:
+                    return None
+
+            result.append(EscalaSalarial(
+                id=_val_r('id', 'ID', 0),
+                nivel=_val_r('nivel', 'Nivel', 1),
+                cargo=_val_r('cargo', 'Cargo', 2),
+                limite_inferior=_val_r('limite_inferior', 'LimiteInferior', 3),
+                limite_superior=_val_r('limite_superior', 'LimiteSuperior', 4),
+                salario_base=_val_r('salario_base', 'SalarioBase', 5),
+            ))
+        return result
+

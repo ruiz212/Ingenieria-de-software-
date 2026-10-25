@@ -1172,8 +1172,35 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarPerfilesPuesto]
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT Cargo, PerfilPuesto, Obligaciones, RequisitosCompetencias, ActualizadoEn
+    SELECT Cargo, PerfilPuesto, Obligaciones, RequisitosCompetencias, ActualizadoEn, Activo
     FROM [rrhh].[PerfilesPuesto] ORDER BY Cargo;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_CambiarEstadoPerfilPuesto]
+    @Cargo NVARCHAR(100),
+    @Activo BIT,
+    @ActorID INT = NULL,
+    @IP VARCHAR(50) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[PerfilesPuesto]
+    SET Activo = @Activo,
+        ActualizadoEn = SYSUTCDATETIME(),
+        ActualizadoPor = @ActorID
+    WHERE Cargo = @Cargo;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        THROW 51053, 'El cargo especificado no existe.', 1;
+    END
+
+    IF @ActorID IS NOT NULL
+    BEGIN
+        EXEC [seguridad].[sp_RegistrarAuditoria] @ActorID, 'PERFIL_ESTADO', 'PerfilPuesto', NULL,
+             NULL, @Cargo, @IP;
+    END
 END
 GO
 
@@ -1213,6 +1240,63 @@ BEGIN
         VALUES(@Cargo,@PerfilPuesto,@Obligaciones,@RequisitosCompetencias,@ActorID);
     EXEC [seguridad].[sp_RegistrarAuditoria] @ActorID, 'PERFIL_PUESTO', 'PerfilPuesto', NULL,
          NULL, @Cargo, @IP;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
+    @Cargo NVARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @CargoClean NVARCHAR(100) = LTRIM(RTRIM(@Cargo));
+
+    IF EXISTS (SELECT 1 FROM [rrhh].[escala_salarial] WHERE LOWER(cargo) = LOWER(@CargoClean))
+    BEGIN
+        SELECT id, nivel, cargo, limite_inferior, limite_superior, salario_base
+        FROM [rrhh].[escala_salarial]
+        WHERE LOWER(cargo) = LOWER(@CargoClean);
+        RETURN;
+    END
+
+    IF LOWER(@CargoClean) = 'cajero' OR LOWER(@CargoClean) LIKE 'cajero%'
+    BEGIN
+        SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+        FROM [rrhh].[escala_salarial]
+        WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta');
+        RETURN;
+    END
+
+    IF LOWER(@CargoClean) = 'cocina' OR LOWER(@CargoClean) LIKE 'coci%'
+    BEGIN
+        SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+        FROM [rrhh].[escala_salarial]
+        WHERE LOWER(cargo) IN ('cocina', 'cocinero');
+        RETURN;
+    END
+
+    IF LOWER(@CargoClean) = 'gerente' OR LOWER(@CargoClean) LIKE 'gerente%'
+    BEGIN
+        SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+        FROM [rrhh].[escala_salarial]
+        WHERE LOWER(cargo) IN ('gerente', 'gerente general');
+        RETURN;
+    END
+
+    SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+    FROM [rrhh].[escala_salarial]
+    WHERE LOWER(cargo) LIKE '%' + LOWER(@CargoClean) + '%'
+       OR LOWER(@CargoClean) LIKE '%' + LOWER(cargo) + '%'
+    ORDER BY id ASC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarEscalaSalarial]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT id, nivel, cargo, limite_inferior, limite_superior, salario_base
+    FROM [rrhh].[escala_salarial]
+    ORDER BY id ASC;
 END
 GO
 

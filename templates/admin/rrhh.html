@@ -91,13 +91,26 @@
         <p>Describe el rol, sus obligaciones y las competencias del contrato. Los cargos históricos pueden completarse aquí.</p>
         <div class="rrhh-profile-list">
             {% for p in perfiles %}
-            <article class="rrhh-profile-card">
-                <h4>{{ p.cargo }}</h4>
-                {% if p.perfil or p.obligaciones or p.competencias %}
-                <p>{{ p.perfil or 'Descripción pendiente' }}</p>
-                <details><summary>Obligaciones y competencias</summary><p><strong>Obligaciones</strong><br>{{ p.obligaciones or 'Pendiente' }}</p><p><strong>Competencias</strong><br>{{ p.competencias or 'Pendiente' }}</p></details>
-                {% else %}<p>Perfil contractual pendiente de completar.</p>{% endif %}
-                <button type="button" class="btn btn-outline btn-sm" data-edit-profile="{{ loop.index0 }}">Editar perfil</button>
+            {% set is_active = (p.activo is not defined or (p.activo != false and p.activo != 0)) %}
+            <article class="rrhh-profile-card {% if not is_active %}profile-card-inactive{% endif %}">
+                <div class="rrhh-profile-card-header">
+                    <h4>{{ p.cargo }}</h4>
+                    <span class="rrhh-profile-status-badge {% if is_active %}status-activo{% else %}status-inactivo{% endif %}">
+                        {{ 'Activo' if is_active else 'Inactivo' }}
+                    </span>
+                </div>
+                <div class="rrhh-profile-card-body">
+                    {% if p.perfil or p.obligaciones or p.competencias %}
+                    <p>{{ p.perfil or 'Descripción pendiente' }}</p>
+                    <details><summary>Obligaciones y competencias</summary><p><strong>Obligaciones</strong><br>{{ p.obligaciones or 'Pendiente' }}</p><p><strong>Competencias</strong><br>{{ p.competencias or 'Pendiente' }}</p></details>
+                    {% else %}<p>Perfil contractual pendiente de completar.</p>{% endif %}
+                </div>
+                <div class="rrhh-profile-card-footer">
+                    <button type="button" class="btn btn-outline btn-sm btn-edit-profile" data-edit-profile="{{ loop.index0 }}">Editar perfil</button>
+                    <button type="button" class="btn-toggle-status {% if is_active %}btn-deactivate{% else %}btn-activate{% endif %}" onclick="cambiarEstadoPerfil('{{ p.cargo }}', {{ 'false' if is_active else 'true' }})">
+                        {{ 'Desactivar' if is_active else 'Activar' }}
+                    </button>
+                </div>
             </article>
             {% else %}<p>No hay perfiles registrados. Agrega el primero antes de crear un empleado.</p>{% endfor %}
         </div>
@@ -248,7 +261,7 @@
                 </footer>
             </article>
             {% endfor %}
-            <div id="dossier-no-results" class="empty-state hidden" style="grid-column: 1 / -1; padding: 30px;">
+            <div id="dossier-no-results" class="empty-state hidden rrhh-dossier-no-results">
                 <div class="empty-state-icon">🔍</div>
                 <p>No se encontraron colaboradores que coincidan con los filtros aplicados.</p>
                 <button type="button" class="btn btn-outline btn-sm" onclick="limpiarFiltrosDossier()">Restablecer búsqueda</button>
@@ -443,8 +456,51 @@
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Cargo</label>
-                    <select id="ne-cargo" class="form-select" required><option value="">Selecciona un perfil</option>{% for p in perfiles %}<option value="{{ p.cargo }}">{{ p.cargo }}</option>{% endfor %}</select>
+                    <label class="form-label" id="lbl-ne-cargo">Cargo</label>
+                    <div class="custom-select-wrapper" id="cargo-dropdown-wrapper">
+                        <input type="hidden" id="ne-cargo" name="cargo" value="" required>
+                        <button type="button" class="form-select custom-select-trigger" id="cargo-select-trigger" onclick="toggleCargoDropdown(event)" aria-haspopup="true" aria-expanded="false" aria-labelledby="lbl-ne-cargo cargo-select-label">
+                            <span class="custom-select-label" id="cargo-select-label">Selecciona un perfil</span>
+                        </button>
+                        <div class="custom-select-dropdown" id="cargo-select-dropdown" role="menu">
+                            <div class="custom-select-option custom-select-placeholder" data-value="" onclick="seleccionarCargoOpcion('', event)" role="menuitem">Selecciona un perfil</div>
+                            {% for p in perfiles %}
+                                {% set p_activo = (p.activo is not defined or (p.activo != false and p.activo != 0)) %}
+                                {% if p_activo and p.cargo not in ['Panadero Aprendiz', 'Panadero Junior', 'Panadero Senior', 'Maestro Panadero'] %}
+                                    {% if p.cargo == 'Panadero' %}
+                                        <div class="custom-select-option has-cascade" data-value="Panadero" onclick="toggleCascadeSubmenu(event)" role="menuitem" aria-haspopup="true">
+                                            <div class="cascade-label-wrap">
+                                                <span>Panadero</span>
+                                                <svg class="cascade-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                                            </div>
+                                            <div class="custom-cascade-menu" role="menu">
+                                                <div class="custom-cascade-option" data-value="Panadero Aprendiz" onclick="seleccionarCargoOpcion('Panadero Aprendiz', event)" role="menuitem">Panadero Aprendiz</div>
+                                                <div class="custom-cascade-option" data-value="Panadero Junior" onclick="seleccionarCargoOpcion('Panadero Junior', event)" role="menuitem">Panadero Junior</div>
+                                                <div class="custom-cascade-option" data-value="Panadero Senior" onclick="seleccionarCargoOpcion('Panadero Senior', event)" role="menuitem">Panadero Senior</div>
+                                                <div class="custom-cascade-option" data-value="Maestro Panadero" onclick="seleccionarCargoOpcion('Maestro Panadero', event)" role="menuitem">Maestro Panadero</div>
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <div class="custom-select-option" data-value="{{ p.cargo }}" onclick="seleccionarCargoOpcion('{{ p.cargo }}', event)" role="menuitem">{{ p.cargo }}</div>
+                                    {% endif %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if 'Panadero' not in perfiles|map(attribute='cargo')|list %}
+                                <div class="custom-select-option has-cascade" data-value="Panadero" onclick="toggleCascadeSubmenu(event)" role="menuitem" aria-haspopup="true">
+                                    <div class="cascade-label-wrap">
+                                        <span>Panadero</span>
+                                        <svg class="cascade-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                                    </div>
+                                    <div class="custom-cascade-menu" role="menu">
+                                        <div class="custom-cascade-option" data-value="Panadero Aprendiz" onclick="seleccionarCargoOpcion('Panadero Aprendiz', event)" role="menuitem">Panadero Aprendiz</div>
+                                        <div class="custom-cascade-option" data-value="Panadero Junior" onclick="seleccionarCargoOpcion('Panadero Junior', event)" role="menuitem">Panadero Junior</div>
+                                        <div class="custom-cascade-option" data-value="Panadero Senior" onclick="seleccionarCargoOpcion('Panadero Senior', event)" role="menuitem">Panadero Senior</div>
+                                        <div class="custom-cascade-option" data-value="Maestro Panadero" onclick="seleccionarCargoOpcion('Maestro Panadero', event)" role="menuitem">Maestro Panadero</div>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Fecha de Ingreso</label>
@@ -454,7 +510,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">Salario Base (C$)</label>
-                    <input type="number" id="ne-salario" class="form-input form-number" step="0.01" required>
+                    <input type="number" id="ne-salario" class="form-input form-number rrhh-input-readonly" step="0.01" readonly required placeholder="0.00" title="Autocompletado automáticamente según la escala salarial del cargo">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Jornada</label>
@@ -754,10 +810,27 @@
 
 {% block extra_scripts %}
 <script>
-    function abrirModalEmpleado() { document.getElementById('modal-nuevo-empleado').classList.remove('hidden'); }
+    function abrirModalEmpleado() {
+        document.getElementById('modal-nuevo-empleado').classList.remove('hidden');
+        const hiddenInput = document.getElementById('ne-cargo');
+        const label = document.getElementById('cargo-select-label');
+        if (hiddenInput && label) {
+            label.textContent = hiddenInput.value || 'Selecciona un perfil';
+            if (hiddenInput.value && typeof consultarSalarioEscala === 'function') {
+                consultarSalarioEscala(hiddenInput.value);
+            }
+        }
+    }
     function cerrarModalEmpleado() {
         document.getElementById('modal-nuevo-empleado').classList.add('hidden');
         if (typeof stopEmployeeCamera === 'function') stopEmployeeCamera();
+        const dropdown = document.getElementById('cargo-select-dropdown');
+        if (dropdown) dropdown.classList.remove('open');
+        const trigger = document.getElementById('cargo-select-trigger');
+        if (trigger) {
+            trigger.classList.remove('active');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
     }
 
     let tipoNominaFiltroActual = 'MENSUAL';
@@ -1187,8 +1260,195 @@
         if (video) video.srcObject = null;
     }
 
+    // ==========================================
+    // Requisito 2 y 3: Dropdown personalizado con submenú cascada y autocompletado salarial
+    // ==========================================
+    async function consultarSalarioEscala(cargo) {
+        const salarioInput = document.getElementById('ne-salario');
+        if (!salarioInput || !cargo) return;
+
+        try {
+            salarioInput.classList.add('loading-salary');
+            salarioInput.placeholder = 'Consultando...';
+            const res = await fetch(`/admin/api/rrhh/escala-salarial?cargo=${encodeURIComponent(cargo)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.salario_base !== undefined) {
+                    salarioInput.value = Number(data.salario_base).toFixed(2);
+                    salarioInput.classList.add('salary-updated');
+                    setTimeout(() => salarioInput.classList.remove('salary-updated'), 1000);
+                }
+            } else {
+                console.warn(`No se encontró registro en escala salarial para "${cargo}".`);
+            }
+        } catch (err) {
+            console.error('Error al consultar escala salarial:', err);
+        } finally {
+            salarioInput.classList.remove('loading-salary');
+            salarioInput.placeholder = '0.00';
+        }
+    }
+
+    window.toggleCargoDropdown = function(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const dropdown = document.getElementById('cargo-select-dropdown');
+        const trigger = document.getElementById('cargo-select-trigger');
+        if (!dropdown || !trigger) return;
+        const isOpen = dropdown.classList.contains('open');
+        if (isOpen) {
+            dropdown.classList.remove('open');
+            trigger.classList.remove('active');
+            trigger.setAttribute('aria-expanded', 'false');
+            const cascadeOpt = dropdown.querySelector('.custom-select-option.has-cascade');
+            if (cascadeOpt) cascadeOpt.classList.remove('cascade-active');
+        } else {
+            dropdown.classList.add('open');
+            trigger.classList.add('active');
+            trigger.setAttribute('aria-expanded', 'true');
+        }
+    };
+
+    window.toggleCascadeSubmenu = function(e) {
+        if (e && e.target.closest('.custom-cascade-option')) return;
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const opt = e ? (e.currentTarget || e.target.closest('.has-cascade')) : document.querySelector('.custom-select-option.has-cascade');
+        if (opt) {
+            opt.classList.toggle('cascade-active');
+        }
+    };
+
+    window.seleccionarCargoOpcion = function(valor, e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const hiddenInput = document.getElementById('ne-cargo');
+        const label = document.getElementById('cargo-select-label');
+        const dropdown = document.getElementById('cargo-select-dropdown');
+        const trigger = document.getElementById('cargo-select-trigger');
+        if (hiddenInput) {
+            hiddenInput.value = valor;
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (label) label.textContent = valor ? valor : 'Selecciona un perfil';
+        if (dropdown) dropdown.classList.remove('open');
+        if (trigger) {
+            trigger.classList.remove('active');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+        const cascadeOpt = dropdown ? dropdown.querySelector('.custom-select-option.has-cascade') : null;
+        if (cascadeOpt) cascadeOpt.classList.remove('cascade-active');
+
+        if (valor) {
+            consultarSalarioEscala(valor);
+        } else {
+            const salarioInput = document.getElementById('ne-salario');
+            if (salarioInput) salarioInput.value = '';
+        }
+    };
+
+    window.cambiarEstadoPerfil = async function(cargo, nuevoEstado) {
+        if (!cargo) return;
+        const accion = nuevoEstado ? 'activar' : 'desactivar';
+        let confirmed = false;
+        if (typeof window.showConfirm === 'function') {
+            confirmed = await window.showConfirm({
+                title: nuevoEstado ? '¿Activar perfil de puesto?' : '¿Desactivar perfil de puesto?',
+                message: nuevoEstado
+                    ? `El cargo "${cargo}" volverá a estar disponible para la selección en nuevos registros de empleados.`
+                    : `El cargo "${cargo}" se desactivará (soft delete). Se conservará todo el historial de colaboradores actuales, pero no aparecerá disponible para nuevos registros.`,
+                confirmText: nuevoEstado ? 'Activar' : 'Desactivar',
+                type: nuevoEstado ? 'success' : 'warning',
+                icon: nuevoEstado ? '✅' : '⚠️'
+            });
+        } else {
+            confirmed = confirm(`¿Está seguro de que desea ${accion} el perfil "${cargo}"?`);
+        }
+        if (!confirmed) return;
+
+        try {
+            window.showLoading?.();
+            const res = await fetch('/admin/api/rrhh/puestos/estado', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                },
+                body: JSON.stringify({ cargo: cargo, activo: nuevoEstado })
+            });
+            window.hideLoading?.();
+            const data = await res.json();
+            if (res.ok) {
+                window.showToast?.(`Perfil "${cargo}" ${nuevoEstado ? 'activado' : 'desactivado'} con éxito.`);
+                setTimeout(() => location.reload(), 700);
+            } else {
+                window.showToast?.(data.error || 'No se pudo cambiar el estado del perfil.', true);
+            }
+        } catch (err) {
+            window.hideLoading?.();
+            window.showToast?.('Error de conexión con el servidor.', true);
+        }
+    };
+
+    function inicializarCustomDropdownCargo() {
+        const wrapper = document.getElementById('cargo-dropdown-wrapper');
+        if (!wrapper || wrapper.dataset.inited === 'true') return;
+        wrapper.dataset.inited = 'true';
+
+        const trigger = document.getElementById('cargo-select-trigger');
+        const dropdown = document.getElementById('cargo-select-dropdown');
+        const label = document.getElementById('cargo-select-label');
+        const hiddenInput = document.getElementById('ne-cargo');
+
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) {
+                if (dropdown) dropdown.classList.remove('open');
+                if (trigger) {
+                    trigger.classList.remove('active');
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && dropdown && dropdown.classList.contains('open')) {
+                dropdown.classList.remove('open');
+                if (trigger) {
+                    trigger.classList.remove('active');
+                    trigger.setAttribute('aria-expanded', 'false');
+                    trigger.focus();
+                }
+            }
+        });
+
+        if (hiddenInput && hiddenInput.value) {
+            if (label) label.textContent = hiddenInput.value;
+            consultarSalarioEscala(hiddenInput.value);
+        }
+    }
+
+
     document.getElementById('form-nuevo-empleado').addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        const cargoVal = document.getElementById('ne-cargo').value;
+        if (!cargoVal) {
+            showToast('Por favor, selecciona un cargo.', true);
+            document.getElementById('cargo-select-trigger')?.focus();
+            return;
+        }
+
+        const salarioVal = document.getElementById('ne-salario').value;
+        if (!salarioVal || parseFloat(salarioVal) <= 0) {
+            showToast('El salario base no puede estar vacío (autocompletado desde la escala salarial).', true);
+            return;
+        }
 
         showLoading();
         let fotoBase64 = capturedFaceBase64;
@@ -1197,9 +1457,9 @@
             nombre: document.getElementById('ne-nombre').value,
             cedula: document.getElementById('ne-cedula').value,
             telefono: document.getElementById('ne-telefono').value,
-            cargo: document.getElementById('ne-cargo').value,
+            cargo: cargoVal,
             fecha_ingreso: document.getElementById('ne-ingreso').value,
-            salario_base: document.getElementById('ne-salario').value,
+            salario_base: salarioVal,
             tipo_jornada: document.getElementById('ne-jornada').value,
             tipo_contrato: document.getElementById('ne-tipo-contrato').value,
             fecha_fin_contrato: document.getElementById('ne-fin-contrato').value,
@@ -1217,6 +1477,10 @@
             hideLoading();
             if (res.ok) {
                 window.clearFormDraft?.(e.currentTarget);
+                const hiddenCargo = document.getElementById('ne-cargo');
+                if (hiddenCargo) hiddenCargo.value = '';
+                const cargoLabel = document.getElementById('cargo-select-label');
+                if (cargoLabel) cargoLabel.textContent = 'Selecciona un perfil';
                 showToast('Empleado registrado exitosamente');
                 setTimeout(() => location.reload(), 1000);
             } else {
@@ -1420,7 +1684,8 @@
         }
     }
 </script>
-<script src="{{ url_for('static', filename='js/rrhh_corte5.js', v=1) }}" defer>
+<script src="{{ url_for('static', filename='js/rrhh_corte5.js', v=1) }}" defer></script>
+<script>
     let estadoFiltroDossierActual = 'ALL';
 
     function togglePayrollMenu(e) {
@@ -1498,6 +1763,7 @@
     }
     document.addEventListener('DOMContentLoaded', function() {
         actualizarContadoresDossier();
+        inicializarCustomDropdownCargo();
     });
 </script>
 {% endblock %}

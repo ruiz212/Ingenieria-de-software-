@@ -141,7 +141,7 @@
   },
   "pages/admin/rrhh": {
     "file": "dist/pages/admin/rrhh.css",
-    "version": "462cd727424b"
+    "version": "232ba4feaf30"
   },
   "pages/admin/setup_totp": {
     "file": "dist/pages/admin/setup_totp.css",
