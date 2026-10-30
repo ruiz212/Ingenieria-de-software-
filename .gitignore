@@ -10,5 +10,6 @@ scratch/
 static/uploads/
 app/static/uploads/
 node_modules/
+graphify-out/
 .pytest_cache/
 ~$*

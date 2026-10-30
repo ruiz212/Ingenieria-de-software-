@@ -4,7 +4,7 @@ import io
 import json
 from datetime import datetime, date
 from decimal import Decimal
-from flask import render_template, request, jsonify, redirect, url_for, flash, Response
+from flask import render_template, request, jsonify, redirect, url_for, flash, Response, current_app
 from flask_login import login_required, current_user
 from app.admin import admin_bp
 from app.auth.decorators import roles_required
@@ -12,7 +12,7 @@ from app.db import get_db_connection, execute_sp
 from app.services.business_time import business_now
 from app.services.fiscal_service import configuration, audit
 from app.services.contabilidad_service import ContabilidadService, ContabilidadError
-from app.services.validation import amount, required_text
+from app.services.validation import amount, required_text, validate_telefono_nicaragua
 
 
 @admin_bp.route('/fiscal')
@@ -73,6 +73,12 @@ def fiscal_configuration():
     if data['fiscal_regimen']!='Pendiente':
         for field in ('razon_social','ruc','direccion','telefono','autorizacion'):
             required_text(data['fiscal_'+field],field,255)
+    if data.get('fiscal_telefono'):
+        data['fiscal_telefono'] = validate_telefono_nicaragua(
+            data['fiscal_telefono'],
+            'Teléfono del emisor',
+            optional=(data['fiscal_regimen'] == 'Pendiente')
+        ) or ''
     conn=get_db_connection()
     try:
         cursor=conn.cursor()
@@ -284,8 +290,10 @@ def void_invoice(invoice_id):
         flash('Factura anulada y devolución registrada. Conserve el original y todas las copias.','success')
     except (ValueError,ContabilidadError) as error:
         conn.rollback(); flash(str(error),'error')
-    except Exception:
-        conn.rollback(); raise
+    except Exception as error:
+        conn.rollback()
+        current_app.logger.exception('Error al anular factura %s: %s', invoice_id, error)
+        flash(f'Error al anular factura: {error}', 'error')
     finally:
         conn.close()
     return redirect(url_for('admin.fiscal'))

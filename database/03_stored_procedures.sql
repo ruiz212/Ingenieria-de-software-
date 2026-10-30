@@ -5519,3 +5519,5103 @@ GRANT EXECUTE ON OBJECT::[ventas].[sp_SeguimientoProductosPublico] TO [db_rol_po
 GRANT EXECUTE ON OBJECT::[ventas].[sp_VerificarColumnaEstadoFiscalFacturas] TO [db_rol_portal_cliente];
 GRANT EXECUTE ON OBJECT::[ventas].[sp_ObtenerTurnoAbierto] TO [db_rol_portal_cliente];
 GO
+
+-- ============================================================================
+-- Procedimiento rrhh.sp_CambiarEstadoPerfilPuesto
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [rrhh].[sp_CambiarEstadoPerfilPuesto]
+                @Cargo NVARCHAR(100),
+                @Activo BIT,
+                @ActorID INT = NULL,
+                @IP VARCHAR(50) = NULL
+            AS
+            BEGIN
+                SET NOCOUNT ON;
+                UPDATE [rrhh].[PerfilesPuesto]
+                SET Activo = @Activo,
+                    ActualizadoEn = SYSUTCDATETIME(),
+                    ActualizadoPor = @ActorID
+                WHERE Cargo = @Cargo;
+
+                IF @@ROWCOUNT = 0
+                BEGIN
+                    THROW 51053, 'El cargo especificado no existe.', 1;
+                END
+
+                IF @ActorID IS NOT NULL
+                BEGIN
+                    EXEC [seguridad].[sp_RegistrarAuditoria] @ActorID, 'PERFIL_ESTADO', 'PerfilPuesto', NULL,
+                         NULL, @Cargo, @IP;
+                END
+            END
+GO
+
+-- ============================================================================
+-- Procedimiento rrhh.sp_ListarEscalaSalarial
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarEscalaSalarial]
+        AS
+        BEGIN
+            SET NOCOUNT ON;
+            SELECT id, nivel, cargo, limite_inferior, limite_superior, salario_base
+            FROM [rrhh].[escala_salarial]
+            ORDER BY id ASC;
+        END
+GO
+
+-- ============================================================================
+-- Procedimiento rrhh.sp_ObtenerEscalaSalarialPorCargo
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
+            @Cargo NVARCHAR(100)
+        AS
+        BEGIN
+            SET NOCOUNT ON;
+            DECLARE @CargoClean NVARCHAR(100) = LTRIM(RTRIM(@Cargo));
+
+            -- 1. Coincidencia exacta
+            IF EXISTS (SELECT 1 FROM [rrhh].[escala_salarial] WHERE LOWER(cargo) = LOWER(@CargoClean))
+            BEGIN
+                SELECT id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) = LOWER(@CargoClean);
+                RETURN;
+            END
+
+            -- 2. Mapeos o prefijo
+            IF LOWER(@CargoClean) = 'cajero' OR LOWER(@CargoClean) LIKE 'cajero%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta');
+                RETURN;
+            END
+
+            IF LOWER(@CargoClean) = 'cocina' OR LOWER(@CargoClean) LIKE 'coci%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) IN ('cocina', 'cocinero');
+                RETURN;
+            END
+
+            IF LOWER(@CargoClean) = 'gerente' OR LOWER(@CargoClean) LIKE 'gerente%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) IN ('gerente', 'gerente general');
+                RETURN;
+            END
+
+            -- 3. LIKE genérico
+            SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+            FROM [rrhh].[escala_salarial]
+            WHERE LOWER(cargo) LIKE '%' + LOWER(@CargoClean) + '%'
+               OR LOWER(@CargoClean) LIKE '%' + LOWER(cargo) + '%'
+            ORDER BY id ASC;
+        END
+GO
+
+-- ============================================================================
+-- REMEDIACIÓN AUDITORÍA DE REGLAS DE NEGOCIO (2026-10-25: L01-L28)
+-- ============================================================================
+
+-- >>> sql_group1_pos_kds_fiscal.sql
+-- ============================================================================
+-- REMEDIACIÓN GRUPO 1: POS, Arqueos, Encargos/KDS, Cotizaciones y Anulaciones Fiscales
+-- Hallazgos: L01, L02, L03, L13, L15, L28
+-- ============================================================================
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET NOCOUNT ON;
+GO
+
+-- ----------------------------------------------------------------------------
+-- L13: Cálculo consistente del efectivo esperado de la gaveta del turno POS
+-- Distingue la gaveta operativa del turno POS (ventas.Pagos por TurnoReceptorID,
+-- incluyendo cobros en efectivo y restando devoluciones/anulaciones del turno)
+-- respecto de Caja General de oficina (EgresosPrivados / ValesEmpleados).
+-- ----------------------------------------------------------------------------
+CREATE OR ALTER PROCEDURE [ventas].[sp_CalcularValoresSistemaTurno]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM [ventas].[Pagos] p JOIN [ventas].[Facturas] f ON f.ID=p.FacturaID
+               JOIN [ventas].[TurnosCaja] t ON t.ID=@P1
+               WHERE p.Monto<>0 AND (p.TurnoReceptorID IS NULL OR p.UsuarioReceptorID IS NULL)
+                 AND (f.TurnoID=@P1 OR (p.FechaPago>=t.FechaApertura AND (t.FechaCierre IS NULL OR p.FechaPago<=t.FechaCierre))))
+        THROW 51021, 'Existen movimientos históricos sin receptor de caja. Conciliar antes del arqueo.', 1;
+
+    SELECT
+        ISNULL(SUM(CASE WHEN (p.MetodoPago = 'Efectivo' OR (p.MetodoPago='Efectivo USD' AND p.MonedaRegistro='NIO')) THEN p.Monto ELSE 0 END), 0) AS EfectivoCordobasSistema,
+        ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo USD' AND p.MonedaRegistro<>'NIO' THEN p.Monto ELSE 0 END), 0) AS EfectivoUSDSistema,
+        ISNULL(SUM(CASE WHEN p.MetodoPago = 'Transferencia' THEN p.Monto ELSE 0 END), 0) AS TransferenciasSistema
+    FROM [ventas].[Pagos] p
+    WHERE p.TurnoReceptorID = @P1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [ventas].[sp_ObtenerResumenTurnoCaja]
+    @TurnoID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM [ventas].[Pagos] p JOIN [ventas].[Facturas] f ON f.ID=p.FacturaID
+               JOIN [ventas].[TurnosCaja] t ON t.ID=@TurnoID
+               WHERE p.Monto<>0 AND (p.TurnoReceptorID IS NULL OR p.UsuarioReceptorID IS NULL)
+                 AND (f.TurnoID=@TurnoID OR (p.FechaPago>=t.FechaApertura AND (t.FechaCierre IS NULL OR p.FechaPago<=t.FechaCierre))))
+        THROW 51021, 'Existen movimientos históricos sin receptor de caja. Conciliar antes del arqueo.', 1;
+
+    SELECT
+        ISNULL(SUM(CASE WHEN (p.MetodoPago = 'Efectivo' OR (p.MetodoPago='Efectivo USD' AND p.MonedaRegistro='NIO')) THEN p.Monto ELSE 0 END), 0) AS EfectivoCordobasSistema,
+        ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo USD' AND p.MonedaRegistro<>'NIO' THEN p.Monto ELSE 0 END), 0) AS EfectivoUSDSistema,
+        ISNULL(SUM(CASE WHEN p.MetodoPago = 'Transferencia' THEN p.Monto ELSE 0 END), 0) AS TransferenciasSistema
+    FROM [ventas].[Pagos] p
+    WHERE p.TurnoReceptorID = @TurnoID;
+END
+GO
+
+IF DATABASE_PRINCIPAL_ID('db_rol_cajero_pos') IS NOT NULL
+    GRANT EXECUTE ON OBJECT::[ventas].[sp_ObtenerResumenTurnoCaja] TO [db_rol_cajero_pos];
+IF DATABASE_PRINCIPAL_ID('db_rol_gerencia') IS NOT NULL
+    GRANT EXECUTE ON OBJECT::[ventas].[sp_ObtenerResumenTurnoCaja] TO [db_rol_gerencia];
+IF DATABASE_PRINCIPAL_ID('db_rol_superadmin') IS NOT NULL
+    GRANT EXECUTE ON OBJECT::[ventas].[sp_ObtenerResumenTurnoCaja] TO [db_rol_superadmin];
+GO
+
+-- ----------------------------------------------------------------------------
+-- L03: Máquina de estados estricta para encargos en KDS y bloqueo de pago duplicado
+-- ----------------------------------------------------------------------------
+CREATE OR ALTER PROCEDURE [produccion].[sp_ActualizarEstadoEncargoCompare]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 NVARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT OFF;
+    DECLARE @FacturaID INT;
+    SELECT @FacturaID = ID FROM [ventas].[Facturas] WITH(UPDLOCK, HOLDLOCK)
+      WHERE CodigoSeguimiento = @P2 AND EstadoFiscal = 'Emitida';
+
+    IF @FacturaID IS NOT NULL
+    BEGIN
+        DECLARE @EstadoActual NVARCHAR(50);
+        SELECT @EstadoActual = Estado FROM [ventas].[Encargos] WITH(UPDLOCK, HOLDLOCK)
+          WHERE FacturaID = @FacturaID;
+
+        DECLARE @EstadoDestino NVARCHAR(50) = CASE WHEN @P1 = N'En Preparacion' THEN N'En Proceso' ELSE @P1 END;
+        DECLARE @EstadoEsperado NVARCHAR(50) = CASE WHEN @P3 = N'En Preparacion' THEN N'En Proceso' ELSE @P3 END;
+
+        IF (@EstadoActual = N'Entregado' OR @EstadoEsperado = N'Entregado') AND @EstadoDestino <> N'Entregado'
+            THROW 51034, 'Un encargo ya entregado es estado terminal en KDS y no puede revertirse ni cancelarse.', 1;
+
+        IF @EstadoActual IN (N'Cancelado', N'Anulada') OR @EstadoEsperado IN (N'Cancelado', N'Anulada')
+            THROW 51034, 'Un encargo cancelado o anulado no admite transiciones.', 1;
+
+        IF NOT (
+            (@EstadoEsperado = N'Pendiente' AND @EstadoDestino IN (N'En Proceso', N'Listo', N'Entregado'))
+            OR (@EstadoEsperado = N'En Proceso' AND @EstadoDestino IN (N'Listo', N'Entregado'))
+            OR (@EstadoEsperado = N'Listo' AND @EstadoDestino IN (N'Entregado'))
+            OR (@EstadoEsperado = @EstadoDestino AND @EstadoDestino IN (N'Pendiente', N'En Proceso', N'Listo', N'Entregado'))
+        )
+            THROW 51034, 'Transición de estado de encargo inválida o regresiva.', 1;
+
+        IF @EstadoDestino = N'Entregado' AND IS_MEMBER('db_rol_produccion') = 1 AND EXISTS (
+            SELECT 1 FROM [ventas].[Facturas] f WHERE f.ID = @FacturaID AND
+              f.Total > ISNULL((SELECT SUM(p.Monto) FROM [ventas].[Pagos] p WHERE p.FacturaID = f.ID), 0))
+            THROW 51032, 'El cobro pendiente debe confirmarlo un cajero con turno abierto.', 1;
+
+        UPDATE e SET Estado = @EstadoDestino
+        FROM [ventas].[Encargos] AS e
+        JOIN [ventas].[Facturas] AS f ON e.FacturaID = f.ID
+        WHERE f.ID = @FacturaID AND f.EstadoFiscal = 'Emitida' AND e.Estado = @EstadoEsperado;
+    END
+    ELSE
+    BEGIN
+        UPDATE e SET Estado = @P1
+        FROM [ventas].[Encargos] AS e
+        JOIN [ventas].[Facturas] AS f ON e.FacturaID = f.ID
+        WHERE f.ID = @FacturaID AND f.EstadoFiscal = 'Emitida' AND e.Estado = @P3;
+    END
+END
+GO
+
+CREATE OR ALTER PROCEDURE [ventas].[sp_InsertarPagoSaldoEncargo]
+    @P1 INT = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 DECIMAL(18, 2) = NULL,
+    @P4 NVARCHAR(255) = NULL,
+    @P5 DATETIME2 = NULL,
+    @P6 DECIMAL(18, 6) = NULL,
+    @TurnoReceptorID INT = NULL,
+    @UsuarioReceptorID INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET @UsuarioReceptorID = COALESCE(@UsuarioReceptorID, TRY_CAST(SESSION_CONTEXT(N'usuario_id') AS INT));
+    DECLARE @TotalFactura DECIMAL(18, 2);
+    SELECT @TotalFactura = Total FROM [ventas].[Facturas] WITH(UPDLOCK, HOLDLOCK) WHERE ID = @P1 AND EstadoFiscal = 'Emitida';
+    IF @TotalFactura IS NULL
+        THROW 51025, 'La factura no está emitida.', 1;
+
+    DECLARE @PagadoActual DECIMAL(18, 2);
+    SELECT @PagadoActual = ISNULL(SUM(Monto), 0) FROM [ventas].[Pagos] WITH(UPDLOCK, HOLDLOCK) WHERE FacturaID = @P1;
+    IF @P3 IS NULL OR @P3 <= 0 OR (@PagadoActual + @P3) > @TotalFactura
+        THROW 51035, 'El encargo ya fue pagado o el monto excede el saldo pendiente.', 1;
+
+    IF @TurnoReceptorID IS NULL
+        SELECT TOP 1 @TurnoReceptorID = ID FROM [ventas].[TurnosCaja] WITH(UPDLOCK, HOLDLOCK)
+        WHERE UsuarioID = @UsuarioReceptorID AND Cerrado = 0 ORDER BY ID DESC;
+    IF NOT EXISTS (SELECT 1 FROM [ventas].[TurnosCaja] WITH(UPDLOCK, HOLDLOCK) WHERE ID = @TurnoReceptorID AND UsuarioID = @UsuarioReceptorID AND Cerrado = 0)
+        THROW 51026, 'El saldo requiere la caja abierta del usuario receptor.', 1;
+    IF EXISTS (SELECT 1 FROM [ventas].[ArqueoCaja] WHERE TurnoID = @TurnoReceptorID AND EstadoArqueo IN ('Pendiente', 'Verificado'))
+        THROW 51027, 'La caja receptora tiene un arqueo pendiente.', 1;
+
+    INSERT INTO [ventas].[Pagos] (FacturaID, MetodoPago, Monto, NombreTransferente, FechaPago, MonedaRegistro, TipoCambioAplicado, TurnoReceptorID, UsuarioReceptorID)
+    VALUES (@P1, @P2, @P3, @P4, @P5, 'NIO', @P6, @TurnoReceptorID, @UsuarioReceptorID);
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- L15: Vínculo único de cotización a factura (uso único con bloqueo transaccional)
+-- ----------------------------------------------------------------------------
+IF EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Cotizaciones_Estado'
+      AND parent_object_id = OBJECT_ID('crm.Cotizaciones')
+)
+BEGIN
+    ALTER TABLE [crm].[Cotizaciones] DROP CONSTRAINT [CK_Cotizaciones_Estado];
+END
+GO
+
+ALTER TABLE [crm].[Cotizaciones] WITH CHECK ADD CONSTRAINT [CK_Cotizaciones_Estado]
+    CHECK ([Estado] IN ('Pendiente', 'Cotizada', 'Aceptada', 'Facturada', 'Rechazada'));
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_ObtenerCotizacionParaCalculoVenta]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, Especificaciones, PrecioCotizado
+    FROM [crm].[Cotizaciones] WITH (UPDLOCK, HOLDLOCK)
+    WHERE ID = @P1
+      AND Estado IN ('Cotizada', 'Aceptada')
+      AND PrecioCotizado IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM [ventas].[Facturas] f WITH (UPDLOCK, HOLDLOCK)
+          WHERE f.EstadoFiscal = 'Emitida'
+            AND f.DocumentoJSON IS NOT NULL
+            AND ISJSON(f.DocumentoJSON) = 1
+            AND EXISTS (
+                SELECT 1
+                FROM OPENJSON(f.DocumentoJSON, '$.productos')
+                WHERE TRY_CAST(JSON_VALUE([value], '$.cotizacion_id') AS INT) = @P1
+            )
+      );
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_MarcarCotizacionAceptadaEnVenta]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT OFF;
+    UPDATE [crm].[Cotizaciones] WITH (UPDLOCK, HOLDLOCK)
+    SET Estado = 'Facturada'
+    WHERE ID = @P1
+      AND Estado IN ('Cotizada', 'Aceptada')
+      AND PrecioCotizado IS NOT NULL;
+    IF @@ROWCOUNT <> 1
+        THROW 51036, 'La cotización personalizada ya fue facturada o no está disponible para venta.', 1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_ActualizarEstadoCotizacion]
+    @CotizacionID INT,
+    @NuevoEstado VARCHAR(30),
+    @PrecioCotizado DECIMAL(10,2) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        IF IS_MEMBER('db_rol_portal_cliente') = 1
+           OR TRY_CAST(SESSION_CONTEXT(N'rol') AS NVARCHAR(50)) IN (N'Cliente', N'Invitado')
+            THROW 52025, 'Operación administrativa de cotizaciones no autorizada para el portal de clientes.', 1;
+
+        IF EXISTS (SELECT 1 FROM [crm].[Cotizaciones] WITH (UPDLOCK, HOLDLOCK) WHERE ID = @CotizacionID AND Estado = 'Facturada')
+            THROW 52028, 'La cotización ya fue facturada y no puede reutilizarse ni cambiar de estado.', 1;
+
+        UPDATE [crm].[Cotizaciones]
+        SET Estado = @NuevoEstado,
+            PrecioCotizado = ISNULL(@PrecioCotizado, PrecioCotizado)
+        WHERE ID = @CotizacionID
+          AND Estado <> 'Facturada';
+    END TRY
+    BEGIN CATCH
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'crm.sp_ActualizarEstadoCotizacion';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [ventas].[sp_RegistrarFacturaCompleta]
+    @NumeroFactura VARCHAR(50),
+    @CodigoSeguimiento VARCHAR(20),
+    @UsuarioID INT,
+    @ClienteID INT,
+    @TurnoID INT,
+    @Subtotal DECIMAL(18,2),
+    @IVA DECIMAL(18,2),
+    @Total DECIMAL(18,2),
+    @EsEncargo BIT,
+    @IncluyeRUC BIT,
+    @ClaveSolicitud VARCHAR(100) = NULL,
+    @FechaHora DATETIME2,
+    @RazonSocial NVARCHAR(200) = NULL,
+    @NumeroRUC VARCHAR(50) = NULL,
+    @CarritoJSON NVARCHAR(MAX),
+    @PagosJSON NVARCHAR(MAX),
+    @FechaEntrega DATETIME2 = NULL,
+    @NotasCliente NVARCHAR(MAX) = NULL,
+    @Especificaciones NVARCHAR(MAX) = NULL,
+    @RutaImagenReferencia VARCHAR(255) = NULL,
+    @TelefonoContacto VARCHAR(30) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @FacturaID INT;
+
+        IF NOT EXISTS (SELECT 1 FROM [ventas].[TurnosCaja] WITH(UPDLOCK,HOLDLOCK) WHERE ID=@TurnoID AND UsuarioID=@UsuarioID AND Cerrado=0)
+            THROW 51024, 'La venta requiere la caja abierta del emisor.', 1;
+        IF EXISTS (SELECT 1 FROM [ventas].[ArqueoCaja] WHERE TurnoID=@TurnoID AND EstadoArqueo IN ('Pendiente','Verificado'))
+            THROW 51027, 'La caja receptora tiene un arqueo pendiente.', 1;
+
+        INSERT INTO [ventas].[Facturas] (
+            NumeroFactura, CodigoSeguimiento, UsuarioID, ClienteID, TurnoID,
+            Subtotal, IVA, Total, EsEncargo, IncluyeRUC, ClaveSolicitud, FechaHora
+        )
+        VALUES (
+            @NumeroFactura, @CodigoSeguimiento, @UsuarioID, @ClienteID, @TurnoID,
+            @Subtotal, @IVA, @Total, @EsEncargo, @IncluyeRUC, @ClaveSolicitud, @FechaHora
+        );
+        SET @FacturaID = SCOPE_IDENTITY();
+
+        IF @IncluyeRUC = 1 AND @NumeroRUC IS NOT NULL
+        BEGIN
+            INSERT INTO [ventas].[FacturasRUC] (FacturaID, RazonSocial, NumeroRUC)
+            VALUES (@FacturaID, @RazonSocial, @NumeroRUC);
+        END
+
+        -- Procesar líneas del carrito e ingredientes adicionales desde JSON
+        DECLARE @ItemKey NVARCHAR(50), @ItemJSON NVARCHAR(MAX);
+        DECLARE cur_items CURSOR LOCAL FAST_FORWARD FOR
+            SELECT [key], [value] FROM OPENJSON(@CarritoJSON);
+        OPEN cur_items;
+        FETCH NEXT FROM cur_items INTO @ItemKey, @ItemJSON;
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            DECLARE @ProdID INT = TRY_CAST(JSON_VALUE(@ItemJSON, '$.id') AS INT);
+            DECLARE @Cant INT = TRY_CAST(JSON_VALUE(@ItemJSON, '$.cantidad') AS INT);
+            DECLARE @PrecioUnit DECIMAL(18,2) = TRY_CAST(JSON_VALUE(@ItemJSON, '$.precio') AS DECIMAL(18,2));
+            DECLARE @SubItem DECIMAL(18,2) = TRY_CAST(JSON_VALUE(@ItemJSON, '$.subtotal') AS DECIMAL(18,2));
+            DECLARE @CotID INT = TRY_CAST(JSON_VALUE(@ItemJSON, '$.cotizacion_id') AS INT);
+            DECLARE @DetalleID INT;
+
+            IF @CotID IS NOT NULL
+            BEGIN
+                UPDATE [crm].[Cotizaciones] WITH (UPDLOCK, HOLDLOCK)
+                SET Estado = 'Facturada'
+                WHERE ID = @CotID
+                  AND Estado IN ('Cotizada', 'Aceptada')
+                  AND PrecioCotizado IS NOT NULL;
+                IF @@ROWCOUNT <> 1
+                    THROW 51036, 'La cotización personalizada ya fue facturada o no está disponible para venta.', 1;
+            END
+
+            INSERT INTO [ventas].[DetalleFacturas] (FacturaID, ProductoID, Cantidad, PrecioUnitario, Subtotal)
+            VALUES (@FacturaID, @ProdID, @Cant, @PrecioUnit, @SubItem);
+            SET @DetalleID = SCOPE_IDENTITY();
+
+            INSERT INTO [ventas].[DetalleIngredientes] (DetalleFacturaID, IngredienteID, PrecioAplicado)
+            SELECT
+                @DetalleID,
+                TRY_CAST(JSON_VALUE([value], '$.id') AS INT),
+                TRY_CAST(JSON_VALUE([value], '$.precio') AS DECIMAL(18,2))
+            FROM OPENJSON(@ItemJSON, '$.detalle_ingredientes.ingredientes')
+            WHERE TRY_CAST(JSON_VALUE([value], '$.id') AS INT) IS NOT NULL;
+
+            FETCH NEXT FROM cur_items INTO @ItemKey, @ItemJSON;
+        END
+        CLOSE cur_items;
+        DEALLOCATE cur_items;
+
+        -- Procesar pagos desde JSON
+        INSERT INTO [ventas].[Pagos] (
+            FacturaID, MetodoPago, Monto, NombreTransferente, MonedaRegistro, TipoCambioAplicado, TurnoReceptorID, UsuarioReceptorID
+        )
+        SELECT
+            @FacturaID,
+            JSON_VALUE([value], '$.metodo'),
+            TRY_CAST(JSON_VALUE([value], '$.monto') AS DECIMAL(18,2)),
+            JSON_VALUE([value], '$.referencia'),
+            'NIO',
+            TRY_CAST(JSON_VALUE([value], '$.tipo_cambio') AS DECIMAL(18,4)), @TurnoID, @UsuarioID
+        FROM OPENJSON(@PagosJSON);
+
+        IF @EsEncargo = 1
+        BEGIN
+            INSERT INTO [ventas].[Encargos] (
+                FacturaID, FechaEntrega, Estado, NotasCliente,
+                Especificaciones, RutaImagenReferencia, TelefonoContacto
+            )
+            VALUES (
+                @FacturaID, @FechaEntrega, 'Pendiente', @NotasCliente,
+                @Especificaciones, @RutaImagenReferencia, @TelefonoContacto
+            );
+        END
+
+        IF @ClienteID > 1
+        BEGIN
+            UPDATE [crm].[Clientes]
+            SET TotalCompras = ISNULL(TotalCompras, 0) + 1
+            WHERE ID = @ClienteID;
+
+            UPDATE [crm].[Clientes]
+            SET NivelConfianzaID = CASE
+                WHEN TotalCompras >= 10 THEN 3
+                WHEN TotalCompras >= 3 THEN 2
+                ELSE 1
+            END
+            WHERE ID = @ClienteID;
+        END
+
+        SELECT CAST(@FacturaID AS INT) AS ID;
+    END TRY
+    BEGIN CATCH
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'ventas.sp_RegistrarFacturaCompleta';
+        THROW;
+    END CATCH
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- L28: Marca temporal comercial de Nicaragua consistente en anulaciones fiscales y contables
+-- ----------------------------------------------------------------------------
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_MarcarAsientoAnulado]
+    @P1 INT = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 INT = NULL,
+    @FechaAnulacion DATETIME2 = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @FechaEfectiva DATETIME2 = COALESCE(
+        @FechaAnulacion,
+        (SELECT TOP 1 Fecha FROM [contabilidad].[AsientosDiario]
+         WHERE ReferenciaExterna = CONCAT('REV-', @P3) AND TipoDocumento = N'Reversión'
+         ORDER BY ID DESC),
+        SWITCHOFFSET(SYSDATETIMEOFFSET(), '-06:00')
+    );
+    UPDATE [contabilidad].[AsientosDiario] SET
+        Estado = 'Anulado',
+        AnuladoPor = @P1,
+        FechaAnulacion = @FechaEfectiva,
+        MotivoAnulacion = @P2
+    WHERE ID = @P3 AND Estado IN ('Contabilizado', 'Anulado');
+END
+GO
+
+CREATE OR ALTER PROCEDURE [ventas].[sp_MarcarFacturaAnulada]
+    @P1 INT = NULL,
+    @P2 DATETIME2 = NULL,
+    @P3 NVARCHAR(300) = NULL,
+    @P4 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [ventas].[Facturas]
+    SET EstadoFiscal = 'Anulada',
+        AnuladaPor = @P1,
+        FechaAnulacion = ISNULL(@P2, SWITCHOFFSET(SYSDATETIMEOFFSET(), '-06:00')),
+        MotivoAnulacion = @P3
+    WHERE ID = @P4;
+END
+GO
+GO
+
+-- >>> sql_group2_hr_nomina.sql
+-- ============================================================================
+-- REMEDIACIÓN AUDITORÍA GRUPO 2: RR. HH., Nómina, Pago de Planilla, Vales,
+-- Asistencia/Kiosco y Biometría (L04, L05, L12, L17, L19)
+-- ============================================================================
+
+SET NOCOUNT ON;
+GO
+
+-- 1. L17: Incluir HoraEntrada y HoraSalida en el bloqueo de empleado de Kiosco
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEmpleadoActivoPorIDBloqueo]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, NombreCompleto, HoraEntrada, HoraSalida
+    FROM [rrhh].[Empleados] WITH (UPDLOCK, HOLDLOCK)
+    WHERE ID = @P1 AND EstadoEmpleado = 'Activo';
+END
+GO
+
+GRANT EXECUTE ON OBJECT::[rrhh].[sp_ObtenerEmpleadoActivoPorIDBloqueo] TO [db_rol_kiosco];
+GO
+
+-- 2. L17: Orden determinista en turno laboral por defecto
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerTurnoLaboralActivoDefecto]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 1 ID, HoraEntrada, ToleranciaMinutos
+    FROM [rrhh].[TurnosLaborales]
+    WHERE Activo = 1
+    ORDER BY ID ASC;
+END
+GO
+
+GRANT EXECUTE ON OBJECT::[rrhh].[sp_ObtenerTurnoLaboralActivoDefecto] TO [db_rol_kiosco];
+GO
+
+-- 3. L19: Huella ligera de descriptores faciales en BD para sincronizar caché multi-worker
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerHuellaDescriptoresFacialesKiosco]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        COUNT(*) AS TotalActivos,
+        ISNULL(MAX(ID), 0) AS MaxID,
+        ISNULL(CHECKSUM_AGG(BINARY_CHECKSUM(ID, CAST(FaceDescriptor AS VARCHAR(4000)))), 0) AS Huella
+    FROM [rrhh].[Empleados]
+    WHERE EstadoEmpleado = 'Activo' AND FaceDescriptor IS NOT NULL;
+END
+GO
+
+GRANT EXECUTE ON OBJECT::[rrhh].[sp_ObtenerHuellaDescriptoresFacialesKiosco] TO [db_rol_kiosco];
+GO
+
+-- 4. L12: Vales en nómina filtrados por fecha del período y aplicación parcial sin neto negativo
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ObtenerSumaValesPendientesUsuario]
+    @P1 INT = NULL,
+    @P2 DATE = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(SUM(Monto), 0)
+    FROM [rrhh].[ValesEmpleados]
+    WHERE EmpleadoID = @P1
+      AND Descontado = 0
+      AND (@P2 IS NULL OR CAST(Fecha AS DATE) <= @P2);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ListarValesPendientesUsuarioHastaFecha]
+    @P1 INT = NULL,
+    @P2 DATE = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, Monto, Fecha
+    FROM [rrhh].[ValesEmpleados] WITH (UPDLOCK, HOLDLOCK)
+    WHERE EmpleadoID = @P1
+      AND Descontado = 0
+      AND (@P2 IS NULL OR CAST(Fecha AS DATE) <= @P2)
+    ORDER BY Fecha ASC, ID ASC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_MarcarValeDescontadoPorID]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[ValesEmpleados]
+    SET Descontado = 1
+    WHERE ID = @P1 AND Descontado = 0;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ActualizarSaldoValeParcialPorID]
+    @P1 DECIMAL(10,2) = NULL,
+    @P2 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[ValesEmpleados]
+    SET Monto = @P1, Descontado = 0
+    WHERE ID = @P2 AND Descontado = 0;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_MarcarValesDescontadosUsuario]
+    @P1 INT = NULL,
+    @P2 DATE = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[ValesEmpleados]
+    SET Descontado = 1
+    WHERE EmpleadoID = @P1
+      AND Descontado = 0
+      AND (@P2 IS NULL OR CAST(Fecha AS DATE) <= @P2);
+END
+GO
+
+-- 5. L05: Desembolso verificable de nómina (control de fondos en Caja/Bancos y transición a Pagada)
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ObtenerSaldoDisponibleCuentaBloqueo]
+    @P1 VARCHAR(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(SUM(d.Debe - d.Haber), 0) AS SaldoDisponible
+    FROM [contabilidad].[CatalogoCuentas] c WITH (UPDLOCK, HOLDLOCK)
+    LEFT JOIN [contabilidad].[DetalleAsientos] d WITH (UPDLOCK, HOLDLOCK)
+        ON d.CuentaID = c.ID
+    LEFT JOIN [contabilidad].[AsientosDiario] a WITH (UPDLOCK, HOLDLOCK)
+        ON a.ID = d.AsientoID AND a.Estado = 'Contabilizado'
+    WHERE c.Codigo = @P1 AND c.Activa = 1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_VerificarAsientoPagoNominaExistente]
+    @P1 VARCHAR(50) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 1 ID, NumeroComprobante
+    FROM [contabilidad].[AsientosDiario] WITH (UPDLOCK, HOLDLOCK)
+    WHERE ReferenciaExterna = @P1 AND Estado = 'Contabilizado'
+    ORDER BY ID DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_MarcarNominaPagada]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[Nomina]
+    SET Estado = 'Pagada'
+    WHERE ID = @P1 AND Estado = 'Contabilizada';
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarNominasContabilizadasPorPeriodoBloqueo]
+    @P1 DATE = NULL,
+    @P2 DATE = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID
+    FROM [rrhh].[Nomina] WITH (UPDLOCK, HOLDLOCK)
+    WHERE PeriodoInicio >= @P1 AND PeriodoFin <= @P2 AND Estado = 'Contabilizada'
+    ORDER BY ID ASC;
+END
+GO
+GO
+
+-- >>> sql_group3_accounting_dgi.sql
+-- ============================================================================
+-- Group 3 Remediation SQL: Accounting, Balance Sheet, DGI Engine/Repo & Forecast
+-- Target Database: PanaderiaQA_Prevalidacion_20261015
+-- ============================================================================
+SET NOCOUNT ON;
+GO
+
+-- 1. L24: Saldo disponible con bloqueo UPDLOCK, HOLDLOCK sobre cuentas de efectivo/bancos
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ObtenerSaldoDisponibleCuenta]
+    @CodigoCuenta NVARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        C.Naturaleza,
+        ISNULL(SUM(CASE WHEN A.ID IS NOT NULL THEN D.Debe ELSE 0 END), 0) AS TotalDebe,
+        ISNULL(SUM(CASE WHEN A.ID IS NOT NULL THEN D.Haber ELSE 0 END), 0) AS TotalHaber
+    FROM [contabilidad].[CatalogoCuentas] C WITH (UPDLOCK, HOLDLOCK)
+    LEFT JOIN [contabilidad].[DetalleAsientos] D WITH (UPDLOCK, HOLDLOCK) ON D.CuentaID = C.ID
+    LEFT JOIN [contabilidad].[AsientosDiario] A WITH (UPDLOCK, HOLDLOCK) ON D.AsientoID = A.ID
+        AND (
+            A.Estado = 'Contabilizado'
+            OR (A.Estado = 'Anulado' AND EXISTS (
+                SELECT 1
+                FROM [contabilidad].[AsientosDiario] R
+                WHERE R.ReferenciaExterna = CONCAT('REV-', A.ID)
+                  AND R.Estado = 'Contabilizado'
+            ))
+        )
+    WHERE C.Codigo = @CodigoCuenta
+    GROUP BY C.Naturaleza;
+END
+GO
+
+-- 2. L27: Verificación de conciliación de facturas y compras antes del cierre mensual
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_VerificarConciliacionCierrePeriodo]
+    @PeriodoID INT,
+    @Mes INT,
+    @Anio INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @FacturasSinAsiento INT = 0;
+    DECLARE @ComprasSinAsiento INT = 0;
+
+    SELECT @FacturasSinAsiento = COUNT(*)
+    FROM [ventas].[Facturas] f
+    WHERE MONTH(f.FechaHora) = @Mes
+      AND YEAR(f.FechaHora) = @Anio
+      AND ISNULL(f.EstadoFiscal, 'Emitida') != 'Anulada'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM [contabilidad].[AsientosDiario] a
+          WHERE a.Estado = 'Contabilizado'
+            AND (
+                a.ID = TRY_CONVERT(INT, JSON_VALUE(CASE WHEN ISJSON(f.DocumentoJSON) = 1 THEN f.DocumentoJSON ELSE N'{}' END, '$.asiento_id'))
+                OR a.ReferenciaExterna = f.NumeroFactura
+                OR a.ReferenciaExterna = CONCAT('FAC-', f.ID)
+                OR a.ReferenciaExterna = CAST(f.ID AS NVARCHAR(100))
+            )
+      );
+
+    SELECT @ComprasSinAsiento = COUNT(*)
+    FROM [produccion].[ComprasMateriaPrima] c
+    WHERE MONTH(c.Fecha) = @Mes
+      AND YEAR(c.Fecha) = @Anio
+      AND NOT EXISTS (
+          SELECT 1
+          FROM [contabilidad].[AsientosDiario] a
+          WHERE a.Estado = 'Contabilizado'
+            AND (
+                a.ReferenciaExterna = CONCAT('COMP-', c.ID)
+                OR (c.FacturaProveedor IS NOT NULL AND LTRIM(RTRIM(c.FacturaProveedor)) <> '' AND a.ReferenciaExterna = c.FacturaProveedor)
+                OR a.ReferenciaExterna = CAST(c.ID AS NVARCHAR(100))
+            )
+      );
+
+    SELECT @FacturasSinAsiento AS FacturasSinAsiento, @ComprasSinAsiento AS ComprasSinAsiento;
+END
+GO
+
+-- 3. L14: Resumen financiero de rango (Utilidad neta contable real vs Flujo de caja operativo)
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ObtenerResumenFinancieroRango]
+    @FechaInicio DATETIME2,
+    @FechaFin DATETIME2
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        ISNULL(SUM(CASE WHEN C.Clase = 'Ingreso' OR C.Codigo LIKE '4.%' THEN D.Haber - D.Debe ELSE 0 END), 0) AS IngresosContables,
+        ISNULL(SUM(CASE WHEN C.Clase = 'Costo' OR C.Codigo LIKE '5.%' THEN D.Debe - D.Haber ELSE 0 END), 0) AS CostosContables,
+        ISNULL(SUM(CASE WHEN C.Clase = 'Gasto' OR C.Codigo LIKE '6.%' THEN D.Debe - D.Haber ELSE 0 END), 0) AS GastosContables,
+        ISNULL(SUM(CASE WHEN C.Codigo IN ('1.1.01.001','1.1.01.002','1.1.01.003','1.1.01.004','1.1.01.005')
+                           AND A.Estado = 'Contabilizado' AND ISNULL(A.TipoDocumento, N'') != N'Reversión'
+                     THEN D.Debe ELSE 0 END), 0) AS EntradasEfectivo,
+        ISNULL(SUM(CASE WHEN C.Codigo IN ('1.1.01.001','1.1.01.002','1.1.01.003','1.1.01.004','1.1.01.005')
+                           AND A.Estado = 'Contabilizado' AND ISNULL(A.TipoDocumento, N'') != N'Reversión'
+                     THEN D.Haber ELSE 0 END), 0) AS SalidasEfectivo,
+        ISNULL(SUM(CASE WHEN C.Codigo IN ('1.1.01.001','1.1.01.002','1.1.01.003','1.1.01.004','1.1.01.005')
+                     THEN D.Debe - D.Haber ELSE 0 END), 0) AS FlujoCajaOperativo
+    FROM [contabilidad].[DetalleAsientos] D
+    JOIN [contabilidad].[AsientosDiario] A ON D.AsientoID = A.ID
+    JOIN [contabilidad].[CatalogoCuentas] C ON D.CuentaID = C.ID
+    WHERE (
+        A.Estado = 'Contabilizado'
+        OR (A.Estado = 'Anulado' AND EXISTS (
+            SELECT 1
+            FROM [contabilidad].[AsientosDiario] R
+            WHERE R.ReferenciaExterna = CONCAT('REV-', A.ID)
+              AND R.Estado = 'Contabilizado'
+        ))
+    )
+      AND A.Fecha >= @FechaInicio
+      AND A.Fecha < @FechaFin;
+END
+GO
+
+-- 4. L22: Balance General con separación de Resultados Acumulados Anteriores vs Utilidad del Ejercicio
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ObtenerBalanceGeneralCorte]
+    @FechaCorte DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @InicioEjercicio DATE = DATEFROMPARTS(YEAR(@FechaCorte), 1, 1);
+    DECLARE @FinExclusivo DATE = DATEADD(DAY, 1, CAST(@FechaCorte AS DATE));
+
+    WITH SaldosHistoricos AS (
+        SELECT
+            C.Clase,
+            C.Grupo,
+            C.Codigo,
+            C.Nombre AS Cuenta,
+            C.Naturaleza,
+            SUM(D.Debe) AS TotalDebe,
+            SUM(D.Haber) AS TotalHaber,
+            SUM(CASE WHEN A.Fecha < @InicioEjercicio THEN D.Debe ELSE 0 END) AS DebeAnterior,
+            SUM(CASE WHEN A.Fecha < @InicioEjercicio THEN D.Haber ELSE 0 END) AS HaberAnterior,
+            SUM(CASE WHEN A.Fecha >= @InicioEjercicio THEN D.Debe ELSE 0 END) AS DebeEjercicio,
+            SUM(CASE WHEN A.Fecha >= @InicioEjercicio THEN D.Haber ELSE 0 END) AS HaberEjercicio
+        FROM [contabilidad].[DetalleAsientos] D
+        JOIN [contabilidad].[AsientosDiario] A ON D.AsientoID = A.ID
+        JOIN [contabilidad].[CatalogoCuentas] C ON D.CuentaID = C.ID
+        WHERE (
+            A.Estado = 'Contabilizado'
+            OR (A.Estado = 'Anulado' AND EXISTS (
+                SELECT 1
+                FROM [contabilidad].[AsientosDiario] R
+                WHERE R.ReferenciaExterna = CONCAT('REV-', A.ID)
+                  AND R.Estado = 'Contabilizado'
+            ))
+        )
+          AND A.Fecha < @FinExclusivo
+        GROUP BY C.Clase, C.Grupo, C.Codigo, C.Nombre, C.Naturaleza
+    )
+    SELECT
+        Clase,
+        Grupo,
+        Codigo,
+        Cuenta,
+        CASE
+            WHEN Naturaleza = 'Deudora' THEN (TotalDebe - TotalHaber)
+            ELSE (TotalHaber - TotalDebe)
+        END AS SaldoFinal,
+        CASE
+            WHEN Naturaleza = 'Deudora' THEN (DebeAnterior - HaberAnterior)
+            ELSE (HaberAnterior - DebeAnterior)
+        END AS SaldoEjerciciosAnteriores,
+        CASE
+            WHEN Naturaleza = 'Deudora' THEN (DebeEjercicio - HaberEjercicio)
+            ELSE (HaberEjercicio - DebeEjercicio)
+        END AS SaldoEjercicioActual
+    FROM SaldosHistoricos
+    WHERE (TotalDebe - TotalHaber) <> 0
+       OR (DebeAnterior - HaberAnterior) <> 0
+       OR (DebeEjercicio - HaberEjercicio) <> 0
+    ORDER BY Codigo;
+END
+GO
+
+-- 5. L06 & L07: Snapshot DGI de Ventas Candidatas con asiento_id y reversion_asiento_id
+CREATE OR ALTER PROCEDURE [fiscal].[sp_SnapshotDGIVentasCandidatas]
+    @P1 DATETIME2 = NULL,
+    @P2 DATETIME2 = NULL,
+    @P3 DATETIME2 = NULL,
+    @P4 DATETIME2 = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        f.ID AS id,
+        f.NumeroFactura AS numero,
+        f.FechaHora AS fecha,
+        f.Subtotal AS base,
+        f.IVA AS iva,
+        f.Total AS total,
+        f.EstadoFiscal AS estado,
+        f.FechaAnulacion AS anulada_en,
+        f.MotivoAnulacion AS motivo_anulacion,
+        f.DocumentoJSON AS documento,
+        j.AsientoID AS asiento_id,
+        a.Fecha AS fecha_asiento,
+        r.ID AS reversion_asiento_id,
+        r.Fecha AS fecha_reversion
+    FROM [ventas].[Facturas] f
+    OUTER APPLY (
+        SELECT COALESCE(
+            TRY_CONVERT(INT, JSON_VALUE(CASE WHEN ISJSON(f.DocumentoJSON) = 1 THEN f.DocumentoJSON ELSE N'{}' END, '$.asiento_id')),
+            (SELECT TOP 1 a0.ID FROM [contabilidad].[AsientosDiario] a0 WHERE a0.ReferenciaExterna = f.NumeroFactura ORDER BY a0.ID)
+        ) AS AsientoID
+    ) j
+    LEFT JOIN [contabilidad].[AsientosDiario] a ON a.ID = j.AsientoID
+    OUTER APPLY (
+        SELECT TOP 1 v.ID, v.Fecha
+        FROM [contabilidad].[AsientosDiario] v
+        WHERE (
+            v.ReferenciaExterna = CONCAT('REV-', j.AsientoID)
+            OR v.ReferenciaExterna = CONCAT('REV-', f.NumeroFactura)
+            OR v.ReferenciaExterna = CONCAT('REV-FACT-', f.ID)
+        )
+        ORDER BY v.ID
+    ) r
+    WHERE (f.FechaHora >= @P1 AND f.FechaHora < @P2)
+       OR (f.FechaAnulacion >= @P3 AND f.FechaAnulacion < @P4)
+    ORDER BY f.ID;
+END
+GO
+
+-- 6. L06 & L07: Snapshot DGI de Asientos con tipo_documento
+CREATE OR ALTER PROCEDURE [fiscal].[sp_SnapshotDGIAsientos]
+    @P1 DATETIME2 = NULL,
+    @P2 DATETIME2 = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        ID AS id,
+        NumeroComprobante AS numero,
+        Fecha AS fecha,
+        Estado AS estado,
+        Descripcion AS descripcion,
+        ReferenciaExterna AS referencia,
+        TipoDocumento AS tipo_documento
+    FROM [contabilidad].[AsientosDiario]
+    WHERE Fecha >= @P1 AND Fecha < @P2
+    ORDER BY ID;
+END
+GO
+
+-- 7. L11: Historial de Revisiones DGI con Huella para verificación de frescura en GET /admin/dgi
+CREATE OR ALTER PROCEDURE [fiscal].[sp_HistorialRevisionesDGIPorPeriodo]
+    @PeriodoID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 100
+        r.ID, r.PeriodoID, r.Obligacion, r.Version, r.Estado, r.Motor, r.Huella, r.ResultadoJSON,
+        r.CreadoEn, r.CreadoPor, r.AprobadoPor, p.Desde, p.Hasta
+    FROM [fiscal].[DGI_Revisiones] r
+    JOIN [fiscal].[DGI_Periodos] p ON p.ID = r.PeriodoID
+    WHERE r.PeriodoID = @PeriodoID
+    ORDER BY r.ID DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [fiscal].[sp_HistorialRevisionesDGITodas]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 100
+        r.ID, r.PeriodoID, r.Obligacion, r.Version, r.Estado, r.Motor, r.Huella, r.ResultadoJSON,
+        r.CreadoEn, r.CreadoPor, r.AprobadoPor, p.Desde, p.Hasta
+    FROM [fiscal].[DGI_Revisiones] r
+    JOIN [fiscal].[DGI_Periodos] p ON p.ID = r.PeriodoID
+    ORDER BY r.ID DESC;
+END
+GO
+
+-- 8. L25: Histórico de Ventas para Regresión Lineal anclado a la fecha operativa
+CREATE OR ALTER PROCEDURE [ventas].[sp_EstadisticaHistoricoVentasRegresion]
+    @FechaHoy DATE = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Corte DATE = ISNULL(@FechaHoy, CONVERT(date, GETDATE()));
+    SELECT CONVERT(date, FechaHora) AS Dia, ISNULL(SUM(Total), 0) AS Total
+    FROM [ventas].[Facturas]
+    WHERE EstadoFiscal = 'Emitida'
+      AND CONVERT(date, FechaHora) >= DATEADD(DAY, -29, @Corte)
+      AND CONVERT(date, FechaHora) <= @Corte
+    GROUP BY CONVERT(date, FechaHora)
+    ORDER BY Dia;
+END
+GO
+GO
+
+-- >>> sql_group4_auth_inv_prod.sql
+/* ============================================================================
+   REMEDIACIÓN AUDITORÍA GRUPO 4 (L08, L09, L10, L16, L18, L20, L21, L23, L26)
+   Archivo: scratch/remediation_20261025/sql_group4_auth_inv_prod.sql
+   Base de datos objetivo: PanaderiaQA_Prevalidacion_20261015
+   ============================================================================ */
+
+SET NOCOUNT ON;
+GO
+
+-- ============================================================================
+-- 1. AJUSTES DE ESQUEMA IDEMPOTENTES (L10, L18, L20)
+-- ============================================================================
+IF COL_LENGTH('produccion.Proveedores', 'RUC') IS NULL
+BEGIN
+    ALTER TABLE [produccion].[Proveedores] ADD [RUC] NVARCHAR(30) NULL;
+END
+GO
+
+IF COL_LENGTH('produccion.ComprasMateriaPrima', 'IdempotencyKey') IS NULL
+BEGIN
+    ALTER TABLE [produccion].[ComprasMateriaPrima] ADD [IdempotencyKey] NVARCHAR(120) NULL;
+END
+GO
+
+IF COL_LENGTH('produccion.ComprasMateriaPrima', 'ProveedorRUC') IS NULL
+BEGIN
+    ALTER TABLE [produccion].[ComprasMateriaPrima] ADD [ProveedorRUC] NVARCHAR(30) NULL;
+END
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'produccion.ComprasMateriaPrima')
+      AND name = N'UX_ComprasMateriaPrima_IdempotencyKey'
+)
+BEGIN
+    CREATE UNIQUE INDEX [UX_ComprasMateriaPrima_IdempotencyKey]
+    ON [produccion].[ComprasMateriaPrima]([IdempotencyKey])
+    WHERE [IdempotencyKey] IS NOT NULL;
+END
+GO
+
+IF COL_LENGTH('produccion.MateriaPrima', 'CostoUnitario') IS NULL
+BEGIN
+    ALTER TABLE [produccion].[MateriaPrima] ADD [CostoUnitario] DECIMAL(18, 4) NULL;
+END
+GO
+
+-- ============================================================================
+-- 2. L08: NORMALIZACIÓN DE IDENTIDAD EN BLOQUEO DE LOGIN
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [seguridad].[sp_VerificarBloqueoCuenta]
+    @Identificador NVARCHAR(100),
+    @DireccionIP VARCHAR(45)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Ahora DATETIME2 = SYSDATETIME();
+    DECLARE @Raw NVARCHAR(100) = LOWER(LTRIM(RTRIM(ISNULL(@Identificador, N'desconocido'))));
+    DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@Raw, N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+    DECLARE @Canon NVARCHAR(100) = @Raw;
+
+    IF @Clean LIKE N'[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 8
+        SET @Canon = N'+505' + @Clean;
+    ELSE IF @Clean LIKE N'505[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 11
+        SET @Canon = N'+505' + RIGHT(@Clean, 8);
+    ELSE IF @Clean LIKE N'00505[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 13
+        SET @Canon = N'+505' + RIGHT(@Clean, 8);
+
+    SET @DireccionIP = LTRIM(RTRIM(ISNULL(@DireccionIP, '0.0.0.0')));
+
+    SELECT TOP 1
+        ID,
+        Identificador,
+        DireccionIP,
+        IntentosFallidos,
+        BloqueadoHasta,
+        CASE WHEN BloqueadoHasta IS NOT NULL AND BloqueadoHasta > @Ahora THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS EstaBloqueado
+    FROM [seguridad].[BloqueosCuenta]
+    WHERE Identificador IN (@Canon, @Raw)
+      AND DireccionIP = @DireccionIP
+      AND BloqueadoHasta > @Ahora
+    ORDER BY BloqueadoHasta DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_VerificarBloqueoLogin]
+    @Identificador NVARCHAR(100),
+    @DireccionIP VARCHAR(45)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC [seguridad].[sp_VerificarBloqueoCuenta]
+        @Identificador = @Identificador,
+        @DireccionIP = @DireccionIP;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_RegistrarIntentoLogin]
+    @Identificador NVARCHAR(100),
+    @DireccionIP VARCHAR(45),
+    @Exitoso BIT,
+    @MaxIntentos INT = 5,
+    @MinutosBloqueo INT = 15
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Ahora DATETIME2 = SYSDATETIME();
+    DECLARE @IntentosActuales INT = 0;
+    DECLARE @BloqueadoHasta DATETIME2 = NULL;
+    DECLARE @EstaBloqueado BIT = 0;
+    DECLARE @RecienBloqueado BIT = 0;
+
+    BEGIN TRY
+        DECLARE @Raw NVARCHAR(100) = LOWER(LTRIM(RTRIM(ISNULL(@Identificador, N'desconocido'))));
+        DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@Raw, N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+        SET @Identificador = @Raw;
+
+        IF @Clean LIKE N'[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 8
+            SET @Identificador = N'+505' + @Clean;
+        ELSE IF @Clean LIKE N'505[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 11
+            SET @Identificador = N'+505' + RIGHT(@Clean, 8);
+        ELSE IF @Clean LIKE N'00505[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 13
+            SET @Identificador = N'+505' + RIGHT(@Clean, 8);
+
+        SET @DireccionIP = LTRIM(RTRIM(ISNULL(@DireccionIP, '0.0.0.0')));
+
+        SELECT @MaxIntentos = ISNULL(TRY_CAST(Valor AS INT), @MaxIntentos)
+        FROM [seguridad].[ConfiguracionSistema] WHERE Clave = 'smtp_bloqueo_intentos_max';
+
+        SELECT @MinutosBloqueo = ISNULL(TRY_CAST(Valor AS INT), @MinutosBloqueo)
+        FROM [seguridad].[ConfiguracionSistema] WHERE Clave = 'smtp_bloqueo_minutos';
+
+        IF @Exitoso = 1
+        BEGIN
+            DELETE FROM [seguridad].[BloqueosCuenta]
+            WHERE Identificador IN (@Identificador, @Raw) AND DireccionIP = @DireccionIP;
+
+            SELECT
+                CAST(0 AS BIT) AS Bloqueado,
+                CAST(0 AS BIT) AS RecienBloqueado,
+                0 AS IntentosFallidos,
+                CAST(NULL AS DATETIME2) AS BloqueadoHasta;
+            RETURN;
+        END
+
+        SELECT @IntentosActuales = IntentosFallidos, @BloqueadoHasta = BloqueadoHasta
+        FROM [seguridad].[BloqueosCuenta] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Identificador = @Identificador AND DireccionIP = @DireccionIP;
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            SET @IntentosActuales = 1;
+            IF @IntentosActuales >= @MaxIntentos
+            BEGIN
+                SET @BloqueadoHasta = DATEADD(MINUTE, @MinutosBloqueo, @Ahora);
+                SET @EstaBloqueado = 1;
+                SET @RecienBloqueado = 1;
+            END
+
+            INSERT INTO [seguridad].[BloqueosCuenta] (
+                Identificador, DireccionIP, IntentosFallidos, PrimerIntento, UltimoIntento, BloqueadoHasta, Motivo
+            )
+            VALUES (
+                @Identificador, @DireccionIP, @IntentosActuales, @Ahora, @Ahora, @BloqueadoHasta,
+                CASE WHEN @EstaBloqueado = 1 THEN N'Exceso de intentos fallidos de inicio de sesión' ELSE NULL END
+            );
+        END
+        ELSE
+        BEGIN
+            IF @BloqueadoHasta IS NOT NULL AND @BloqueadoHasta < @Ahora
+            BEGIN
+                SET @IntentosActuales = 1;
+                SET @BloqueadoHasta = NULL;
+            END
+            ELSE
+            BEGIN
+                SET @IntentosActuales = @IntentosActuales + 1;
+            END
+
+            IF @IntentosActuales >= @MaxIntentos
+            BEGIN
+                IF @BloqueadoHasta IS NULL OR @BloqueadoHasta < @Ahora
+                    SET @RecienBloqueado = 1;
+                SET @BloqueadoHasta = DATEADD(MINUTE, @MinutosBloqueo, @Ahora);
+                SET @EstaBloqueado = 1;
+            END
+
+            UPDATE [seguridad].[BloqueosCuenta]
+            SET IntentosFallidos = @IntentosActuales,
+                UltimoIntento = @Ahora,
+                BloqueadoHasta = @BloqueadoHasta,
+                Motivo = CASE WHEN @EstaBloqueado = 1 THEN N'Exceso de intentos fallidos de inicio de sesión' ELSE Motivo END
+            WHERE Identificador = @Identificador AND DireccionIP = @DireccionIP;
+        END
+
+        IF @RecienBloqueado = 1
+        BEGIN
+            DECLARE @MsgBloqueo NVARCHAR(500) = CONCAT(
+                N'Cuenta bloqueada temporalmente por fuerza bruta: identificador "', @Identificador,
+                N'" desde IP ', @DireccionIP, N' tras ', @IntentosActuales, N' intentos fallidos.'
+            );
+            EXEC [seguridad].[sp_RegistrarErrorBD]
+                @Origen = 'SEGURIDAD_AUTH',
+                @Severidad = 'CRITICAL',
+                @NumeroError = 50401,
+                @EstadoError = 1,
+                @LineaError = 1,
+                @Procedimiento = N'seguridad.sp_RegistrarIntentoLogin',
+                @EsquemaOrigen = N'seguridad',
+                @MensajeError = @MsgBloqueo,
+                @Username = @Identificador,
+                @DireccionIP = @DireccionIP,
+                @RutaHTTP = N'/login';
+        END
+
+        SELECT
+            @EstaBloqueado AS Bloqueado,
+            @RecienBloqueado AS RecienBloqueado,
+            @IntentosActuales AS IntentosFallidos,
+            @BloqueadoHasta AS BloqueadoHasta;
+    END TRY
+    BEGIN CATCH
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_RegistrarIntentoLogin';
+        THROW;
+    END CATCH
+END
+GO
+
+-- ============================================================================
+-- 3. L09: CONTEO ACUMULADO DE FALLOS TOTP POR CUENTA EN VENTANA DE TIEMPO
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ObtenerFallosTOTPRecientes]
+    @Subject NVARCHAR(128),
+    @MinExpiresAt BIGINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(SUM(Attempts), 0) AS TotalFallos
+    FROM [seguridad].[AuthChallenges] WITH (UPDLOCK, HOLDLOCK)
+    WHERE Subject = @Subject
+      AND Kind LIKE 'totp%'
+      AND Verified = 0
+      AND ExpiresAt > @MinExpiresAt;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_LimpiarFallosTOTPUsuario]
+    @Subject NVARCHAR(128)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [seguridad].[AuthChallenges]
+    SET Verified = 1,
+        Consumed = 1,
+        Attempts = 0
+    WHERE Subject = @Subject
+      AND Kind LIKE 'totp%';
+END
+GO
+
+-- ============================================================================
+-- 4. L23: INVARIANTE DE ÚLTIMO SUPERADMIN ACTIVO BAJO BLOQUEO SERIALIZABLE
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ContarSuperAdminsActivosBloqueo]
+    @TargetUserID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @SuperAdminRolID INT;
+    SELECT @SuperAdminRolID = ID
+    FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+    WHERE Nombre = 'SuperAdmin';
+
+    DECLARE @TargetRolID INT, @TargetActivo BIT, @TargetRolNombre NVARCHAR(50);
+    SELECT @TargetRolID = u.RolID, @TargetActivo = u.Activo, @TargetRolNombre = r.Nombre
+    FROM [seguridad].[Usuarios] u WITH (UPDLOCK, HOLDLOCK)
+    JOIN [seguridad].[Roles] r ON r.ID = u.RolID
+    WHERE u.ID = @TargetUserID;
+
+    DECLARE @Restantes INT = 0;
+    SELECT @Restantes = COUNT(*)
+    FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+    WHERE RolID = @SuperAdminRolID
+      AND Activo = 1
+      AND ID <> ISNULL(@TargetUserID, -1);
+
+    SELECT
+        @TargetRolID AS TargetRolID,
+        @TargetRolNombre AS TargetRolNombre,
+        @TargetActivo AS TargetActivo,
+        @SuperAdminRolID AS SuperAdminRolID,
+        ISNULL(@Restantes, 0) AS SuperAdminsActivosRestantes;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ActualizarRolUsuario]
+    @P1 INT = NULL,
+    @P2 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @SuperAdminRolID INT;
+        SELECT @SuperAdminRolID = ID
+        FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Nombre = 'SuperAdmin';
+
+        DECLARE @RolActualID INT, @ActivoActual BIT;
+        SELECT @RolActualID = RolID, @ActivoActual = Activo
+        FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @P1;
+
+        IF @RolActualID IS NULL
+            THROW 52004, 'Usuario no encontrado.', 1;
+
+        IF @RolActualID = @SuperAdminRolID AND @P2 <> @SuperAdminRolID AND @ActivoActual = 1
+        BEGIN
+            DECLARE @Restantes INT = 0;
+            SELECT @Restantes = COUNT(*)
+            FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+            WHERE RolID = @SuperAdminRolID AND Activo = 1 AND ID <> @P1;
+
+            IF ISNULL(@Restantes, 0) < 1
+                THROW 52005, 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema', 1;
+        END
+
+        UPDATE [seguridad].[Usuarios]
+        SET RolID = @P2
+        WHERE ID = @P1;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_ActualizarRolUsuario';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ActualizarUsuario]
+    @UsuarioID INT,
+    @NombreCompleto NVARCHAR(100) = NULL,
+    @RolID INT = NULL,
+    @Activo BIT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @SuperAdminRolID INT;
+        SELECT @SuperAdminRolID = ID
+        FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Nombre = 'SuperAdmin';
+
+        DECLARE @RolActualID INT, @ActivoActual BIT;
+        SELECT @RolActualID = RolID, @ActivoActual = Activo
+        FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @UsuarioID;
+
+        IF @RolActualID IS NULL
+            THROW 52004, 'Usuario no encontrado.', 1;
+
+        DECLARE @NuevoRolID INT = ISNULL(@RolID, @RolActualID);
+        DECLARE @NuevoActivo BIT = ISNULL(@Activo, @ActivoActual);
+
+        IF @RolActualID = @SuperAdminRolID AND @ActivoActual = 1
+           AND (@NuevoRolID <> @SuperAdminRolID OR @NuevoActivo = 0)
+        BEGIN
+            DECLARE @Restantes INT = 0;
+            SELECT @Restantes = COUNT(*)
+            FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+            WHERE RolID = @SuperAdminRolID AND Activo = 1 AND ID <> @UsuarioID;
+
+            IF ISNULL(@Restantes, 0) < 1
+                THROW 52005, 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema', 1;
+        END
+
+        UPDATE [seguridad].[Usuarios]
+        SET NombreCompleto = ISNULL(@NombreCompleto, NombreCompleto),
+            RolID = @NuevoRolID,
+            Activo = @NuevoActivo
+        WHERE ID = @UsuarioID;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_ActualizarUsuario';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ToggleActivoUsuario]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @SuperAdminRolID INT;
+        SELECT @SuperAdminRolID = ID
+        FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Nombre = 'SuperAdmin';
+
+        DECLARE @RolActualID INT, @ActivoActual BIT;
+        SELECT @RolActualID = RolID, @ActivoActual = Activo
+        FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @P1;
+
+        IF @RolActualID IS NULL
+            THROW 52004, 'Usuario no encontrado.', 1;
+
+        IF @RolActualID = @SuperAdminRolID AND @ActivoActual = 1
+        BEGIN
+            DECLARE @Restantes INT = 0;
+            SELECT @Restantes = COUNT(*)
+            FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+            WHERE RolID = @SuperAdminRolID AND Activo = 1 AND ID <> @P1;
+
+            IF ISNULL(@Restantes, 0) < 1
+                THROW 52005, 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema', 1;
+        END
+
+        UPDATE [seguridad].[Usuarios]
+        SET Activo = 1 ^ Activo
+        WHERE ID = @P1;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_ToggleActivoUsuario';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_CambiarEstadoUsuario]
+    @UsuarioID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @SuperAdminRolID INT;
+        SELECT @SuperAdminRolID = ID
+        FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Nombre = 'SuperAdmin';
+
+        DECLARE @RolActualID INT, @ActivoActual BIT;
+        SELECT @RolActualID = RolID, @ActivoActual = Activo
+        FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @UsuarioID;
+
+        IF @RolActualID IS NULL
+            THROW 52004, 'Usuario no encontrado.', 1;
+
+        IF @RolActualID = @SuperAdminRolID AND @ActivoActual = 1
+        BEGIN
+            DECLARE @Restantes INT = 0;
+            SELECT @Restantes = COUNT(*)
+            FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+            WHERE RolID = @SuperAdminRolID AND Activo = 1 AND ID <> @UsuarioID;
+
+            IF ISNULL(@Restantes, 0) < 1
+                THROW 52005, 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema', 1;
+        END
+
+        UPDATE [seguridad].[Usuarios]
+        SET Activo = 1 ^ Activo
+        OUTPUT DELETED.NombreCompleto, DELETED.Username, DELETED.RolID, DELETED.Activo AS ActivoAntes, INSERTED.Activo AS ActivoDespues
+        WHERE ID = @UsuarioID;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_CambiarEstadoUsuario';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_EliminarUsuario]
+    @UsuarioID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @SuperAdminRolID INT;
+        SELECT @SuperAdminRolID = ID
+        FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Nombre = 'SuperAdmin';
+
+        DECLARE @RolActualID INT, @ActivoActual BIT;
+        SELECT @RolActualID = RolID, @ActivoActual = Activo
+        FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @UsuarioID;
+
+        IF @RolActualID IS NULL
+            THROW 52004, 'Usuario no encontrado.', 1;
+
+        IF @RolActualID = @SuperAdminRolID AND @ActivoActual = 1
+        BEGIN
+            DECLARE @Restantes INT = 0;
+            SELECT @Restantes = COUNT(*)
+            FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+            WHERE RolID = @SuperAdminRolID AND Activo = 1 AND ID <> @UsuarioID;
+
+            IF ISNULL(@Restantes, 0) < 1
+                THROW 52005, 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema', 1;
+        END
+
+        UPDATE [seguridad].[Usuarios]
+        SET Activo = 0
+        WHERE ID = @UsuarioID;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_EliminarUsuario';
+        THROW;
+    END CATCH
+END
+GO
+
+-- ============================================================================
+-- 5. L26: ALERTAS SMTP OUTBOX CON DESTINATARIO INDIVIDUAL PERSISTIDO
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [seguridad].[sp_EncolarAlertaSMTP]
+    @ErrorID BIGINT,
+    @DestinatariosJSON NVARCHAR(MAX) = NULL,
+    @Forzar BIT = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        DECLARE @LockResult INT;
+        EXEC @LockResult = sys.sp_getapplock @Resource = N'panaderia.smtp.outbox.v1',
+             @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+        IF @LockResult < 0 THROW 51070, 'No se pudo reservar la cola SMTP.', 1;
+
+        INSERT INTO [seguridad].[AlertasSMTPOutbox](ErrorID, DedupKey, DestinatariosJSON, Forzar)
+        SELECT b.ID, HASHBYTES('SHA2_256', (
+            SELECT b.Origen AS origen, b.NumeroError AS numero, b.Procedimiento AS procedimiento,
+                CASE WHEN b.Procedimiento IS NULL AND b.NumeroError IS NULL
+                     THEN LEFT(b.MensajeError, 120) ELSE N'' END AS mensaje
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)), @DestinatariosJSON, @Forzar
+        FROM [seguridad].[BitacoraErrores] b
+        WHERE b.ID = @ErrorID AND b.NotificadoSMTP = 0
+          AND NOT EXISTS(SELECT 1 FROM [seguridad].[AlertasSMTPOutbox] o WHERE o.ErrorID = b.ID);
+
+        UPDATE [seguridad].[AlertasSMTPOutbox]
+        SET DestinatariosJSON = COALESCE(@DestinatariosJSON, DestinatariosJSON),
+            Forzar = CASE WHEN @Forzar = 1 THEN 1 ELSE Forzar END
+        WHERE ErrorID = @ErrorID AND Estado <> 'Sent';
+
+        COMMIT;
+        SELECT CAST(CASE WHEN EXISTS(SELECT 1 FROM [seguridad].[AlertasSMTPOutbox] WHERE ErrorID = @ErrorID)
+                        THEN 1 ELSE 0 END AS BIT) AS Encolada;
+    END TRY
+    BEGIN CATCH
+        IF XACT_STATE() <> 0 ROLLBACK;
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ReclamarAlertaSMTP]
+    @ErrorID BIGINT = NULL,
+    @VentanaSegundos INT = 300,
+    @LeaseSegundos INT = 300,
+    @SembrarLote INT = 20
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF @SembrarLote NOT BETWEEN 0 AND 100 OR @VentanaSegundos NOT BETWEEN 0 AND 86400
+       OR @LeaseSegundos NOT BETWEEN 60 AND 3600
+        THROW 51071, 'Limites SMTP invalidos.', 1;
+    DECLARE @Ahora DATETIME2(3) = SYSUTCDATETIME(), @Elegido BIGINT, @Clave BINARY(32),
+            @Token UNIQUEIDENTIFIER = NEWID(), @LockResult INT;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        EXEC @LockResult = sys.sp_getapplock @Resource = N'panaderia.smtp.outbox.v1',
+             @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+        IF @LockResult < 0 THROW 51070, 'No se pudo reservar la cola SMTP.', 1;
+
+        INSERT INTO [seguridad].[AlertasSMTPOutbox](ErrorID, DedupKey)
+        SELECT TOP (@SembrarLote) b.ID, HASHBYTES('SHA2_256', (
+            SELECT b.Origen AS origen, b.NumeroError AS numero, b.Procedimiento AS procedimiento,
+                CASE WHEN b.Procedimiento IS NULL AND b.NumeroError IS NULL
+                     THEN LEFT(b.MensajeError, 120) ELSE N'' END AS mensaje
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+        FROM [seguridad].[BitacoraErrores] b
+        WHERE b.NotificadoSMTP = 0
+          AND NOT EXISTS(SELECT 1 FROM [seguridad].[AlertasSMTPOutbox] o WHERE o.ErrorID = b.ID)
+        ORDER BY b.ID;
+
+        UPDATE TOP (100) o SET Estado = 'Suppressed', ClaimToken = NULL, LeaseHasta = NULL
+        FROM [seguridad].[AlertasSMTPOutbox] o
+        JOIN [seguridad].[AlertasSMTPDedup] d ON d.DedupKey = o.DedupKey
+        WHERE o.Estado IN ('Pending', 'Sending') AND o.Forzar = 0
+          AND (o.LeaseHasta IS NULL OR o.LeaseHasta <= @Ahora)
+          AND d.UltimoEnvio > DATEADD(SECOND, -@VentanaSegundos, @Ahora)
+          AND (@ErrorID IS NULL OR o.ErrorID = @ErrorID);
+
+        SELECT TOP(1) @Elegido = o.ErrorID, @Clave = o.DedupKey
+        FROM [seguridad].[AlertasSMTPOutbox] o
+        LEFT JOIN [seguridad].[AlertasSMTPDedup] d ON d.DedupKey = o.DedupKey
+        WHERE o.Estado IN ('Pending', 'Sending') AND o.DisponibleDesde <= @Ahora
+          AND (o.LeaseHasta IS NULL OR o.LeaseHasta <= @Ahora)
+          AND (d.LeaseHasta IS NULL OR d.LeaseHasta <= @Ahora)
+          AND (o.Forzar = 1 OR d.UltimoEnvio IS NULL OR d.UltimoEnvio <= DATEADD(SECOND, -@VentanaSegundos, @Ahora))
+          AND (@ErrorID IS NULL OR o.ErrorID = @ErrorID)
+        ORDER BY CASE WHEN o.DestinatariosJSON IS NOT NULL THEN 0 ELSE 1 END,
+                 o.Forzar DESC,
+                 o.DisponibleDesde,
+                 o.ErrorID;
+
+        IF @Elegido IS NOT NULL
+        BEGIN
+            IF NOT EXISTS(SELECT 1 FROM [seguridad].[AlertasSMTPDedup] WHERE DedupKey = @Clave)
+                INSERT INTO [seguridad].[AlertasSMTPDedup](DedupKey) VALUES(@Clave);
+            UPDATE [seguridad].[AlertasSMTPDedup]
+               SET ClaimToken = @Token, LeaseHasta = DATEADD(SECOND, @LeaseSegundos, @Ahora)
+             WHERE DedupKey = @Clave;
+            UPDATE [seguridad].[AlertasSMTPOutbox] SET Estado = 'Sending', ClaimToken = @Token,
+                   LeaseHasta = DATEADD(SECOND, @LeaseSegundos, @Ahora), Intentos = Intentos + 1
+             WHERE ErrorID = @Elegido;
+        END;
+        COMMIT;
+        SELECT b.*, o.ClaimToken, o.DestinatariosJSON, o.DestinatariosJSON AS Destinatario
+        FROM [seguridad].[AlertasSMTPOutbox] o
+        JOIN [seguridad].[BitacoraErrores] b ON b.ID = o.ErrorID
+        WHERE o.ErrorID = @Elegido AND o.ClaimToken = @Token;
+    END TRY
+    BEGIN CATCH
+        IF XACT_STATE() <> 0 ROLLBACK;
+        THROW;
+    END CATCH
+END
+GO
+
+-- ============================================================================
+-- 6. L16: CLIENTES - NORMALIZACIÓN Y UNICIDAD DE TELÉFONO BAJO BLOQUEO
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [crm].[sp_VerificarTelefonoClienteDuplicado]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@P1, N''))), N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+    IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = N'505'
+        SET @Clean = RIGHT(@Clean, 8);
+    ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = N'00505'
+        SET @Clean = RIGHT(@Clean, 8);
+
+    SELECT ID
+    FROM [crm].[Clientes] WITH (UPDLOCK, HOLDLOCK)
+    WHERE ID <> ISNULL(@P2, 0)
+      AND ID > 1
+      AND Telefono IS NOT NULL
+      AND LTRIM(RTRIM(Telefono)) <> ''
+      AND (
+          CASE
+              WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                   AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+              THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+              WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 13
+                   AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 5) = '00505'
+              THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+              ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+          END = @Clean
+      );
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_ActualizarClienteAdmin]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 NVARCHAR(255) = NULL,
+    @P4 NVARCHAR(255) = NULL,
+    @P5 DATE = NULL,
+    @P6 INT = NULL,
+    @P7 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@P3, N''))), N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+    IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = N'505'
+        SET @Clean = RIGHT(@Clean, 8);
+    ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = N'00505'
+        SET @Clean = RIGHT(@Clean, 8);
+
+    IF EXISTS (
+        SELECT 1
+        FROM [crm].[Clientes] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID <> ISNULL(@P7, 0)
+          AND ID > 1
+          AND Telefono IS NOT NULL
+          AND LTRIM(RTRIM(Telefono)) <> ''
+          AND (
+              CASE
+                  WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                       AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+                  THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+                  WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 13
+                       AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 5) = '00505'
+                  THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+                  ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+              END = @Clean
+          )
+    )
+        THROW 52020, 'El teléfono ya pertenece a otro cliente.', 1;
+
+    SET NOCOUNT OFF;
+    UPDATE [crm].[Clientes]
+    SET Nombre = @P1,
+        Apellidos = @P2,
+        Telefono = @Clean,
+        Genero = @P4,
+        FechaNacimiento = @P5,
+        NivelConfianzaID = @P6
+    WHERE ID = @P7 AND ID > 1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_ActualizarCliente]
+    @ClienteID INT,
+    @Nombre NVARCHAR(100),
+    @Apellidos NVARCHAR(100) = NULL,
+    @Telefono VARCHAR(30),
+    @Genero VARCHAR(20) = NULL,
+    @FechaNacimiento DATE = NULL,
+    @NivelConfianzaID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @Clean VARCHAR(30) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@Telefono, ''))), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '');
+        IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = '505'
+            SET @Clean = RIGHT(@Clean, 8);
+        ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = '00505'
+            SET @Clean = RIGHT(@Clean, 8);
+
+        IF EXISTS (
+            SELECT 1
+            FROM [crm].[Clientes] WITH (UPDLOCK, HOLDLOCK)
+            WHERE ID <> @ClienteID
+              AND ID > 1
+              AND Telefono IS NOT NULL
+              AND (
+                  CASE
+                      WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                           AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+                      THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+                      ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+                  END = @Clean
+              )
+        )
+            THROW 52020, 'El teléfono ya pertenece a otro cliente.', 1;
+
+        IF NOT EXISTS (SELECT 1 FROM [crm].[NivelesConfianza] WHERE ID = @NivelConfianzaID)
+            THROW 52021, 'Nivel de fidelidad inexistente.', 1;
+
+        UPDATE [crm].[Clientes]
+        SET Nombre = @Nombre,
+            Apellidos = @Apellidos,
+            Telefono = @Clean,
+            Genero = @Genero,
+            FechaNacimiento = @FechaNacimiento,
+            NivelConfianzaID = @NivelConfianzaID
+        WHERE ID = @ClienteID AND ID > 1;
+    END TRY
+    BEGIN CATCH
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'crm.sp_ActualizarCliente';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_RegistrarClienteVerificado]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 NVARCHAR(255) = NULL,
+    @P4 NVARCHAR(255) = NULL,
+    @P5 NVARCHAR(255) = NULL,
+    @P6 DATE = NULL,
+    @P7 NVARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@P3, N''))), N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+    IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = N'505'
+        SET @Clean = RIGHT(@Clean, 8);
+    ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = N'00505'
+        SET @Clean = RIGHT(@Clean, 8);
+
+    IF EXISTS (
+        SELECT 1
+        FROM [crm].[Clientes] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID > 1
+          AND Telefono IS NOT NULL
+          AND LTRIM(RTRIM(Telefono)) <> ''
+          AND (
+              CASE
+                  WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                       AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+                  THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+                  ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+              END = @Clean
+          )
+    )
+        THROW 52020, 'El teléfono ya pertenece a otro cliente.', 1;
+
+    INSERT INTO [crm].[Clientes] (
+        Nombre, Apellidos, Telefono, PasswordHash, Genero,
+        FechaNacimiento, RutaFotoPerfil, EsInvitado, NivelConfianzaID
+    )
+    VALUES (@P1, @P2, @Clean, @P4, @P5, @P6, @P7, 0, 1);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_InsertarClienteRapido]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@P2, N''))), N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+    IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = N'505'
+        SET @Clean = RIGHT(@Clean, 8);
+    ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = N'00505'
+        SET @Clean = RIGHT(@Clean, 8);
+
+    IF @Clean <> N'' AND EXISTS (
+        SELECT 1
+        FROM [crm].[Clientes] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID > 1
+          AND Telefono IS NOT NULL
+          AND LTRIM(RTRIM(Telefono)) <> ''
+          AND (
+              CASE
+                  WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                       AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+                  THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+                  ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+              END = @Clean
+          )
+    )
+        THROW 52020, 'El teléfono ya pertenece a otro cliente.', 1;
+
+    INSERT INTO [crm].[Clientes](Nombre, Telefono, NivelConfianzaID)
+    OUTPUT INSERTED.ID
+    VALUES(@P1, CASE WHEN @Clean <> N'' THEN @Clean ELSE @P2 END, 1);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_ObtenerClientePorTelefono]
+    @Telefono VARCHAR(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Clean VARCHAR(30) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@Telefono, ''))), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '');
+    IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = '505'
+        SET @Clean = RIGHT(@Clean, 8);
+    ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = '00505'
+        SET @Clean = RIGHT(@Clean, 8);
+
+    SELECT ID, Nombre, Apellidos, Telefono, PasswordHash, EsInvitado, NivelConfianzaID, FechaNacimiento, RutaFotoPerfil
+    FROM [crm].[Clientes]
+    WHERE Telefono = @Telefono
+       OR (
+           @Clean <> '' AND Telefono IS NOT NULL AND
+           CASE
+               WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                    AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+               THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+               ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+           END = @Clean
+       )
+    ORDER BY EsInvitado ASC, ID DESC;
+END
+GO
+
+-- ============================================================================
+-- 7. L10 y L18: COMPRAS IDEMPOTENTES Y SOPORTE RUC DE PROVEEDOR PARA IVA
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [produccion].[sp_CrearProveedor]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 NVARCHAR(30) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO [produccion].[Proveedores] (Nombre, Telefono, RUC)
+    OUTPUT INSERTED.ID
+    VALUES (@P1, @P2, @P3);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_ActualizarProveedorActivo]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 INT = NULL,
+    @P4 NVARCHAR(30) = NULL
+AS
+BEGIN
+    SET NOCOUNT OFF;
+    UPDATE [produccion].[Proveedores]
+    SET Nombre = @P1,
+        Telefono = @P2,
+        RUC = COALESCE(@P4, RUC)
+    WHERE ID = @P3 AND Activo = 1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_VerificarProveedorActivo]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, RUC FROM [produccion].[Proveedores] WHERE ID = @P1 AND Activo = 1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_ListarProveedoresActivos]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, Nombre, Telefono, RUC
+    FROM [produccion].[Proveedores]
+    WHERE Activo = 1
+    ORDER BY Nombre;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_ObtenerCompraPorIdempotencia]
+    @IdempotencyKey NVARCHAR(120),
+    @ProveedorID INT = NULL,
+    @FacturaProveedor NVARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 1
+        ID,
+        MateriaPrimaID,
+        ProveedorID,
+        Cantidad,
+        CostoTotal,
+        FacturaProveedor,
+        IVADocumentado,
+        Fecha,
+        IdempotencyKey
+    FROM [produccion].[ComprasMateriaPrima] WITH (UPDLOCK, HOLDLOCK)
+    WHERE IdempotencyKey = @IdempotencyKey
+       OR (
+           @ProveedorID IS NOT NULL
+           AND @FacturaProveedor IS NOT NULL
+           AND ProveedorID = @ProveedorID
+           AND UPPER(LTRIM(RTRIM(FacturaProveedor))) = UPPER(LTRIM(RTRIM(@FacturaProveedor)))
+       )
+    ORDER BY ID DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_InsertarCompraMateriaPrima]
+    @P1 INT = NULL,
+    @P2 INT = NULL,
+    @P3 DECIMAL(18, 2) = NULL,
+    @P4 DECIMAL(18, 2) = NULL,
+    @P5 NVARCHAR(255) = NULL,
+    @P6 DECIMAL(18, 2) = NULL,
+    @P7 DATETIME2 = NULL,
+    @P8 NVARCHAR(120) = NULL,
+    @P9 NVARCHAR(30) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @P8 IS NOT NULL
+    BEGIN
+        DECLARE @ExistingID INT;
+        SELECT TOP 1 @ExistingID = ID
+        FROM [produccion].[ComprasMateriaPrima] WITH (UPDLOCK, HOLDLOCK)
+        WHERE IdempotencyKey = @P8;
+
+        IF @ExistingID IS NOT NULL
+        BEGIN
+            SELECT @ExistingID AS ID, CAST(1 AS BIT) AS YaExistia;
+            RETURN;
+        END
+    END
+
+    INSERT INTO [produccion].[ComprasMateriaPrima] (
+        MateriaPrimaID, ProveedorID, Cantidad, CostoTotal, FacturaProveedor, IVADocumentado, Fecha, IdempotencyKey, ProveedorRUC
+    )
+    OUTPUT INSERTED.ID, CAST(0 AS BIT) AS YaExistia
+    VALUES (@P1, @P2, @P3, @P4, @P5, @P6, @P7, @P8, @P9);
+END
+GO
+
+-- ============================================================================
+-- 8. L20: INVENTARIO / RECETAS - CAMBIO DE UNIDAD DE MEDIDA CON CONVERSIÓN
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [produccion].[sp_ObtenerEstadoMateriaPrimaParaEdicion]
+    @MateriaID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        m.ID,
+        m.Nombre,
+        m.UnidadMedidaID,
+        m.StockActual,
+        m.StockMinimo,
+        m.CostoUnitario,
+        (SELECT COUNT(*) FROM [produccion].[RecetaProducto] WHERE MateriaPrimaID = m.ID) AS TotalRecetas,
+        (SELECT COUNT(*) FROM [produccion].[ComprasMateriaPrima] WHERE MateriaPrimaID = m.ID) AS TotalCompras,
+        (SELECT COUNT(*) FROM [produccion].[ConsumoLote] WHERE MateriaPrimaID = m.ID) AS TotalConsumos
+    FROM [produccion].[MateriaPrima] m WITH (UPDLOCK, HOLDLOCK)
+    WHERE m.ID = @MateriaID;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_ActualizarMateriaPrima]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 INT = NULL,
+    @P3 DECIMAL(18, 2) = NULL,
+    @P4 INT = NULL,
+    @FactorConversion DECIMAL(18, 6) = NULL,
+    @UsuarioID INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @UnidadActualID INT,
+                @StockActual DECIMAL(18, 2),
+                @StockMinimoActual DECIMAL(18, 2),
+                @CostoUnitarioActual DECIMAL(18, 4);
+
+        SELECT
+            @UnidadActualID = UnidadMedidaID,
+            @StockActual = StockActual,
+            @StockMinimoActual = StockMinimo,
+            @CostoUnitarioActual = CostoUnitario
+        FROM [produccion].[MateriaPrima] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @P4;
+
+        IF @UnidadActualID IS NULL
+        BEGIN
+            IF @OwnTran = 1 COMMIT TRANSACTION;
+            SET NOCOUNT OFF;
+            UPDATE [produccion].[MateriaPrima] SET Nombre = @P1 WHERE ID = @P4 AND 1 = 0;
+            RETURN;
+        END
+
+        IF @P2 <> @UnidadActualID
+        BEGIN
+            DECLARE @TieneUso BIT = 0;
+            IF @StockActual > 0
+               OR EXISTS (SELECT 1 FROM [produccion].[RecetaProducto] WHERE MateriaPrimaID = @P4)
+               OR EXISTS (SELECT 1 FROM [produccion].[ComprasMateriaPrima] WHERE MateriaPrimaID = @P4)
+               OR EXISTS (SELECT 1 FROM [produccion].[ConsumoLote] WHERE MateriaPrimaID = @P4)
+            BEGIN
+                SET @TieneUso = 1;
+            END
+
+            IF @FactorConversion IS NOT NULL AND @FactorConversion <= 0
+                THROW 52040, 'El factor de conversión debe ser mayor a cero.', 1;
+
+            IF @TieneUso = 1 AND (@FactorConversion IS NULL OR @FactorConversion <= 0)
+                THROW 52040, 'No se puede cambiar la unidad de medida de una materia prima con stock, recetas o historial sin proporcionar un factor de conversión válido.', 1;
+
+            IF @FactorConversion IS NOT NULL AND @FactorConversion > 0
+            BEGIN
+                DECLARE @NuevoStock DECIMAL(18, 2) = ROUND(@StockActual * @FactorConversion, 2);
+                DECLARE @NuevoMinimo DECIMAL(18, 2) = CASE
+                    WHEN @P3 IS NOT NULL AND @P3 <> @StockMinimoActual THEN @P3
+                    ELSE ROUND(@StockMinimoActual * @FactorConversion, 2)
+                END;
+                DECLARE @NuevoCosto DECIMAL(18, 4) = CASE
+                    WHEN @CostoUnitarioActual IS NOT NULL THEN ROUND(@CostoUnitarioActual / @FactorConversion, 4)
+                    ELSE NULL
+                END;
+
+                UPDATE [produccion].[RecetaProducto]
+                SET CantidadNecesaria = CASE
+                    WHEN ROUND(CantidadNecesaria * @FactorConversion, 2) < 0.01 THEN 0.01
+                    ELSE ROUND(CantidadNecesaria * @FactorConversion, 2)
+                END
+                WHERE MateriaPrimaID = @P4;
+
+                DECLARE @ActorID INT = TRY_CAST(SESSION_CONTEXT(N'usuario_id') AS INT);
+                DECLARE @IP VARCHAR(45) = TRY_CAST(SESSION_CONTEXT(N'ip') AS VARCHAR(45));
+                DECLARE @AntesJSON NVARCHAR(MAX) = CONCAT(
+                    N'{"unidad_id":', @UnidadActualID,
+                    N',"stock_actual":', @StockActual,
+                    N',"stock_minimo":', @StockMinimoActual, N'}'
+                );
+                DECLARE @DespuesJSON NVARCHAR(MAX) = CONCAT(
+                    N'{"unidad_id":', @P2,
+                    N',"factor_conversion":', @FactorConversion,
+                    N',"stock_actual":', @NuevoStock,
+                    N',"stock_minimo":', @NuevoMinimo, N'}'
+                );
+
+                EXEC [seguridad].[sp_RegistrarAuditoria]
+                    @UsuarioID = @ActorID,
+                    @Accion = 'CONVERTIR_UNIDAD_MP',
+                    @Entidad = 'MateriaPrima',
+                    @EntidadID = @P4,
+                    @DatosAntes = @AntesJSON,
+                    @DatosDespues = @DespuesJSON,
+                    @IP = @IP;
+
+                SET NOCOUNT OFF;
+                UPDATE [produccion].[MateriaPrima]
+                SET Nombre = @P1,
+                    UnidadMedidaID = @P2,
+                    StockActual = @NuevoStock,
+                    StockMinimo = @NuevoMinimo,
+                    CostoUnitario = @NuevoCosto
+                WHERE ID = @P4;
+
+                IF @OwnTran = 1 COMMIT TRANSACTION;
+                RETURN;
+            END
+        END
+
+        SET NOCOUNT OFF;
+        UPDATE [produccion].[MateriaPrima]
+        SET Nombre = @P1,
+            UnidadMedidaID = @P2,
+            StockMinimo = @P3
+        WHERE ID = @P4;
+
+        IF @OwnTran = 1 COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'produccion.sp_ActualizarMateriaPrima';
+        THROW;
+    END CATCH
+END
+GO
+
+-- ============================================================================
+-- 9. L21: PRODUCCIÓN - VALIDACIÓN DE PRODUCTO ACTIVO Y NO BEBIDA EN LOTES
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [produccion].[sp_ValidarProductoParaProduccion]
+    @ProductoID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        p.ID,
+        p.Nombre,
+        p.Activo,
+        ISNULL(p.EsFicticio, 0) AS EsFicticio,
+        p.CategoriaID,
+        ISNULL(c.Nombre, '') AS CategoriaNombre,
+        (SELECT COUNT(*) FROM [produccion].[RecetaProducto] r WHERE r.ProductoID = p.ID AND r.CantidadNecesaria > 0) AS TieneReceta
+    FROM [catalogo].[Productos] p WITH (UPDLOCK, HOLDLOCK)
+    LEFT JOIN [catalogo].[Categorias] c ON p.CategoriaID = c.ID
+    WHERE p.ID = @ProductoID;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_InsertarLoteProduccion]
+    @P1 INT = NULL,
+    @P2 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Activo BIT, @EsFicticio BIT, @Categoria NVARCHAR(100);
+    SELECT
+        @Activo = p.Activo,
+        @EsFicticio = ISNULL(p.EsFicticio, 0),
+        @Categoria = ISNULL(c.Nombre, N'')
+    FROM [catalogo].[Productos] p
+    LEFT JOIN [catalogo].[Categorias] c ON p.CategoriaID = c.ID
+    WHERE p.ID = @P1;
+
+    IF @Activo IS NULL
+        THROW 52034, 'El producto especificado no existe.', 1;
+    IF @Activo = 0
+        THROW 52035, 'No se puede registrar un lote de producción para un producto inactivo.', 1;
+    IF LOWER(LTRIM(RTRIM(@Categoria))) IN (N'bebidas', N'bebida', N'reventa') OR @EsFicticio = 1
+        THROW 52036, 'No se puede registrar un lote de producción para productos de la categoría Bebidas o no producibles.', 1;
+
+    INSERT INTO [produccion].[ProduccionLotes] (ProductoID, CantidadProducida)
+    OUTPUT INSERTED.ID
+    VALUES (@P1, @P2);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_RegistrarLoteProduccion]
+    @ProductoID INT,
+    @CantidadProducida INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        IF @CantidadProducida <= 0
+            THROW 52031, 'La cantidad a producir debe ser un entero positivo.', 1;
+
+        DECLARE @Activo BIT, @EsFicticio BIT, @Categoria NVARCHAR(100);
+        SELECT
+            @Activo = p.Activo,
+            @EsFicticio = ISNULL(p.EsFicticio, 0),
+            @Categoria = ISNULL(c.Nombre, N'')
+        FROM [catalogo].[Productos] p
+        LEFT JOIN [catalogo].[Categorias] c ON p.CategoriaID = c.ID
+        WHERE p.ID = @ProductoID;
+
+        IF @Activo IS NULL
+            THROW 52034, 'El producto especificado no existe.', 1;
+        IF @Activo = 0
+            THROW 52035, 'No se puede registrar un lote de producción para un producto inactivo.', 1;
+        IF LOWER(LTRIM(RTRIM(@Categoria))) IN (N'bebidas', N'bebida', N'reventa') OR @EsFicticio = 1
+            THROW 52036, 'No se puede registrar un lote de producción para productos de la categoría Bebidas o no producibles.', 1;
+
+        IF NOT EXISTS (SELECT 1 FROM [produccion].[RecetaProducto] WHERE ProductoID = @ProductoID AND CantidadNecesaria > 0)
+            THROW 52032, 'El producto no tiene receta definida. Imposible producir sin receta.', 1;
+
+        DECLARE @InsumoFaltante NVARCHAR(200);
+        SELECT TOP 1
+            @InsumoFaltante = CONCAT(
+                N'Stock insuficiente de ', m.Nombre,
+                N'. Se requieren ', CAST(r.CantidadNecesaria * @CantidadProducida AS NVARCHAR(30)),
+                N' y hay ', CAST(m.StockActual AS NVARCHAR(30)), N'.'
+            )
+        FROM [produccion].[RecetaProducto] r
+        JOIN [produccion].[MateriaPrima] m WITH (UPDLOCK, HOLDLOCK) ON r.MateriaPrimaID = m.ID
+        WHERE r.ProductoID = @ProductoID
+          AND m.StockActual < (r.CantidadNecesaria * @CantidadProducida);
+
+        IF @InsumoFaltante IS NOT NULL
+            THROW 52033, @InsumoFaltante, 1;
+
+        DECLARE @LoteID INT;
+        INSERT INTO [produccion].[ProduccionLotes] (ProductoID, CantidadProducida)
+        VALUES (@ProductoID, @CantidadProducida);
+        SET @LoteID = SCOPE_IDENTITY();
+
+        UPDATE m
+        SET m.StockActual = m.StockActual - (r.CantidadNecesaria * @CantidadProducida)
+        FROM [produccion].[MateriaPrima] m
+        JOIN [produccion].[RecetaProducto] r ON r.MateriaPrimaID = m.ID
+        WHERE r.ProductoID = @ProductoID;
+
+        INSERT INTO [produccion].[ConsumoLote] (LoteID, MateriaPrimaID, CantidadUsada)
+        SELECT @LoteID, r.MateriaPrimaID, (r.CantidadNecesaria * @CantidadProducida)
+        FROM [produccion].[RecetaProducto] r
+        WHERE r.ProductoID = @ProductoID;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+
+        SELECT @LoteID AS LoteID;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'produccion.sp_RegistrarLoteProduccion';
+        THROW;
+    END CATCH
+END
+GO
+
+-- ============================================================================
+-- 10. PERMISOS PARA ROLES DE BASE DE DATOS EN PROCEDIMIENTOS NUEVOS/ACTUALIZADOS
+-- ============================================================================
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_VerificarBloqueoLogin] TO [db_rol_cajero_pos];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_VerificarBloqueoLogin] TO [db_rol_produccion];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_VerificarBloqueoLogin] TO [db_rol_kiosco];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_VerificarBloqueoLogin] TO [db_rol_portal_cliente];
+
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_ObtenerFallosTOTPRecientes] TO [db_rol_cajero_pos];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_ObtenerFallosTOTPRecientes] TO [db_rol_produccion];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_ObtenerFallosTOTPRecientes] TO [db_rol_kiosco];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_ObtenerFallosTOTPRecientes] TO [db_rol_portal_cliente];
+
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_LimpiarFallosTOTPUsuario] TO [db_rol_cajero_pos];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_LimpiarFallosTOTPUsuario] TO [db_rol_produccion];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_LimpiarFallosTOTPUsuario] TO [db_rol_kiosco];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_LimpiarFallosTOTPUsuario] TO [db_rol_portal_cliente];
+
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_ObtenerConfiguracionGlobal] TO [db_rol_produccion];
+GRANT EXECUTE ON OBJECT::[fiscal].[sp_RegistrarBitacoraFiscal] TO [db_rol_produccion];
+GRANT EXECUTE ON OBJECT::[ventas].[sp_RegistrarEventoFiscalOperacion] TO [db_rol_produccion];
+GO
+GO
+
+-- ============================================================================
+-- REMEDIACI?N AUDITOR?A DE REGLAS DE NEGOCIO (2026-10-25: L01-L28)
+-- ============================================================================
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+
+-- >>> sql_group1_pos_kds_fiscal.sql
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+-- ============================================================================
+-- REMEDIACIÓN GRUPO 1: POS, Arqueos, Encargos/KDS, Cotizaciones y Anulaciones Fiscales
+-- Hallazgos: L01, L02, L03, L13, L15, L28
+-- ============================================================================
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+SET NOCOUNT ON;
+GO
+
+-- ----------------------------------------------------------------------------
+-- L13: Cálculo consistente del efectivo esperado de la gaveta del turno POS
+-- Distingue la gaveta operativa del turno POS (ventas.Pagos por TurnoReceptorID,
+-- incluyendo cobros en efectivo y restando devoluciones/anulaciones del turno)
+-- respecto de Caja General de oficina (EgresosPrivados / ValesEmpleados).
+-- ----------------------------------------------------------------------------
+CREATE OR ALTER PROCEDURE [ventas].[sp_CalcularValoresSistemaTurno]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM [ventas].[Pagos] p JOIN [ventas].[Facturas] f ON f.ID=p.FacturaID
+               JOIN [ventas].[TurnosCaja] t ON t.ID=@P1
+               WHERE p.Monto<>0 AND (p.TurnoReceptorID IS NULL OR p.UsuarioReceptorID IS NULL)
+                 AND (f.TurnoID=@P1 OR (p.FechaPago>=t.FechaApertura AND (t.FechaCierre IS NULL OR p.FechaPago<=t.FechaCierre))))
+        THROW 51021, 'Existen movimientos históricos sin receptor de caja. Conciliar antes del arqueo.', 1;
+
+    SELECT
+        ISNULL(SUM(CASE WHEN (p.MetodoPago = 'Efectivo' OR (p.MetodoPago='Efectivo USD' AND p.MonedaRegistro='NIO')) THEN p.Monto ELSE 0 END), 0) AS EfectivoCordobasSistema,
+        ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo USD' AND p.MonedaRegistro<>'NIO' THEN p.Monto ELSE 0 END), 0) AS EfectivoUSDSistema,
+        ISNULL(SUM(CASE WHEN p.MetodoPago = 'Transferencia' THEN p.Monto ELSE 0 END), 0) AS TransferenciasSistema
+    FROM [ventas].[Pagos] p
+    WHERE p.TurnoReceptorID = @P1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [ventas].[sp_ObtenerResumenTurnoCaja]
+    @TurnoID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM [ventas].[Pagos] p JOIN [ventas].[Facturas] f ON f.ID=p.FacturaID
+               JOIN [ventas].[TurnosCaja] t ON t.ID=@TurnoID
+               WHERE p.Monto<>0 AND (p.TurnoReceptorID IS NULL OR p.UsuarioReceptorID IS NULL)
+                 AND (f.TurnoID=@TurnoID OR (p.FechaPago>=t.FechaApertura AND (t.FechaCierre IS NULL OR p.FechaPago<=t.FechaCierre))))
+        THROW 51021, 'Existen movimientos históricos sin receptor de caja. Conciliar antes del arqueo.', 1;
+
+    SELECT
+        ISNULL(SUM(CASE WHEN (p.MetodoPago = 'Efectivo' OR (p.MetodoPago='Efectivo USD' AND p.MonedaRegistro='NIO')) THEN p.Monto ELSE 0 END), 0) AS EfectivoCordobasSistema,
+        ISNULL(SUM(CASE WHEN p.MetodoPago = 'Efectivo USD' AND p.MonedaRegistro<>'NIO' THEN p.Monto ELSE 0 END), 0) AS EfectivoUSDSistema,
+        ISNULL(SUM(CASE WHEN p.MetodoPago = 'Transferencia' THEN p.Monto ELSE 0 END), 0) AS TransferenciasSistema
+    FROM [ventas].[Pagos] p
+    WHERE p.TurnoReceptorID = @TurnoID;
+END
+GO
+
+IF DATABASE_PRINCIPAL_ID('db_rol_cajero_pos') IS NOT NULL
+    GRANT EXECUTE ON OBJECT::[ventas].[sp_ObtenerResumenTurnoCaja] TO [db_rol_cajero_pos];
+IF DATABASE_PRINCIPAL_ID('db_rol_gerencia') IS NOT NULL
+    GRANT EXECUTE ON OBJECT::[ventas].[sp_ObtenerResumenTurnoCaja] TO [db_rol_gerencia];
+IF DATABASE_PRINCIPAL_ID('db_rol_superadmin') IS NOT NULL
+    GRANT EXECUTE ON OBJECT::[ventas].[sp_ObtenerResumenTurnoCaja] TO [db_rol_superadmin];
+GO
+
+-- ----------------------------------------------------------------------------
+-- L03: Máquina de estados estricta para encargos en KDS y bloqueo de pago duplicado
+-- ----------------------------------------------------------------------------
+CREATE OR ALTER PROCEDURE [produccion].[sp_ActualizarEstadoEncargoCompare]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 NVARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT OFF;
+    DECLARE @FacturaID INT;
+    SELECT @FacturaID = ID FROM [ventas].[Facturas] WITH(UPDLOCK, HOLDLOCK)
+      WHERE CodigoSeguimiento = @P2 AND EstadoFiscal = 'Emitida';
+
+    IF @FacturaID IS NOT NULL
+    BEGIN
+        DECLARE @EstadoActual NVARCHAR(50);
+        SELECT @EstadoActual = Estado FROM [ventas].[Encargos] WITH(UPDLOCK, HOLDLOCK)
+          WHERE FacturaID = @FacturaID;
+
+        DECLARE @EstadoDestino NVARCHAR(50) = CASE WHEN @P1 = N'En Preparacion' THEN N'En Proceso' ELSE @P1 END;
+        DECLARE @EstadoEsperado NVARCHAR(50) = CASE WHEN @P3 = N'En Preparacion' THEN N'En Proceso' ELSE @P3 END;
+
+        IF (@EstadoActual = N'Entregado' OR @EstadoEsperado = N'Entregado') AND @EstadoDestino <> N'Entregado'
+            THROW 51034, 'Un encargo ya entregado es estado terminal en KDS y no puede revertirse ni cancelarse.', 1;
+
+        IF @EstadoActual IN (N'Cancelado', N'Anulada') OR @EstadoEsperado IN (N'Cancelado', N'Anulada')
+            THROW 51034, 'Un encargo cancelado o anulado no admite transiciones.', 1;
+
+        IF NOT (
+            (@EstadoEsperado = N'Pendiente' AND @EstadoDestino IN (N'En Proceso', N'Listo', N'Entregado'))
+            OR (@EstadoEsperado = N'En Proceso' AND @EstadoDestino IN (N'Listo', N'Entregado'))
+            OR (@EstadoEsperado = N'Listo' AND @EstadoDestino IN (N'Entregado'))
+            OR (@EstadoEsperado = @EstadoDestino AND @EstadoDestino IN (N'Pendiente', N'En Proceso', N'Listo', N'Entregado'))
+        )
+            THROW 51034, 'Transición de estado de encargo inválida o regresiva.', 1;
+
+        IF @EstadoDestino = N'Entregado' AND IS_MEMBER('db_rol_produccion') = 1 AND EXISTS (
+            SELECT 1 FROM [ventas].[Facturas] f WHERE f.ID = @FacturaID AND
+              f.Total > ISNULL((SELECT SUM(p.Monto) FROM [ventas].[Pagos] p WHERE p.FacturaID = f.ID), 0))
+            THROW 51032, 'El cobro pendiente debe confirmarlo un cajero con turno abierto.', 1;
+
+        UPDATE e SET Estado = @EstadoDestino
+        FROM [ventas].[Encargos] AS e
+        JOIN [ventas].[Facturas] AS f ON e.FacturaID = f.ID
+        WHERE f.ID = @FacturaID AND f.EstadoFiscal = 'Emitida' AND e.Estado = @EstadoEsperado;
+    END
+    ELSE
+    BEGIN
+        UPDATE e SET Estado = @P1
+        FROM [ventas].[Encargos] AS e
+        JOIN [ventas].[Facturas] AS f ON e.FacturaID = f.ID
+        WHERE f.ID = @FacturaID AND f.EstadoFiscal = 'Emitida' AND e.Estado = @P3;
+    END
+END
+GO
+
+CREATE OR ALTER PROCEDURE [ventas].[sp_InsertarPagoSaldoEncargo]
+    @P1 INT = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 DECIMAL(18, 2) = NULL,
+    @P4 NVARCHAR(255) = NULL,
+    @P5 DATETIME2 = NULL,
+    @P6 DECIMAL(18, 6) = NULL,
+    @TurnoReceptorID INT = NULL,
+    @UsuarioReceptorID INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET @UsuarioReceptorID = COALESCE(@UsuarioReceptorID, TRY_CAST(SESSION_CONTEXT(N'usuario_id') AS INT));
+    DECLARE @TotalFactura DECIMAL(18, 2);
+    SELECT @TotalFactura = Total FROM [ventas].[Facturas] WITH(UPDLOCK, HOLDLOCK) WHERE ID = @P1 AND EstadoFiscal = 'Emitida';
+    IF @TotalFactura IS NULL
+        THROW 51025, 'La factura no está emitida.', 1;
+
+    DECLARE @PagadoActual DECIMAL(18, 2);
+    SELECT @PagadoActual = ISNULL(SUM(Monto), 0) FROM [ventas].[Pagos] WITH(UPDLOCK, HOLDLOCK) WHERE FacturaID = @P1;
+    IF @P3 IS NULL OR @P3 <= 0 OR (@PagadoActual + @P3) > @TotalFactura
+        THROW 51035, 'El encargo ya fue pagado o el monto excede el saldo pendiente.', 1;
+
+    IF @TurnoReceptorID IS NULL
+        SELECT TOP 1 @TurnoReceptorID = ID FROM [ventas].[TurnosCaja] WITH(UPDLOCK, HOLDLOCK)
+        WHERE UsuarioID = @UsuarioReceptorID AND Cerrado = 0 ORDER BY ID DESC;
+    IF NOT EXISTS (SELECT 1 FROM [ventas].[TurnosCaja] WITH(UPDLOCK, HOLDLOCK) WHERE ID = @TurnoReceptorID AND UsuarioID = @UsuarioReceptorID AND Cerrado = 0)
+        THROW 51026, 'El saldo requiere la caja abierta del usuario receptor.', 1;
+    IF EXISTS (SELECT 1 FROM [ventas].[ArqueoCaja] WHERE TurnoID = @TurnoReceptorID AND EstadoArqueo IN ('Pendiente', 'Verificado'))
+        THROW 51027, 'La caja receptora tiene un arqueo pendiente.', 1;
+
+    INSERT INTO [ventas].[Pagos] (FacturaID, MetodoPago, Monto, NombreTransferente, FechaPago, MonedaRegistro, TipoCambioAplicado, TurnoReceptorID, UsuarioReceptorID)
+    VALUES (@P1, @P2, @P3, @P4, @P5, 'NIO', @P6, @TurnoReceptorID, @UsuarioReceptorID);
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- L15: Vínculo único de cotización a factura (uso único con bloqueo transaccional)
+-- ----------------------------------------------------------------------------
+IF EXISTS (
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE name = 'CK_Cotizaciones_Estado'
+      AND parent_object_id = OBJECT_ID('crm.Cotizaciones')
+)
+BEGIN
+    ALTER TABLE [crm].[Cotizaciones] DROP CONSTRAINT [CK_Cotizaciones_Estado];
+END
+GO
+
+ALTER TABLE [crm].[Cotizaciones] WITH CHECK ADD CONSTRAINT [CK_Cotizaciones_Estado]
+    CHECK ([Estado] IN ('Pendiente', 'Cotizada', 'Aceptada', 'Facturada', 'Rechazada'));
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_ObtenerCotizacionParaCalculoVenta]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, Especificaciones, PrecioCotizado
+    FROM [crm].[Cotizaciones] WITH (UPDLOCK, HOLDLOCK)
+    WHERE ID = @P1
+      AND Estado IN ('Cotizada', 'Aceptada')
+      AND PrecioCotizado IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM [ventas].[Facturas] f WITH (UPDLOCK, HOLDLOCK)
+          WHERE f.EstadoFiscal = 'Emitida'
+            AND f.DocumentoJSON IS NOT NULL
+            AND ISJSON(f.DocumentoJSON) = 1
+            AND EXISTS (
+                SELECT 1
+                FROM OPENJSON(f.DocumentoJSON, '$.productos')
+                WHERE TRY_CAST(JSON_VALUE([value], '$.cotizacion_id') AS INT) = @P1
+            )
+      );
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_MarcarCotizacionAceptadaEnVenta]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT OFF;
+    UPDATE [crm].[Cotizaciones] WITH (UPDLOCK, HOLDLOCK)
+    SET Estado = 'Facturada'
+    WHERE ID = @P1
+      AND Estado IN ('Cotizada', 'Aceptada')
+      AND PrecioCotizado IS NOT NULL;
+    IF @@ROWCOUNT <> 1
+        THROW 51036, 'La cotización personalizada ya fue facturada o no está disponible para venta.', 1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_ActualizarEstadoCotizacion]
+    @CotizacionID INT,
+    @NuevoEstado VARCHAR(30),
+    @PrecioCotizado DECIMAL(10,2) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        IF IS_MEMBER('db_rol_portal_cliente') = 1
+           OR TRY_CAST(SESSION_CONTEXT(N'rol') AS NVARCHAR(50)) IN (N'Cliente', N'Invitado')
+            THROW 52025, 'Operación administrativa de cotizaciones no autorizada para el portal de clientes.', 1;
+
+        IF EXISTS (SELECT 1 FROM [crm].[Cotizaciones] WITH (UPDLOCK, HOLDLOCK) WHERE ID = @CotizacionID AND Estado = 'Facturada')
+            THROW 52028, 'La cotización ya fue facturada y no puede reutilizarse ni cambiar de estado.', 1;
+
+        UPDATE [crm].[Cotizaciones]
+        SET Estado = @NuevoEstado,
+            PrecioCotizado = ISNULL(@PrecioCotizado, PrecioCotizado)
+        WHERE ID = @CotizacionID
+          AND Estado <> 'Facturada';
+    END TRY
+    BEGIN CATCH
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'crm.sp_ActualizarEstadoCotizacion';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [ventas].[sp_RegistrarFacturaCompleta]
+    @NumeroFactura VARCHAR(50),
+    @CodigoSeguimiento VARCHAR(20),
+    @UsuarioID INT,
+    @ClienteID INT,
+    @TurnoID INT,
+    @Subtotal DECIMAL(18,2),
+    @IVA DECIMAL(18,2),
+    @Total DECIMAL(18,2),
+    @EsEncargo BIT,
+    @IncluyeRUC BIT,
+    @ClaveSolicitud VARCHAR(100) = NULL,
+    @FechaHora DATETIME2,
+    @RazonSocial NVARCHAR(200) = NULL,
+    @NumeroRUC VARCHAR(50) = NULL,
+    @CarritoJSON NVARCHAR(MAX),
+    @PagosJSON NVARCHAR(MAX),
+    @FechaEntrega DATETIME2 = NULL,
+    @NotasCliente NVARCHAR(MAX) = NULL,
+    @Especificaciones NVARCHAR(MAX) = NULL,
+    @RutaImagenReferencia VARCHAR(255) = NULL,
+    @TelefonoContacto VARCHAR(30) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @FacturaID INT;
+
+        IF NOT EXISTS (SELECT 1 FROM [ventas].[TurnosCaja] WITH(UPDLOCK,HOLDLOCK) WHERE ID=@TurnoID AND UsuarioID=@UsuarioID AND Cerrado=0)
+            THROW 51024, 'La venta requiere la caja abierta del emisor.', 1;
+        IF EXISTS (SELECT 1 FROM [ventas].[ArqueoCaja] WHERE TurnoID=@TurnoID AND EstadoArqueo IN ('Pendiente','Verificado'))
+            THROW 51027, 'La caja receptora tiene un arqueo pendiente.', 1;
+
+        INSERT INTO [ventas].[Facturas] (
+            NumeroFactura, CodigoSeguimiento, UsuarioID, ClienteID, TurnoID,
+            Subtotal, IVA, Total, EsEncargo, IncluyeRUC, ClaveSolicitud, FechaHora
+        )
+        VALUES (
+            @NumeroFactura, @CodigoSeguimiento, @UsuarioID, @ClienteID, @TurnoID,
+            @Subtotal, @IVA, @Total, @EsEncargo, @IncluyeRUC, @ClaveSolicitud, @FechaHora
+        );
+        SET @FacturaID = SCOPE_IDENTITY();
+
+        IF @IncluyeRUC = 1 AND @NumeroRUC IS NOT NULL
+        BEGIN
+            INSERT INTO [ventas].[FacturasRUC] (FacturaID, RazonSocial, NumeroRUC)
+            VALUES (@FacturaID, @RazonSocial, @NumeroRUC);
+        END
+
+        -- Procesar líneas del carrito e ingredientes adicionales desde JSON
+        DECLARE @ItemKey NVARCHAR(50), @ItemJSON NVARCHAR(MAX);
+        DECLARE cur_items CURSOR LOCAL FAST_FORWARD FOR
+            SELECT [key], [value] FROM OPENJSON(@CarritoJSON);
+        OPEN cur_items;
+        FETCH NEXT FROM cur_items INTO @ItemKey, @ItemJSON;
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            DECLARE @ProdID INT = TRY_CAST(JSON_VALUE(@ItemJSON, '$.id') AS INT);
+            DECLARE @Cant INT = TRY_CAST(JSON_VALUE(@ItemJSON, '$.cantidad') AS INT);
+            DECLARE @PrecioUnit DECIMAL(18,2) = TRY_CAST(JSON_VALUE(@ItemJSON, '$.precio') AS DECIMAL(18,2));
+            DECLARE @SubItem DECIMAL(18,2) = TRY_CAST(JSON_VALUE(@ItemJSON, '$.subtotal') AS DECIMAL(18,2));
+            DECLARE @CotID INT = TRY_CAST(JSON_VALUE(@ItemJSON, '$.cotizacion_id') AS INT);
+            DECLARE @DetalleID INT;
+
+            IF @CotID IS NOT NULL
+            BEGIN
+                UPDATE [crm].[Cotizaciones] WITH (UPDLOCK, HOLDLOCK)
+                SET Estado = 'Facturada'
+                WHERE ID = @CotID
+                  AND Estado IN ('Cotizada', 'Aceptada')
+                  AND PrecioCotizado IS NOT NULL;
+                IF @@ROWCOUNT <> 1
+                    THROW 51036, 'La cotización personalizada ya fue facturada o no está disponible para venta.', 1;
+            END
+
+            INSERT INTO [ventas].[DetalleFacturas] (FacturaID, ProductoID, Cantidad, PrecioUnitario, Subtotal)
+            VALUES (@FacturaID, @ProdID, @Cant, @PrecioUnit, @SubItem);
+            SET @DetalleID = SCOPE_IDENTITY();
+
+            INSERT INTO [ventas].[DetalleIngredientes] (DetalleFacturaID, IngredienteID, PrecioAplicado)
+            SELECT
+                @DetalleID,
+                TRY_CAST(JSON_VALUE([value], '$.id') AS INT),
+                TRY_CAST(JSON_VALUE([value], '$.precio') AS DECIMAL(18,2))
+            FROM OPENJSON(@ItemJSON, '$.detalle_ingredientes.ingredientes')
+            WHERE TRY_CAST(JSON_VALUE([value], '$.id') AS INT) IS NOT NULL;
+
+            FETCH NEXT FROM cur_items INTO @ItemKey, @ItemJSON;
+        END
+        CLOSE cur_items;
+        DEALLOCATE cur_items;
+
+        -- Procesar pagos desde JSON
+        INSERT INTO [ventas].[Pagos] (
+            FacturaID, MetodoPago, Monto, NombreTransferente, MonedaRegistro, TipoCambioAplicado, TurnoReceptorID, UsuarioReceptorID
+        )
+        SELECT
+            @FacturaID,
+            JSON_VALUE([value], '$.metodo'),
+            TRY_CAST(JSON_VALUE([value], '$.monto') AS DECIMAL(18,2)),
+            JSON_VALUE([value], '$.referencia'),
+            'NIO',
+            TRY_CAST(JSON_VALUE([value], '$.tipo_cambio') AS DECIMAL(18,4)), @TurnoID, @UsuarioID
+        FROM OPENJSON(@PagosJSON);
+
+        IF @EsEncargo = 1
+        BEGIN
+            INSERT INTO [ventas].[Encargos] (
+                FacturaID, FechaEntrega, Estado, NotasCliente,
+                Especificaciones, RutaImagenReferencia, TelefonoContacto
+            )
+            VALUES (
+                @FacturaID, @FechaEntrega, 'Pendiente', @NotasCliente,
+                @Especificaciones, @RutaImagenReferencia, @TelefonoContacto
+            );
+        END
+
+        IF @ClienteID > 1
+        BEGIN
+            UPDATE [crm].[Clientes]
+            SET TotalCompras = ISNULL(TotalCompras, 0) + 1
+            WHERE ID = @ClienteID;
+
+            UPDATE [crm].[Clientes]
+            SET NivelConfianzaID = CASE
+                WHEN TotalCompras >= 10 THEN 3
+                WHEN TotalCompras >= 3 THEN 2
+                ELSE 1
+            END
+            WHERE ID = @ClienteID;
+        END
+
+        SELECT CAST(@FacturaID AS INT) AS ID;
+    END TRY
+    BEGIN CATCH
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'ventas.sp_RegistrarFacturaCompleta';
+        THROW;
+    END CATCH
+END
+GO
+
+-- ----------------------------------------------------------------------------
+-- L28: Marca temporal comercial de Nicaragua consistente en anulaciones fiscales y contables
+-- ----------------------------------------------------------------------------
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_MarcarAsientoAnulado]
+    @P1 INT = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 INT = NULL,
+    @FechaAnulacion DATETIME2 = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @FechaEfectiva DATETIME2 = COALESCE(
+        @FechaAnulacion,
+        (SELECT TOP 1 Fecha FROM [contabilidad].[AsientosDiario]
+         WHERE ReferenciaExterna = CONCAT('REV-', @P3) AND TipoDocumento = N'Reversión'
+         ORDER BY ID DESC),
+        SWITCHOFFSET(SYSDATETIMEOFFSET(), '-06:00')
+    );
+    UPDATE [contabilidad].[AsientosDiario] SET
+        Estado = 'Anulado',
+        AnuladoPor = @P1,
+        FechaAnulacion = @FechaEfectiva,
+        MotivoAnulacion = @P2
+    WHERE ID = @P3 AND Estado IN ('Contabilizado', 'Anulado');
+END
+GO
+
+CREATE OR ALTER PROCEDURE [ventas].[sp_MarcarFacturaAnulada]
+    @P1 INT = NULL,
+    @P2 DATETIME2 = NULL,
+    @P3 NVARCHAR(300) = NULL,
+    @P4 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [ventas].[Facturas]
+    SET EstadoFiscal = 'Anulada',
+        AnuladaPor = @P1,
+        FechaAnulacion = ISNULL(@P2, SWITCHOFFSET(SYSDATETIMEOFFSET(), '-06:00')),
+        MotivoAnulacion = @P3
+    WHERE ID = @P4;
+END
+GO
+GO
+
+-- >>> sql_group2_hr_nomina.sql
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+-- ============================================================================
+-- REMEDIACIÓN AUDITORÍA GRUPO 2: RR. HH., Nómina, Pago de Planilla, Vales,
+-- Asistencia/Kiosco y Biometría (L04, L05, L12, L17, L19)
+-- ============================================================================
+
+SET NOCOUNT ON;
+GO
+
+-- 1. L17: Incluir HoraEntrada y HoraSalida en el bloqueo de empleado de Kiosco
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEmpleadoActivoPorIDBloqueo]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, NombreCompleto, HoraEntrada, HoraSalida
+    FROM [rrhh].[Empleados] WITH (UPDLOCK, HOLDLOCK)
+    WHERE ID = @P1 AND EstadoEmpleado = 'Activo';
+END
+GO
+
+GRANT EXECUTE ON OBJECT::[rrhh].[sp_ObtenerEmpleadoActivoPorIDBloqueo] TO [db_rol_kiosco];
+GO
+
+-- 2. L17: Orden determinista en turno laboral por defecto
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerTurnoLaboralActivoDefecto]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 1 ID, HoraEntrada, ToleranciaMinutos
+    FROM [rrhh].[TurnosLaborales]
+    WHERE Activo = 1
+    ORDER BY ID ASC;
+END
+GO
+
+GRANT EXECUTE ON OBJECT::[rrhh].[sp_ObtenerTurnoLaboralActivoDefecto] TO [db_rol_kiosco];
+GO
+
+-- 3. L19: Huella ligera de descriptores faciales en BD para sincronizar caché multi-worker
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerHuellaDescriptoresFacialesKiosco]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        COUNT(*) AS TotalActivos,
+        ISNULL(MAX(ID), 0) AS MaxID,
+        ISNULL(CHECKSUM_AGG(BINARY_CHECKSUM(ID, CAST(FaceDescriptor AS VARCHAR(4000)))), 0) AS Huella
+    FROM [rrhh].[Empleados]
+    WHERE EstadoEmpleado = 'Activo' AND FaceDescriptor IS NOT NULL;
+END
+GO
+
+GRANT EXECUTE ON OBJECT::[rrhh].[sp_ObtenerHuellaDescriptoresFacialesKiosco] TO [db_rol_kiosco];
+GO
+
+-- 4. L12: Vales en nómina filtrados por fecha del período y aplicación parcial sin neto negativo
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ObtenerSumaValesPendientesUsuario]
+    @P1 INT = NULL,
+    @P2 DATE = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(SUM(Monto), 0)
+    FROM [rrhh].[ValesEmpleados]
+    WHERE EmpleadoID = @P1
+      AND Descontado = 0
+      AND (@P2 IS NULL OR CAST(Fecha AS DATE) <= @P2);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ListarValesPendientesUsuarioHastaFecha]
+    @P1 INT = NULL,
+    @P2 DATE = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, Monto, Fecha
+    FROM [rrhh].[ValesEmpleados] WITH (UPDLOCK, HOLDLOCK)
+    WHERE EmpleadoID = @P1
+      AND Descontado = 0
+      AND (@P2 IS NULL OR CAST(Fecha AS DATE) <= @P2)
+    ORDER BY Fecha ASC, ID ASC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_MarcarValeDescontadoPorID]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[ValesEmpleados]
+    SET Descontado = 1
+    WHERE ID = @P1 AND Descontado = 0;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ActualizarSaldoValeParcialPorID]
+    @P1 DECIMAL(10,2) = NULL,
+    @P2 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[ValesEmpleados]
+    SET Monto = @P1, Descontado = 0
+    WHERE ID = @P2 AND Descontado = 0;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_MarcarValesDescontadosUsuario]
+    @P1 INT = NULL,
+    @P2 DATE = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[ValesEmpleados]
+    SET Descontado = 1
+    WHERE EmpleadoID = @P1
+      AND Descontado = 0
+      AND (@P2 IS NULL OR CAST(Fecha AS DATE) <= @P2);
+END
+GO
+
+-- 5. L05: Desembolso verificable de nómina (control de fondos en Caja/Bancos y transición a Pagada)
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ObtenerSaldoDisponibleCuentaBloqueo]
+    @P1 VARCHAR(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(SUM(d.Debe - d.Haber), 0) AS SaldoDisponible
+    FROM [contabilidad].[CatalogoCuentas] c WITH (UPDLOCK, HOLDLOCK)
+    LEFT JOIN [contabilidad].[DetalleAsientos] d WITH (UPDLOCK, HOLDLOCK)
+        ON d.CuentaID = c.ID
+    LEFT JOIN [contabilidad].[AsientosDiario] a WITH (UPDLOCK, HOLDLOCK)
+        ON a.ID = d.AsientoID AND a.Estado = 'Contabilizado'
+    WHERE c.Codigo = @P1 AND c.Activa = 1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_VerificarAsientoPagoNominaExistente]
+    @P1 VARCHAR(50) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 1 ID, NumeroComprobante
+    FROM [contabilidad].[AsientosDiario] WITH (UPDLOCK, HOLDLOCK)
+    WHERE ReferenciaExterna = @P1 AND Estado = 'Contabilizado'
+    ORDER BY ID DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_MarcarNominaPagada]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[Nomina]
+    SET Estado = 'Pagada'
+    WHERE ID = @P1 AND Estado = 'Contabilizada';
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarNominasContabilizadasPorPeriodoBloqueo]
+    @P1 DATE = NULL,
+    @P2 DATE = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID
+    FROM [rrhh].[Nomina] WITH (UPDLOCK, HOLDLOCK)
+    WHERE PeriodoInicio >= @P1 AND PeriodoFin <= @P2 AND Estado = 'Contabilizada'
+    ORDER BY ID ASC;
+END
+GO
+GO
+
+-- >>> sql_group3_accounting_dgi.sql
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+-- ============================================================================
+-- Group 3 Remediation SQL: Accounting, Balance Sheet, DGI Engine/Repo & Forecast
+-- Target Database: PanaderiaQA_Prevalidacion_20261015
+-- ============================================================================
+SET NOCOUNT ON;
+GO
+
+-- 1. L24: Saldo disponible con bloqueo UPDLOCK, HOLDLOCK sobre cuentas de efectivo/bancos
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ObtenerSaldoDisponibleCuenta]
+    @CodigoCuenta NVARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        C.Naturaleza,
+        ISNULL(SUM(CASE WHEN A.ID IS NOT NULL THEN D.Debe ELSE 0 END), 0) AS TotalDebe,
+        ISNULL(SUM(CASE WHEN A.ID IS NOT NULL THEN D.Haber ELSE 0 END), 0) AS TotalHaber
+    FROM [contabilidad].[CatalogoCuentas] C WITH (UPDLOCK, HOLDLOCK)
+    LEFT JOIN [contabilidad].[DetalleAsientos] D WITH (UPDLOCK, HOLDLOCK) ON D.CuentaID = C.ID
+    LEFT JOIN [contabilidad].[AsientosDiario] A WITH (UPDLOCK, HOLDLOCK) ON D.AsientoID = A.ID
+        AND (
+            A.Estado = 'Contabilizado'
+            OR (A.Estado = 'Anulado' AND EXISTS (
+                SELECT 1
+                FROM [contabilidad].[AsientosDiario] R
+                WHERE R.ReferenciaExterna = CONCAT('REV-', A.ID)
+                  AND R.Estado = 'Contabilizado'
+            ))
+        )
+    WHERE C.Codigo = @CodigoCuenta
+    GROUP BY C.Naturaleza;
+END
+GO
+
+-- 2. L27: Verificación de conciliación de facturas y compras antes del cierre mensual
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_VerificarConciliacionCierrePeriodo]
+    @PeriodoID INT,
+    @Mes INT,
+    @Anio INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @FacturasSinAsiento INT = 0;
+    DECLARE @ComprasSinAsiento INT = 0;
+
+    SELECT @FacturasSinAsiento = COUNT(*)
+    FROM [ventas].[Facturas] f
+    WHERE MONTH(f.FechaHora) = @Mes
+      AND YEAR(f.FechaHora) = @Anio
+      AND ISNULL(f.EstadoFiscal, 'Emitida') != 'Anulada'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM [contabilidad].[AsientosDiario] a
+          WHERE a.Estado = 'Contabilizado'
+            AND (
+                a.ID = TRY_CONVERT(INT, JSON_VALUE(CASE WHEN ISJSON(f.DocumentoJSON) = 1 THEN f.DocumentoJSON ELSE N'{}' END, '$.asiento_id'))
+                OR a.ReferenciaExterna = f.NumeroFactura
+                OR a.ReferenciaExterna = CONCAT('FAC-', f.ID)
+                OR a.ReferenciaExterna = CAST(f.ID AS NVARCHAR(100))
+            )
+      );
+
+    SELECT @ComprasSinAsiento = COUNT(*)
+    FROM [produccion].[ComprasMateriaPrima] c
+    WHERE MONTH(c.Fecha) = @Mes
+      AND YEAR(c.Fecha) = @Anio
+      AND NOT EXISTS (
+          SELECT 1
+          FROM [contabilidad].[AsientosDiario] a
+          WHERE a.Estado = 'Contabilizado'
+            AND (
+                a.ReferenciaExterna = CONCAT('COMP-', c.ID)
+                OR (c.FacturaProveedor IS NOT NULL AND LTRIM(RTRIM(c.FacturaProveedor)) <> '' AND a.ReferenciaExterna = c.FacturaProveedor)
+                OR a.ReferenciaExterna = CAST(c.ID AS NVARCHAR(100))
+            )
+      );
+
+    SELECT @FacturasSinAsiento AS FacturasSinAsiento, @ComprasSinAsiento AS ComprasSinAsiento;
+END
+GO
+
+-- 3. L14: Resumen financiero de rango (Utilidad neta contable real vs Flujo de caja operativo)
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ObtenerResumenFinancieroRango]
+    @FechaInicio DATETIME2,
+    @FechaFin DATETIME2
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        ISNULL(SUM(CASE WHEN C.Clase = 'Ingreso' OR C.Codigo LIKE '4.%' THEN D.Haber - D.Debe ELSE 0 END), 0) AS IngresosContables,
+        ISNULL(SUM(CASE WHEN C.Clase = 'Costo' OR C.Codigo LIKE '5.%' THEN D.Debe - D.Haber ELSE 0 END), 0) AS CostosContables,
+        ISNULL(SUM(CASE WHEN C.Clase = 'Gasto' OR C.Codigo LIKE '6.%' THEN D.Debe - D.Haber ELSE 0 END), 0) AS GastosContables,
+        ISNULL(SUM(CASE WHEN C.Codigo IN ('1.1.01.001','1.1.01.002','1.1.01.003','1.1.01.004','1.1.01.005')
+                           AND A.Estado = 'Contabilizado' AND ISNULL(A.TipoDocumento, N'') != N'Reversión'
+                     THEN D.Debe ELSE 0 END), 0) AS EntradasEfectivo,
+        ISNULL(SUM(CASE WHEN C.Codigo IN ('1.1.01.001','1.1.01.002','1.1.01.003','1.1.01.004','1.1.01.005')
+                           AND A.Estado = 'Contabilizado' AND ISNULL(A.TipoDocumento, N'') != N'Reversión'
+                     THEN D.Haber ELSE 0 END), 0) AS SalidasEfectivo,
+        ISNULL(SUM(CASE WHEN C.Codigo IN ('1.1.01.001','1.1.01.002','1.1.01.003','1.1.01.004','1.1.01.005')
+                     THEN D.Debe - D.Haber ELSE 0 END), 0) AS FlujoCajaOperativo
+    FROM [contabilidad].[DetalleAsientos] D
+    JOIN [contabilidad].[AsientosDiario] A ON D.AsientoID = A.ID
+    JOIN [contabilidad].[CatalogoCuentas] C ON D.CuentaID = C.ID
+    WHERE (
+        A.Estado = 'Contabilizado'
+        OR (A.Estado = 'Anulado' AND EXISTS (
+            SELECT 1
+            FROM [contabilidad].[AsientosDiario] R
+            WHERE R.ReferenciaExterna = CONCAT('REV-', A.ID)
+              AND R.Estado = 'Contabilizado'
+        ))
+    )
+      AND A.Fecha >= @FechaInicio
+      AND A.Fecha < @FechaFin;
+END
+GO
+
+-- 4. L22: Balance General con separación de Resultados Acumulados Anteriores vs Utilidad del Ejercicio
+CREATE OR ALTER PROCEDURE [contabilidad].[sp_ObtenerBalanceGeneralCorte]
+    @FechaCorte DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @InicioEjercicio DATE = DATEFROMPARTS(YEAR(@FechaCorte), 1, 1);
+    DECLARE @FinExclusivo DATE = DATEADD(DAY, 1, CAST(@FechaCorte AS DATE));
+
+    WITH SaldosHistoricos AS (
+        SELECT
+            C.Clase,
+            C.Grupo,
+            C.Codigo,
+            C.Nombre AS Cuenta,
+            C.Naturaleza,
+            SUM(D.Debe) AS TotalDebe,
+            SUM(D.Haber) AS TotalHaber,
+            SUM(CASE WHEN A.Fecha < @InicioEjercicio THEN D.Debe ELSE 0 END) AS DebeAnterior,
+            SUM(CASE WHEN A.Fecha < @InicioEjercicio THEN D.Haber ELSE 0 END) AS HaberAnterior,
+            SUM(CASE WHEN A.Fecha >= @InicioEjercicio THEN D.Debe ELSE 0 END) AS DebeEjercicio,
+            SUM(CASE WHEN A.Fecha >= @InicioEjercicio THEN D.Haber ELSE 0 END) AS HaberEjercicio
+        FROM [contabilidad].[DetalleAsientos] D
+        JOIN [contabilidad].[AsientosDiario] A ON D.AsientoID = A.ID
+        JOIN [contabilidad].[CatalogoCuentas] C ON D.CuentaID = C.ID
+        WHERE (
+            A.Estado = 'Contabilizado'
+            OR (A.Estado = 'Anulado' AND EXISTS (
+                SELECT 1
+                FROM [contabilidad].[AsientosDiario] R
+                WHERE R.ReferenciaExterna = CONCAT('REV-', A.ID)
+                  AND R.Estado = 'Contabilizado'
+            ))
+        )
+          AND A.Fecha < @FinExclusivo
+        GROUP BY C.Clase, C.Grupo, C.Codigo, C.Nombre, C.Naturaleza
+    )
+    SELECT
+        Clase,
+        Grupo,
+        Codigo,
+        Cuenta,
+        CASE
+            WHEN Naturaleza = 'Deudora' THEN (TotalDebe - TotalHaber)
+            ELSE (TotalHaber - TotalDebe)
+        END AS SaldoFinal,
+        CASE
+            WHEN Naturaleza = 'Deudora' THEN (DebeAnterior - HaberAnterior)
+            ELSE (HaberAnterior - DebeAnterior)
+        END AS SaldoEjerciciosAnteriores,
+        CASE
+            WHEN Naturaleza = 'Deudora' THEN (DebeEjercicio - HaberEjercicio)
+            ELSE (HaberEjercicio - DebeEjercicio)
+        END AS SaldoEjercicioActual
+    FROM SaldosHistoricos
+    WHERE (TotalDebe - TotalHaber) <> 0
+       OR (DebeAnterior - HaberAnterior) <> 0
+       OR (DebeEjercicio - HaberEjercicio) <> 0
+    ORDER BY Codigo;
+END
+GO
+
+-- 5. L06 & L07: Snapshot DGI de Ventas Candidatas con asiento_id y reversion_asiento_id
+CREATE OR ALTER PROCEDURE [fiscal].[sp_SnapshotDGIVentasCandidatas]
+    @P1 DATETIME2 = NULL,
+    @P2 DATETIME2 = NULL,
+    @P3 DATETIME2 = NULL,
+    @P4 DATETIME2 = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        f.ID AS id,
+        f.NumeroFactura AS numero,
+        f.FechaHora AS fecha,
+        f.Subtotal AS base,
+        f.IVA AS iva,
+        f.Total AS total,
+        f.EstadoFiscal AS estado,
+        f.FechaAnulacion AS anulada_en,
+        f.MotivoAnulacion AS motivo_anulacion,
+        f.DocumentoJSON AS documento,
+        j.AsientoID AS asiento_id,
+        a.Fecha AS fecha_asiento,
+        r.ID AS reversion_asiento_id,
+        r.Fecha AS fecha_reversion
+    FROM [ventas].[Facturas] f
+    OUTER APPLY (
+        SELECT COALESCE(
+            TRY_CONVERT(INT, JSON_VALUE(CASE WHEN ISJSON(f.DocumentoJSON) = 1 THEN f.DocumentoJSON ELSE N'{}' END, '$.asiento_id')),
+            (SELECT TOP 1 a0.ID FROM [contabilidad].[AsientosDiario] a0 WHERE a0.ReferenciaExterna = f.NumeroFactura ORDER BY a0.ID)
+        ) AS AsientoID
+    ) j
+    LEFT JOIN [contabilidad].[AsientosDiario] a ON a.ID = j.AsientoID
+    OUTER APPLY (
+        SELECT TOP 1 v.ID, v.Fecha
+        FROM [contabilidad].[AsientosDiario] v
+        WHERE (
+            v.ReferenciaExterna = CONCAT('REV-', j.AsientoID)
+            OR v.ReferenciaExterna = CONCAT('REV-', f.NumeroFactura)
+            OR v.ReferenciaExterna = CONCAT('REV-FACT-', f.ID)
+        )
+        ORDER BY v.ID
+    ) r
+    WHERE (f.FechaHora >= @P1 AND f.FechaHora < @P2)
+       OR (f.FechaAnulacion >= @P3 AND f.FechaAnulacion < @P4)
+    ORDER BY f.ID;
+END
+GO
+
+-- 6. L06 & L07: Snapshot DGI de Asientos con tipo_documento
+CREATE OR ALTER PROCEDURE [fiscal].[sp_SnapshotDGIAsientos]
+    @P1 DATETIME2 = NULL,
+    @P2 DATETIME2 = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        ID AS id,
+        NumeroComprobante AS numero,
+        Fecha AS fecha,
+        Estado AS estado,
+        Descripcion AS descripcion,
+        ReferenciaExterna AS referencia,
+        TipoDocumento AS tipo_documento
+    FROM [contabilidad].[AsientosDiario]
+    WHERE Fecha >= @P1 AND Fecha < @P2
+    ORDER BY ID;
+END
+GO
+
+-- 7. L11: Historial de Revisiones DGI con Huella para verificación de frescura en GET /admin/dgi
+CREATE OR ALTER PROCEDURE [fiscal].[sp_HistorialRevisionesDGIPorPeriodo]
+    @PeriodoID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 100
+        r.ID, r.PeriodoID, r.Obligacion, r.Version, r.Estado, r.Motor, r.Huella, r.ResultadoJSON,
+        r.CreadoEn, r.CreadoPor, r.AprobadoPor, p.Desde, p.Hasta
+    FROM [fiscal].[DGI_Revisiones] r
+    JOIN [fiscal].[DGI_Periodos] p ON p.ID = r.PeriodoID
+    WHERE r.PeriodoID = @PeriodoID
+    ORDER BY r.ID DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [fiscal].[sp_HistorialRevisionesDGITodas]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 100
+        r.ID, r.PeriodoID, r.Obligacion, r.Version, r.Estado, r.Motor, r.Huella, r.ResultadoJSON,
+        r.CreadoEn, r.CreadoPor, r.AprobadoPor, p.Desde, p.Hasta
+    FROM [fiscal].[DGI_Revisiones] r
+    JOIN [fiscal].[DGI_Periodos] p ON p.ID = r.PeriodoID
+    ORDER BY r.ID DESC;
+END
+GO
+
+-- 8. L25: Histórico de Ventas para Regresión Lineal anclado a la fecha operativa
+CREATE OR ALTER PROCEDURE [ventas].[sp_EstadisticaHistoricoVentasRegresion]
+    @FechaHoy DATE = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Corte DATE = ISNULL(@FechaHoy, CONVERT(date, GETDATE()));
+    SELECT CONVERT(date, FechaHora) AS Dia, ISNULL(SUM(Total), 0) AS Total
+    FROM [ventas].[Facturas]
+    WHERE EstadoFiscal = 'Emitida'
+      AND CONVERT(date, FechaHora) >= DATEADD(DAY, -29, @Corte)
+      AND CONVERT(date, FechaHora) <= @Corte
+    GROUP BY CONVERT(date, FechaHora)
+    ORDER BY Dia;
+END
+GO
+GO
+
+-- >>> sql_group4_auth_inv_prod.sql
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+/* ============================================================================
+   REMEDIACIÓN AUDITORÍA GRUPO 4 (L08, L09, L10, L16, L18, L20, L21, L23, L26)
+   Archivo: scratch/remediation_20261025/sql_group4_auth_inv_prod.sql
+   Base de datos objetivo: PanaderiaQA_Prevalidacion_20261015
+   ============================================================================ */
+
+SET NOCOUNT ON;
+GO
+
+-- ============================================================================
+-- 1. AJUSTES DE ESQUEMA IDEMPOTENTES (L10, L18, L20)
+-- ============================================================================
+IF COL_LENGTH('produccion.Proveedores', 'RUC') IS NULL
+BEGIN
+    ALTER TABLE [produccion].[Proveedores] ADD [RUC] NVARCHAR(30) NULL;
+END
+GO
+
+IF COL_LENGTH('produccion.ComprasMateriaPrima', 'IdempotencyKey') IS NULL
+BEGIN
+    ALTER TABLE [produccion].[ComprasMateriaPrima] ADD [IdempotencyKey] NVARCHAR(120) NULL;
+END
+GO
+
+IF COL_LENGTH('produccion.ComprasMateriaPrima', 'ProveedorRUC') IS NULL
+BEGIN
+    ALTER TABLE [produccion].[ComprasMateriaPrima] ADD [ProveedorRUC] NVARCHAR(30) NULL;
+END
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'produccion.ComprasMateriaPrima')
+      AND name = N'UX_ComprasMateriaPrima_IdempotencyKey'
+)
+BEGIN
+    CREATE UNIQUE INDEX [UX_ComprasMateriaPrima_IdempotencyKey]
+    ON [produccion].[ComprasMateriaPrima]([IdempotencyKey])
+    WHERE [IdempotencyKey] IS NOT NULL;
+END
+GO
+
+IF COL_LENGTH('produccion.MateriaPrima', 'CostoUnitario') IS NULL
+BEGIN
+    ALTER TABLE [produccion].[MateriaPrima] ADD [CostoUnitario] DECIMAL(18, 4) NULL;
+END
+GO
+
+-- ============================================================================
+-- 2. L08: NORMALIZACIÓN DE IDENTIDAD EN BLOQUEO DE LOGIN
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [seguridad].[sp_VerificarBloqueoCuenta]
+    @Identificador NVARCHAR(100),
+    @DireccionIP VARCHAR(45)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Ahora DATETIME2 = SYSDATETIME();
+    DECLARE @Raw NVARCHAR(100) = LOWER(LTRIM(RTRIM(ISNULL(@Identificador, N'desconocido'))));
+    DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@Raw, N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+    DECLARE @Canon NVARCHAR(100) = @Raw;
+
+    IF @Clean LIKE N'[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 8
+        SET @Canon = N'+505' + @Clean;
+    ELSE IF @Clean LIKE N'505[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 11
+        SET @Canon = N'+505' + RIGHT(@Clean, 8);
+    ELSE IF @Clean LIKE N'00505[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 13
+        SET @Canon = N'+505' + RIGHT(@Clean, 8);
+
+    SET @DireccionIP = LTRIM(RTRIM(ISNULL(@DireccionIP, '0.0.0.0')));
+
+    SELECT TOP 1
+        ID,
+        Identificador,
+        DireccionIP,
+        IntentosFallidos,
+        BloqueadoHasta,
+        CASE WHEN BloqueadoHasta IS NOT NULL AND BloqueadoHasta > @Ahora THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS EstaBloqueado
+    FROM [seguridad].[BloqueosCuenta]
+    WHERE Identificador IN (@Canon, @Raw)
+      AND DireccionIP = @DireccionIP
+      AND BloqueadoHasta > @Ahora
+    ORDER BY BloqueadoHasta DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_VerificarBloqueoLogin]
+    @Identificador NVARCHAR(100),
+    @DireccionIP VARCHAR(45)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    EXEC [seguridad].[sp_VerificarBloqueoCuenta]
+        @Identificador = @Identificador,
+        @DireccionIP = @DireccionIP;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_RegistrarIntentoLogin]
+    @Identificador NVARCHAR(100),
+    @DireccionIP VARCHAR(45),
+    @Exitoso BIT,
+    @MaxIntentos INT = 5,
+    @MinutosBloqueo INT = 15
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Ahora DATETIME2 = SYSDATETIME();
+    DECLARE @IntentosActuales INT = 0;
+    DECLARE @BloqueadoHasta DATETIME2 = NULL;
+    DECLARE @EstaBloqueado BIT = 0;
+    DECLARE @RecienBloqueado BIT = 0;
+
+    BEGIN TRY
+        DECLARE @Raw NVARCHAR(100) = LOWER(LTRIM(RTRIM(ISNULL(@Identificador, N'desconocido'))));
+        DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@Raw, N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+        SET @Identificador = @Raw;
+
+        IF @Clean LIKE N'[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 8
+            SET @Identificador = N'+505' + @Clean;
+        ELSE IF @Clean LIKE N'505[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 11
+            SET @Identificador = N'+505' + RIGHT(@Clean, 8);
+        ELSE IF @Clean LIKE N'00505[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' AND LEN(@Clean) = 13
+            SET @Identificador = N'+505' + RIGHT(@Clean, 8);
+
+        SET @DireccionIP = LTRIM(RTRIM(ISNULL(@DireccionIP, '0.0.0.0')));
+
+        SELECT @MaxIntentos = ISNULL(TRY_CAST(Valor AS INT), @MaxIntentos)
+        FROM [seguridad].[ConfiguracionSistema] WHERE Clave = 'smtp_bloqueo_intentos_max';
+
+        SELECT @MinutosBloqueo = ISNULL(TRY_CAST(Valor AS INT), @MinutosBloqueo)
+        FROM [seguridad].[ConfiguracionSistema] WHERE Clave = 'smtp_bloqueo_minutos';
+
+        IF @Exitoso = 1
+        BEGIN
+            DELETE FROM [seguridad].[BloqueosCuenta]
+            WHERE Identificador IN (@Identificador, @Raw) AND DireccionIP = @DireccionIP;
+
+            SELECT
+                CAST(0 AS BIT) AS Bloqueado,
+                CAST(0 AS BIT) AS RecienBloqueado,
+                0 AS IntentosFallidos,
+                CAST(NULL AS DATETIME2) AS BloqueadoHasta;
+            RETURN;
+        END
+
+        SELECT @IntentosActuales = IntentosFallidos, @BloqueadoHasta = BloqueadoHasta
+        FROM [seguridad].[BloqueosCuenta] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Identificador = @Identificador AND DireccionIP = @DireccionIP;
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            SET @IntentosActuales = 1;
+            IF @IntentosActuales >= @MaxIntentos
+            BEGIN
+                SET @BloqueadoHasta = DATEADD(MINUTE, @MinutosBloqueo, @Ahora);
+                SET @EstaBloqueado = 1;
+                SET @RecienBloqueado = 1;
+            END
+
+            INSERT INTO [seguridad].[BloqueosCuenta] (
+                Identificador, DireccionIP, IntentosFallidos, PrimerIntento, UltimoIntento, BloqueadoHasta, Motivo
+            )
+            VALUES (
+                @Identificador, @DireccionIP, @IntentosActuales, @Ahora, @Ahora, @BloqueadoHasta,
+                CASE WHEN @EstaBloqueado = 1 THEN N'Exceso de intentos fallidos de inicio de sesión' ELSE NULL END
+            );
+        END
+        ELSE
+        BEGIN
+            IF @BloqueadoHasta IS NOT NULL AND @BloqueadoHasta < @Ahora
+            BEGIN
+                SET @IntentosActuales = 1;
+                SET @BloqueadoHasta = NULL;
+            END
+            ELSE
+            BEGIN
+                SET @IntentosActuales = @IntentosActuales + 1;
+            END
+
+            IF @IntentosActuales >= @MaxIntentos
+            BEGIN
+                IF @BloqueadoHasta IS NULL OR @BloqueadoHasta < @Ahora
+                    SET @RecienBloqueado = 1;
+                SET @BloqueadoHasta = DATEADD(MINUTE, @MinutosBloqueo, @Ahora);
+                SET @EstaBloqueado = 1;
+            END
+
+            UPDATE [seguridad].[BloqueosCuenta]
+            SET IntentosFallidos = @IntentosActuales,
+                UltimoIntento = @Ahora,
+                BloqueadoHasta = @BloqueadoHasta,
+                Motivo = CASE WHEN @EstaBloqueado = 1 THEN N'Exceso de intentos fallidos de inicio de sesión' ELSE Motivo END
+            WHERE Identificador = @Identificador AND DireccionIP = @DireccionIP;
+        END
+
+        IF @RecienBloqueado = 1
+        BEGIN
+            DECLARE @MsgBloqueo NVARCHAR(500) = CONCAT(
+                N'Cuenta bloqueada temporalmente por fuerza bruta: identificador "', @Identificador,
+                N'" desde IP ', @DireccionIP, N' tras ', @IntentosActuales, N' intentos fallidos.'
+            );
+            EXEC [seguridad].[sp_RegistrarErrorBD]
+                @Origen = 'SEGURIDAD_AUTH',
+                @Severidad = 'CRITICAL',
+                @NumeroError = 50401,
+                @EstadoError = 1,
+                @LineaError = 1,
+                @Procedimiento = N'seguridad.sp_RegistrarIntentoLogin',
+                @EsquemaOrigen = N'seguridad',
+                @MensajeError = @MsgBloqueo,
+                @Username = @Identificador,
+                @DireccionIP = @DireccionIP,
+                @RutaHTTP = N'/login';
+        END
+
+        SELECT
+            @EstaBloqueado AS Bloqueado,
+            @RecienBloqueado AS RecienBloqueado,
+            @IntentosActuales AS IntentosFallidos,
+            @BloqueadoHasta AS BloqueadoHasta;
+    END TRY
+    BEGIN CATCH
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_RegistrarIntentoLogin';
+        THROW;
+    END CATCH
+END
+GO
+
+-- ============================================================================
+-- 3. L09: CONTEO ACUMULADO DE FALLOS TOTP POR CUENTA EN VENTANA DE TIEMPO
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ObtenerFallosTOTPRecientes]
+    @Subject NVARCHAR(128),
+    @MinExpiresAt BIGINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ISNULL(SUM(Attempts), 0) AS TotalFallos
+    FROM [seguridad].[AuthChallenges] WITH (UPDLOCK, HOLDLOCK)
+    WHERE Subject = @Subject
+      AND Kind LIKE 'totp%'
+      AND Verified = 0
+      AND ExpiresAt > @MinExpiresAt;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_LimpiarFallosTOTPUsuario]
+    @Subject NVARCHAR(128)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [seguridad].[AuthChallenges]
+    SET Verified = 1,
+        Consumed = 1,
+        Attempts = 0
+    WHERE Subject = @Subject
+      AND Kind LIKE 'totp%';
+END
+GO
+
+-- ============================================================================
+-- 4. L23: INVARIANTE DE ÚLTIMO SUPERADMIN ACTIVO BAJO BLOQUEO SERIALIZABLE
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ContarSuperAdminsActivosBloqueo]
+    @TargetUserID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @SuperAdminRolID INT;
+    SELECT @SuperAdminRolID = ID
+    FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+    WHERE Nombre = 'SuperAdmin';
+
+    DECLARE @TargetRolID INT, @TargetActivo BIT, @TargetRolNombre NVARCHAR(50);
+    SELECT @TargetRolID = u.RolID, @TargetActivo = u.Activo, @TargetRolNombre = r.Nombre
+    FROM [seguridad].[Usuarios] u WITH (UPDLOCK, HOLDLOCK)
+    JOIN [seguridad].[Roles] r ON r.ID = u.RolID
+    WHERE u.ID = @TargetUserID;
+
+    DECLARE @Restantes INT = 0;
+    SELECT @Restantes = COUNT(*)
+    FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+    WHERE RolID = @SuperAdminRolID
+      AND Activo = 1
+      AND ID <> ISNULL(@TargetUserID, -1);
+
+    SELECT
+        @TargetRolID AS TargetRolID,
+        @TargetRolNombre AS TargetRolNombre,
+        @TargetActivo AS TargetActivo,
+        @SuperAdminRolID AS SuperAdminRolID,
+        ISNULL(@Restantes, 0) AS SuperAdminsActivosRestantes;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ActualizarRolUsuario]
+    @P1 INT = NULL,
+    @P2 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @SuperAdminRolID INT;
+        SELECT @SuperAdminRolID = ID
+        FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Nombre = 'SuperAdmin';
+
+        DECLARE @RolActualID INT, @ActivoActual BIT;
+        SELECT @RolActualID = RolID, @ActivoActual = Activo
+        FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @P1;
+
+        IF @RolActualID IS NULL
+            THROW 52004, 'Usuario no encontrado.', 1;
+
+        IF @RolActualID = @SuperAdminRolID AND @P2 <> @SuperAdminRolID AND @ActivoActual = 1
+        BEGIN
+            DECLARE @Restantes INT = 0;
+            SELECT @Restantes = COUNT(*)
+            FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+            WHERE RolID = @SuperAdminRolID AND Activo = 1 AND ID <> @P1;
+
+            IF ISNULL(@Restantes, 0) < 1
+                THROW 52005, 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema', 1;
+        END
+
+        UPDATE [seguridad].[Usuarios]
+        SET RolID = @P2
+        WHERE ID = @P1;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_ActualizarRolUsuario';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ActualizarUsuario]
+    @UsuarioID INT,
+    @NombreCompleto NVARCHAR(100) = NULL,
+    @RolID INT = NULL,
+    @Activo BIT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @SuperAdminRolID INT;
+        SELECT @SuperAdminRolID = ID
+        FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Nombre = 'SuperAdmin';
+
+        DECLARE @RolActualID INT, @ActivoActual BIT;
+        SELECT @RolActualID = RolID, @ActivoActual = Activo
+        FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @UsuarioID;
+
+        IF @RolActualID IS NULL
+            THROW 52004, 'Usuario no encontrado.', 1;
+
+        DECLARE @NuevoRolID INT = ISNULL(@RolID, @RolActualID);
+        DECLARE @NuevoActivo BIT = ISNULL(@Activo, @ActivoActual);
+
+        IF @RolActualID = @SuperAdminRolID AND @ActivoActual = 1
+           AND (@NuevoRolID <> @SuperAdminRolID OR @NuevoActivo = 0)
+        BEGIN
+            DECLARE @Restantes INT = 0;
+            SELECT @Restantes = COUNT(*)
+            FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+            WHERE RolID = @SuperAdminRolID AND Activo = 1 AND ID <> @UsuarioID;
+
+            IF ISNULL(@Restantes, 0) < 1
+                THROW 52005, 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema', 1;
+        END
+
+        UPDATE [seguridad].[Usuarios]
+        SET NombreCompleto = ISNULL(@NombreCompleto, NombreCompleto),
+            RolID = @NuevoRolID,
+            Activo = @NuevoActivo
+        WHERE ID = @UsuarioID;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_ActualizarUsuario';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ToggleActivoUsuario]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @SuperAdminRolID INT;
+        SELECT @SuperAdminRolID = ID
+        FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Nombre = 'SuperAdmin';
+
+        DECLARE @RolActualID INT, @ActivoActual BIT;
+        SELECT @RolActualID = RolID, @ActivoActual = Activo
+        FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @P1;
+
+        IF @RolActualID IS NULL
+            THROW 52004, 'Usuario no encontrado.', 1;
+
+        IF @RolActualID = @SuperAdminRolID AND @ActivoActual = 1
+        BEGIN
+            DECLARE @Restantes INT = 0;
+            SELECT @Restantes = COUNT(*)
+            FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+            WHERE RolID = @SuperAdminRolID AND Activo = 1 AND ID <> @P1;
+
+            IF ISNULL(@Restantes, 0) < 1
+                THROW 52005, 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema', 1;
+        END
+
+        UPDATE [seguridad].[Usuarios]
+        SET Activo = 1 ^ Activo
+        WHERE ID = @P1;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_ToggleActivoUsuario';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_CambiarEstadoUsuario]
+    @UsuarioID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @SuperAdminRolID INT;
+        SELECT @SuperAdminRolID = ID
+        FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Nombre = 'SuperAdmin';
+
+        DECLARE @RolActualID INT, @ActivoActual BIT;
+        SELECT @RolActualID = RolID, @ActivoActual = Activo
+        FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @UsuarioID;
+
+        IF @RolActualID IS NULL
+            THROW 52004, 'Usuario no encontrado.', 1;
+
+        IF @RolActualID = @SuperAdminRolID AND @ActivoActual = 1
+        BEGIN
+            DECLARE @Restantes INT = 0;
+            SELECT @Restantes = COUNT(*)
+            FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+            WHERE RolID = @SuperAdminRolID AND Activo = 1 AND ID <> @UsuarioID;
+
+            IF ISNULL(@Restantes, 0) < 1
+                THROW 52005, 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema', 1;
+        END
+
+        UPDATE [seguridad].[Usuarios]
+        SET Activo = 1 ^ Activo
+        OUTPUT DELETED.NombreCompleto, DELETED.Username, DELETED.RolID, DELETED.Activo AS ActivoAntes, INSERTED.Activo AS ActivoDespues
+        WHERE ID = @UsuarioID;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_CambiarEstadoUsuario';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_EliminarUsuario]
+    @UsuarioID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @SuperAdminRolID INT;
+        SELECT @SuperAdminRolID = ID
+        FROM [seguridad].[Roles] WITH (UPDLOCK, HOLDLOCK)
+        WHERE Nombre = 'SuperAdmin';
+
+        DECLARE @RolActualID INT, @ActivoActual BIT;
+        SELECT @RolActualID = RolID, @ActivoActual = Activo
+        FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @UsuarioID;
+
+        IF @RolActualID IS NULL
+            THROW 52004, 'Usuario no encontrado.', 1;
+
+        IF @RolActualID = @SuperAdminRolID AND @ActivoActual = 1
+        BEGIN
+            DECLARE @Restantes INT = 0;
+            SELECT @Restantes = COUNT(*)
+            FROM [seguridad].[Usuarios] WITH (UPDLOCK, HOLDLOCK)
+            WHERE RolID = @SuperAdminRolID AND Activo = 1 AND ID <> @UsuarioID;
+
+            IF ISNULL(@Restantes, 0) < 1
+                THROW 52005, 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema', 1;
+        END
+
+        UPDATE [seguridad].[Usuarios]
+        SET Activo = 0
+        WHERE ID = @UsuarioID;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'seguridad.sp_EliminarUsuario';
+        THROW;
+    END CATCH
+END
+GO
+
+-- ============================================================================
+-- 5. L26: ALERTAS SMTP OUTBOX CON DESTINATARIO INDIVIDUAL PERSISTIDO
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [seguridad].[sp_EncolarAlertaSMTP]
+    @ErrorID BIGINT,
+    @DestinatariosJSON NVARCHAR(MAX) = NULL,
+    @Forzar BIT = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        DECLARE @LockResult INT;
+        EXEC @LockResult = sys.sp_getapplock @Resource = N'panaderia.smtp.outbox.v1',
+             @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+        IF @LockResult < 0 THROW 51070, 'No se pudo reservar la cola SMTP.', 1;
+
+        INSERT INTO [seguridad].[AlertasSMTPOutbox](ErrorID, DedupKey, DestinatariosJSON, Forzar)
+        SELECT b.ID, HASHBYTES('SHA2_256', (
+            SELECT b.Origen AS origen, b.NumeroError AS numero, b.Procedimiento AS procedimiento,
+                CASE WHEN b.Procedimiento IS NULL AND b.NumeroError IS NULL
+                     THEN LEFT(b.MensajeError, 120) ELSE N'' END AS mensaje
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)), @DestinatariosJSON, @Forzar
+        FROM [seguridad].[BitacoraErrores] b
+        WHERE b.ID = @ErrorID AND b.NotificadoSMTP = 0
+          AND NOT EXISTS(SELECT 1 FROM [seguridad].[AlertasSMTPOutbox] o WHERE o.ErrorID = b.ID);
+
+        UPDATE [seguridad].[AlertasSMTPOutbox]
+        SET DestinatariosJSON = COALESCE(@DestinatariosJSON, DestinatariosJSON),
+            Forzar = CASE WHEN @Forzar = 1 THEN 1 ELSE Forzar END
+        WHERE ErrorID = @ErrorID AND Estado <> 'Sent';
+
+        COMMIT;
+        SELECT CAST(CASE WHEN EXISTS(SELECT 1 FROM [seguridad].[AlertasSMTPOutbox] WHERE ErrorID = @ErrorID)
+                        THEN 1 ELSE 0 END AS BIT) AS Encolada;
+    END TRY
+    BEGIN CATCH
+        IF XACT_STATE() <> 0 ROLLBACK;
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [seguridad].[sp_ReclamarAlertaSMTP]
+    @ErrorID BIGINT = NULL,
+    @VentanaSegundos INT = 300,
+    @LeaseSegundos INT = 300,
+    @SembrarLote INT = 20
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    IF @SembrarLote NOT BETWEEN 0 AND 100 OR @VentanaSegundos NOT BETWEEN 0 AND 86400
+       OR @LeaseSegundos NOT BETWEEN 60 AND 3600
+        THROW 51071, 'Limites SMTP invalidos.', 1;
+    DECLARE @Ahora DATETIME2(3) = SYSUTCDATETIME(), @Elegido BIGINT, @Clave BINARY(32),
+            @Token UNIQUEIDENTIFIER = NEWID(), @LockResult INT;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        EXEC @LockResult = sys.sp_getapplock @Resource = N'panaderia.smtp.outbox.v1',
+             @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+        IF @LockResult < 0 THROW 51070, 'No se pudo reservar la cola SMTP.', 1;
+
+        INSERT INTO [seguridad].[AlertasSMTPOutbox](ErrorID, DedupKey)
+        SELECT TOP (@SembrarLote) b.ID, HASHBYTES('SHA2_256', (
+            SELECT b.Origen AS origen, b.NumeroError AS numero, b.Procedimiento AS procedimiento,
+                CASE WHEN b.Procedimiento IS NULL AND b.NumeroError IS NULL
+                     THEN LEFT(b.MensajeError, 120) ELSE N'' END AS mensaje
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+        FROM [seguridad].[BitacoraErrores] b
+        WHERE b.NotificadoSMTP = 0
+          AND NOT EXISTS(SELECT 1 FROM [seguridad].[AlertasSMTPOutbox] o WHERE o.ErrorID = b.ID)
+        ORDER BY b.ID;
+
+        UPDATE TOP (100) o SET Estado = 'Suppressed', ClaimToken = NULL, LeaseHasta = NULL
+        FROM [seguridad].[AlertasSMTPOutbox] o
+        JOIN [seguridad].[AlertasSMTPDedup] d ON d.DedupKey = o.DedupKey
+        WHERE o.Estado IN ('Pending', 'Sending') AND o.Forzar = 0
+          AND (o.LeaseHasta IS NULL OR o.LeaseHasta <= @Ahora)
+          AND d.UltimoEnvio > DATEADD(SECOND, -@VentanaSegundos, @Ahora)
+          AND (@ErrorID IS NULL OR o.ErrorID = @ErrorID);
+
+        SELECT TOP(1) @Elegido = o.ErrorID, @Clave = o.DedupKey
+        FROM [seguridad].[AlertasSMTPOutbox] o
+        LEFT JOIN [seguridad].[AlertasSMTPDedup] d ON d.DedupKey = o.DedupKey
+        WHERE o.Estado IN ('Pending', 'Sending') AND o.DisponibleDesde <= @Ahora
+          AND (o.LeaseHasta IS NULL OR o.LeaseHasta <= @Ahora)
+          AND (d.LeaseHasta IS NULL OR d.LeaseHasta <= @Ahora)
+          AND (o.Forzar = 1 OR d.UltimoEnvio IS NULL OR d.UltimoEnvio <= DATEADD(SECOND, -@VentanaSegundos, @Ahora))
+          AND (@ErrorID IS NULL OR o.ErrorID = @ErrorID)
+        ORDER BY CASE WHEN o.DestinatariosJSON IS NOT NULL THEN 0 ELSE 1 END,
+                 o.Forzar DESC,
+                 o.DisponibleDesde,
+                 o.ErrorID;
+
+        IF @Elegido IS NOT NULL
+        BEGIN
+            IF NOT EXISTS(SELECT 1 FROM [seguridad].[AlertasSMTPDedup] WHERE DedupKey = @Clave)
+                INSERT INTO [seguridad].[AlertasSMTPDedup](DedupKey) VALUES(@Clave);
+            UPDATE [seguridad].[AlertasSMTPDedup]
+               SET ClaimToken = @Token, LeaseHasta = DATEADD(SECOND, @LeaseSegundos, @Ahora)
+             WHERE DedupKey = @Clave;
+            UPDATE [seguridad].[AlertasSMTPOutbox] SET Estado = 'Sending', ClaimToken = @Token,
+                   LeaseHasta = DATEADD(SECOND, @LeaseSegundos, @Ahora), Intentos = Intentos + 1
+             WHERE ErrorID = @Elegido;
+        END;
+        COMMIT;
+        SELECT b.*, o.ClaimToken, o.DestinatariosJSON, o.DestinatariosJSON AS Destinatario
+        FROM [seguridad].[AlertasSMTPOutbox] o
+        JOIN [seguridad].[BitacoraErrores] b ON b.ID = o.ErrorID
+        WHERE o.ErrorID = @Elegido AND o.ClaimToken = @Token;
+    END TRY
+    BEGIN CATCH
+        IF XACT_STATE() <> 0 ROLLBACK;
+        THROW;
+    END CATCH
+END
+GO
+
+-- ============================================================================
+-- 6. L16: CLIENTES - NORMALIZACIÓN Y UNICIDAD DE TELÉFONO BAJO BLOQUEO
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [crm].[sp_VerificarTelefonoClienteDuplicado]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@P1, N''))), N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+    IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = N'505'
+        SET @Clean = RIGHT(@Clean, 8);
+    ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = N'00505'
+        SET @Clean = RIGHT(@Clean, 8);
+
+    SELECT ID
+    FROM [crm].[Clientes] WITH (UPDLOCK, HOLDLOCK)
+    WHERE ID <> ISNULL(@P2, 0)
+      AND ID > 1
+      AND Telefono IS NOT NULL
+      AND LTRIM(RTRIM(Telefono)) <> ''
+      AND (
+          CASE
+              WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                   AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+              THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+              WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 13
+                   AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 5) = '00505'
+              THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+              ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+          END = @Clean
+      );
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_ActualizarClienteAdmin]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 NVARCHAR(255) = NULL,
+    @P4 NVARCHAR(255) = NULL,
+    @P5 DATE = NULL,
+    @P6 INT = NULL,
+    @P7 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@P3, N''))), N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+    IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = N'505'
+        SET @Clean = RIGHT(@Clean, 8);
+    ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = N'00505'
+        SET @Clean = RIGHT(@Clean, 8);
+
+    IF EXISTS (
+        SELECT 1
+        FROM [crm].[Clientes] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID <> ISNULL(@P7, 0)
+          AND ID > 1
+          AND Telefono IS NOT NULL
+          AND LTRIM(RTRIM(Telefono)) <> ''
+          AND (
+              CASE
+                  WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                       AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+                  THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+                  WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 13
+                       AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 5) = '00505'
+                  THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+                  ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+              END = @Clean
+          )
+    )
+        THROW 52020, 'El teléfono ya pertenece a otro cliente.', 1;
+
+    SET NOCOUNT OFF;
+    UPDATE [crm].[Clientes]
+    SET Nombre = @P1,
+        Apellidos = @P2,
+        Telefono = @Clean,
+        Genero = @P4,
+        FechaNacimiento = @P5,
+        NivelConfianzaID = @P6
+    WHERE ID = @P7 AND ID > 1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_ActualizarCliente]
+    @ClienteID INT,
+    @Nombre NVARCHAR(100),
+    @Apellidos NVARCHAR(100) = NULL,
+    @Telefono VARCHAR(30),
+    @Genero VARCHAR(20) = NULL,
+    @FechaNacimiento DATE = NULL,
+    @NivelConfianzaID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @Clean VARCHAR(30) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@Telefono, ''))), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '');
+        IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = '505'
+            SET @Clean = RIGHT(@Clean, 8);
+        ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = '00505'
+            SET @Clean = RIGHT(@Clean, 8);
+
+        IF EXISTS (
+            SELECT 1
+            FROM [crm].[Clientes] WITH (UPDLOCK, HOLDLOCK)
+            WHERE ID <> @ClienteID
+              AND ID > 1
+              AND Telefono IS NOT NULL
+              AND (
+                  CASE
+                      WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                           AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+                      THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+                      ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+                  END = @Clean
+              )
+        )
+            THROW 52020, 'El teléfono ya pertenece a otro cliente.', 1;
+
+        IF NOT EXISTS (SELECT 1 FROM [crm].[NivelesConfianza] WHERE ID = @NivelConfianzaID)
+            THROW 52021, 'Nivel de fidelidad inexistente.', 1;
+
+        UPDATE [crm].[Clientes]
+        SET Nombre = @Nombre,
+            Apellidos = @Apellidos,
+            Telefono = @Clean,
+            Genero = @Genero,
+            FechaNacimiento = @FechaNacimiento,
+            NivelConfianzaID = @NivelConfianzaID
+        WHERE ID = @ClienteID AND ID > 1;
+    END TRY
+    BEGIN CATCH
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'crm.sp_ActualizarCliente';
+        THROW;
+    END CATCH
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_RegistrarClienteVerificado]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 NVARCHAR(255) = NULL,
+    @P4 NVARCHAR(255) = NULL,
+    @P5 NVARCHAR(255) = NULL,
+    @P6 DATE = NULL,
+    @P7 NVARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@P3, N''))), N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+    IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = N'505'
+        SET @Clean = RIGHT(@Clean, 8);
+    ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = N'00505'
+        SET @Clean = RIGHT(@Clean, 8);
+
+    IF EXISTS (
+        SELECT 1
+        FROM [crm].[Clientes] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID > 1
+          AND Telefono IS NOT NULL
+          AND LTRIM(RTRIM(Telefono)) <> ''
+          AND (
+              CASE
+                  WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                       AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+                  THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+                  ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+              END = @Clean
+          )
+    )
+        THROW 52020, 'El teléfono ya pertenece a otro cliente.', 1;
+
+    INSERT INTO [crm].[Clientes] (
+        Nombre, Apellidos, Telefono, PasswordHash, Genero,
+        FechaNacimiento, RutaFotoPerfil, EsInvitado, NivelConfianzaID
+    )
+    VALUES (@P1, @P2, @Clean, @P4, @P5, @P6, @P7, 0, 1);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_InsertarClienteRapido]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Clean NVARCHAR(100) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@P2, N''))), N' ', N''), N'-', N''), N'(', N''), N')', N''), N'.', N''), N'+', N'');
+    IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = N'505'
+        SET @Clean = RIGHT(@Clean, 8);
+    ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = N'00505'
+        SET @Clean = RIGHT(@Clean, 8);
+
+    IF @Clean <> N'' AND EXISTS (
+        SELECT 1
+        FROM [crm].[Clientes] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID > 1
+          AND Telefono IS NOT NULL
+          AND LTRIM(RTRIM(Telefono)) <> ''
+          AND (
+              CASE
+                  WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                       AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+                  THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+                  ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+              END = @Clean
+          )
+    )
+        THROW 52020, 'El teléfono ya pertenece a otro cliente.', 1;
+
+    INSERT INTO [crm].[Clientes](Nombre, Telefono, NivelConfianzaID)
+    OUTPUT INSERTED.ID
+    VALUES(@P1, CASE WHEN @Clean <> N'' THEN @Clean ELSE @P2 END, 1);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [crm].[sp_ObtenerClientePorTelefono]
+    @Telefono VARCHAR(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Clean VARCHAR(30) = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(@Telefono, ''))), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '');
+    IF LEN(@Clean) = 11 AND LEFT(@Clean, 3) = '505'
+        SET @Clean = RIGHT(@Clean, 8);
+    ELSE IF LEN(@Clean) = 13 AND LEFT(@Clean, 5) = '00505'
+        SET @Clean = RIGHT(@Clean, 8);
+
+    SELECT ID, Nombre, Apellidos, Telefono, PasswordHash, EsInvitado, NivelConfianzaID, FechaNacimiento, RutaFotoPerfil
+    FROM [crm].[Clientes]
+    WHERE Telefono = @Telefono
+       OR (
+           @Clean <> '' AND Telefono IS NOT NULL AND
+           CASE
+               WHEN LEN(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')) = 11
+                    AND LEFT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 3) = '505'
+               THEN RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', ''), 8)
+               ELSE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(Telefono)), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')
+           END = @Clean
+       )
+    ORDER BY EsInvitado ASC, ID DESC;
+END
+GO
+
+-- ============================================================================
+-- 7. L10 y L18: COMPRAS IDEMPOTENTES Y SOPORTE RUC DE PROVEEDOR PARA IVA
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [produccion].[sp_CrearProveedor]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 NVARCHAR(30) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO [produccion].[Proveedores] (Nombre, Telefono, RUC)
+    OUTPUT INSERTED.ID
+    VALUES (@P1, @P2, @P3);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_ActualizarProveedorActivo]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 NVARCHAR(255) = NULL,
+    @P3 INT = NULL,
+    @P4 NVARCHAR(30) = NULL
+AS
+BEGIN
+    SET NOCOUNT OFF;
+    UPDATE [produccion].[Proveedores]
+    SET Nombre = @P1,
+        Telefono = @P2,
+        RUC = COALESCE(@P4, RUC)
+    WHERE ID = @P3 AND Activo = 1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_VerificarProveedorActivo]
+    @P1 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, RUC FROM [produccion].[Proveedores] WHERE ID = @P1 AND Activo = 1;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_ListarProveedoresActivos]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, Nombre, Telefono, RUC
+    FROM [produccion].[Proveedores]
+    WHERE Activo = 1
+    ORDER BY Nombre;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_ObtenerCompraPorIdempotencia]
+    @IdempotencyKey NVARCHAR(120),
+    @ProveedorID INT = NULL,
+    @FacturaProveedor NVARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT TOP 1
+        ID,
+        MateriaPrimaID,
+        ProveedorID,
+        Cantidad,
+        CostoTotal,
+        FacturaProveedor,
+        IVADocumentado,
+        Fecha,
+        IdempotencyKey
+    FROM [produccion].[ComprasMateriaPrima] WITH (UPDLOCK, HOLDLOCK)
+    WHERE IdempotencyKey = @IdempotencyKey
+       OR (
+           @ProveedorID IS NOT NULL
+           AND @FacturaProveedor IS NOT NULL
+           AND ProveedorID = @ProveedorID
+           AND UPPER(LTRIM(RTRIM(FacturaProveedor))) = UPPER(LTRIM(RTRIM(@FacturaProveedor)))
+       )
+    ORDER BY ID DESC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_InsertarCompraMateriaPrima]
+    @P1 INT = NULL,
+    @P2 INT = NULL,
+    @P3 DECIMAL(18, 2) = NULL,
+    @P4 DECIMAL(18, 2) = NULL,
+    @P5 NVARCHAR(255) = NULL,
+    @P6 DECIMAL(18, 2) = NULL,
+    @P7 DATETIME2 = NULL,
+    @P8 NVARCHAR(120) = NULL,
+    @P9 NVARCHAR(30) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @P8 IS NOT NULL
+    BEGIN
+        DECLARE @ExistingID INT;
+        SELECT TOP 1 @ExistingID = ID
+        FROM [produccion].[ComprasMateriaPrima] WITH (UPDLOCK, HOLDLOCK)
+        WHERE IdempotencyKey = @P8;
+
+        IF @ExistingID IS NOT NULL
+        BEGIN
+            SELECT @ExistingID AS ID, CAST(1 AS BIT) AS YaExistia;
+            RETURN;
+        END
+    END
+
+    INSERT INTO [produccion].[ComprasMateriaPrima] (
+        MateriaPrimaID, ProveedorID, Cantidad, CostoTotal, FacturaProveedor, IVADocumentado, Fecha, IdempotencyKey, ProveedorRUC
+    )
+    OUTPUT INSERTED.ID, CAST(0 AS BIT) AS YaExistia
+    VALUES (@P1, @P2, @P3, @P4, @P5, @P6, @P7, @P8, @P9);
+END
+GO
+
+-- ============================================================================
+-- 8. L20: INVENTARIO / RECETAS - CAMBIO DE UNIDAD DE MEDIDA CON CONVERSIÓN
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [produccion].[sp_ObtenerEstadoMateriaPrimaParaEdicion]
+    @MateriaID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        m.ID,
+        m.Nombre,
+        m.UnidadMedidaID,
+        m.StockActual,
+        m.StockMinimo,
+        m.CostoUnitario,
+        (SELECT COUNT(*) FROM [produccion].[RecetaProducto] WHERE MateriaPrimaID = m.ID) AS TotalRecetas,
+        (SELECT COUNT(*) FROM [produccion].[ComprasMateriaPrima] WHERE MateriaPrimaID = m.ID) AS TotalCompras,
+        (SELECT COUNT(*) FROM [produccion].[ConsumoLote] WHERE MateriaPrimaID = m.ID) AS TotalConsumos
+    FROM [produccion].[MateriaPrima] m WITH (UPDLOCK, HOLDLOCK)
+    WHERE m.ID = @MateriaID;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_ActualizarMateriaPrima]
+    @P1 NVARCHAR(255) = NULL,
+    @P2 INT = NULL,
+    @P3 DECIMAL(18, 2) = NULL,
+    @P4 INT = NULL,
+    @FactorConversion DECIMAL(18, 6) = NULL,
+    @UsuarioID INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        DECLARE @UnidadActualID INT,
+                @StockActual DECIMAL(18, 2),
+                @StockMinimoActual DECIMAL(18, 2),
+                @CostoUnitarioActual DECIMAL(18, 4);
+
+        SELECT
+            @UnidadActualID = UnidadMedidaID,
+            @StockActual = StockActual,
+            @StockMinimoActual = StockMinimo,
+            @CostoUnitarioActual = CostoUnitario
+        FROM [produccion].[MateriaPrima] WITH (UPDLOCK, HOLDLOCK)
+        WHERE ID = @P4;
+
+        IF @UnidadActualID IS NULL
+        BEGIN
+            IF @OwnTran = 1 COMMIT TRANSACTION;
+            SET NOCOUNT OFF;
+            UPDATE [produccion].[MateriaPrima] SET Nombre = @P1 WHERE ID = @P4 AND 1 = 0;
+            RETURN;
+        END
+
+        IF @P2 <> @UnidadActualID
+        BEGIN
+            DECLARE @TieneUso BIT = 0;
+            IF @StockActual > 0
+               OR EXISTS (SELECT 1 FROM [produccion].[RecetaProducto] WHERE MateriaPrimaID = @P4)
+               OR EXISTS (SELECT 1 FROM [produccion].[ComprasMateriaPrima] WHERE MateriaPrimaID = @P4)
+               OR EXISTS (SELECT 1 FROM [produccion].[ConsumoLote] WHERE MateriaPrimaID = @P4)
+            BEGIN
+                SET @TieneUso = 1;
+            END
+
+            IF @FactorConversion IS NOT NULL AND @FactorConversion <= 0
+                THROW 52040, 'El factor de conversión debe ser mayor a cero.', 1;
+
+            IF @TieneUso = 1 AND (@FactorConversion IS NULL OR @FactorConversion <= 0)
+                THROW 52040, 'No se puede cambiar la unidad de medida de una materia prima con stock, recetas o historial sin proporcionar un factor de conversión válido.', 1;
+
+            IF @FactorConversion IS NOT NULL AND @FactorConversion > 0
+            BEGIN
+                DECLARE @NuevoStock DECIMAL(18, 2) = ROUND(@StockActual * @FactorConversion, 2);
+                DECLARE @NuevoMinimo DECIMAL(18, 2) = CASE
+                    WHEN @P3 IS NOT NULL AND @P3 <> @StockMinimoActual THEN @P3
+                    ELSE ROUND(@StockMinimoActual * @FactorConversion, 2)
+                END;
+                DECLARE @NuevoCosto DECIMAL(18, 4) = CASE
+                    WHEN @CostoUnitarioActual IS NOT NULL THEN ROUND(@CostoUnitarioActual / @FactorConversion, 4)
+                    ELSE NULL
+                END;
+
+                UPDATE [produccion].[RecetaProducto]
+                SET CantidadNecesaria = CASE
+                    WHEN ROUND(CantidadNecesaria * @FactorConversion, 2) < 0.01 THEN 0.01
+                    ELSE ROUND(CantidadNecesaria * @FactorConversion, 2)
+                END
+                WHERE MateriaPrimaID = @P4;
+
+                DECLARE @ActorID INT = TRY_CAST(SESSION_CONTEXT(N'usuario_id') AS INT);
+                DECLARE @IP VARCHAR(45) = TRY_CAST(SESSION_CONTEXT(N'ip') AS VARCHAR(45));
+                DECLARE @AntesJSON NVARCHAR(MAX) = CONCAT(
+                    N'{"unidad_id":', @UnidadActualID,
+                    N',"stock_actual":', @StockActual,
+                    N',"stock_minimo":', @StockMinimoActual, N'}'
+                );
+                DECLARE @DespuesJSON NVARCHAR(MAX) = CONCAT(
+                    N'{"unidad_id":', @P2,
+                    N',"factor_conversion":', @FactorConversion,
+                    N',"stock_actual":', @NuevoStock,
+                    N',"stock_minimo":', @NuevoMinimo, N'}'
+                );
+
+                EXEC [seguridad].[sp_RegistrarAuditoria]
+                    @UsuarioID = @ActorID,
+                    @Accion = 'CONVERTIR_UNIDAD_MP',
+                    @Entidad = 'MateriaPrima',
+                    @EntidadID = @P4,
+                    @DatosAntes = @AntesJSON,
+                    @DatosDespues = @DespuesJSON,
+                    @IP = @IP;
+
+                SET NOCOUNT OFF;
+                UPDATE [produccion].[MateriaPrima]
+                SET Nombre = @P1,
+                    UnidadMedidaID = @P2,
+                    StockActual = @NuevoStock,
+                    StockMinimo = @NuevoMinimo,
+                    CostoUnitario = @NuevoCosto
+                WHERE ID = @P4;
+
+                IF @OwnTran = 1 COMMIT TRANSACTION;
+                RETURN;
+            END
+        END
+
+        SET NOCOUNT OFF;
+        UPDATE [produccion].[MateriaPrima]
+        SET Nombre = @P1,
+            UnidadMedidaID = @P2,
+            StockMinimo = @P3
+        WHERE ID = @P4;
+
+        IF @OwnTran = 1 COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'produccion.sp_ActualizarMateriaPrima';
+        THROW;
+    END CATCH
+END
+GO
+
+-- ============================================================================
+-- 9. L21: PRODUCCIÓN - VALIDACIÓN DE PRODUCTO ACTIVO Y NO BEBIDA EN LOTES
+-- ============================================================================
+CREATE OR ALTER PROCEDURE [produccion].[sp_ValidarProductoParaProduccion]
+    @ProductoID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        p.ID,
+        p.Nombre,
+        p.Activo,
+        ISNULL(p.EsFicticio, 0) AS EsFicticio,
+        p.CategoriaID,
+        ISNULL(c.Nombre, '') AS CategoriaNombre,
+        (SELECT COUNT(*) FROM [produccion].[RecetaProducto] r WHERE r.ProductoID = p.ID AND r.CantidadNecesaria > 0) AS TieneReceta
+    FROM [catalogo].[Productos] p WITH (UPDLOCK, HOLDLOCK)
+    LEFT JOIN [catalogo].[Categorias] c ON p.CategoriaID = c.ID
+    WHERE p.ID = @ProductoID;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_InsertarLoteProduccion]
+    @P1 INT = NULL,
+    @P2 INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @Activo BIT, @EsFicticio BIT, @Categoria NVARCHAR(100);
+    SELECT
+        @Activo = p.Activo,
+        @EsFicticio = ISNULL(p.EsFicticio, 0),
+        @Categoria = ISNULL(c.Nombre, N'')
+    FROM [catalogo].[Productos] p
+    LEFT JOIN [catalogo].[Categorias] c ON p.CategoriaID = c.ID
+    WHERE p.ID = @P1;
+
+    IF @Activo IS NULL
+        THROW 52034, 'El producto especificado no existe.', 1;
+    IF @Activo = 0
+        THROW 52035, 'No se puede registrar un lote de producción para un producto inactivo.', 1;
+    IF LOWER(LTRIM(RTRIM(@Categoria))) IN (N'bebidas', N'bebida', N'reventa') OR @EsFicticio = 1
+        THROW 52036, 'No se puede registrar un lote de producción para productos de la categoría Bebidas o no producibles.', 1;
+
+    INSERT INTO [produccion].[ProduccionLotes] (ProductoID, CantidadProducida)
+    OUTPUT INSERTED.ID
+    VALUES (@P1, @P2);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [produccion].[sp_RegistrarLoteProduccion]
+    @ProductoID INT,
+    @CantidadProducida INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @OwnTran BIT = 0;
+    BEGIN TRY
+        IF @@TRANCOUNT = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @OwnTran = 1;
+        END
+
+        IF @CantidadProducida <= 0
+            THROW 52031, 'La cantidad a producir debe ser un entero positivo.', 1;
+
+        DECLARE @Activo BIT, @EsFicticio BIT, @Categoria NVARCHAR(100);
+        SELECT
+            @Activo = p.Activo,
+            @EsFicticio = ISNULL(p.EsFicticio, 0),
+            @Categoria = ISNULL(c.Nombre, N'')
+        FROM [catalogo].[Productos] p
+        LEFT JOIN [catalogo].[Categorias] c ON p.CategoriaID = c.ID
+        WHERE p.ID = @ProductoID;
+
+        IF @Activo IS NULL
+            THROW 52034, 'El producto especificado no existe.', 1;
+        IF @Activo = 0
+            THROW 52035, 'No se puede registrar un lote de producción para un producto inactivo.', 1;
+        IF LOWER(LTRIM(RTRIM(@Categoria))) IN (N'bebidas', N'bebida', N'reventa') OR @EsFicticio = 1
+            THROW 52036, 'No se puede registrar un lote de producción para productos de la categoría Bebidas o no producibles.', 1;
+
+        IF NOT EXISTS (SELECT 1 FROM [produccion].[RecetaProducto] WHERE ProductoID = @ProductoID AND CantidadNecesaria > 0)
+            THROW 52032, 'El producto no tiene receta definida. Imposible producir sin receta.', 1;
+
+        DECLARE @InsumoFaltante NVARCHAR(200);
+        SELECT TOP 1
+            @InsumoFaltante = CONCAT(
+                N'Stock insuficiente de ', m.Nombre,
+                N'. Se requieren ', CAST(r.CantidadNecesaria * @CantidadProducida AS NVARCHAR(30)),
+                N' y hay ', CAST(m.StockActual AS NVARCHAR(30)), N'.'
+            )
+        FROM [produccion].[RecetaProducto] r
+        JOIN [produccion].[MateriaPrima] m WITH (UPDLOCK, HOLDLOCK) ON r.MateriaPrimaID = m.ID
+        WHERE r.ProductoID = @ProductoID
+          AND m.StockActual < (r.CantidadNecesaria * @CantidadProducida);
+
+        IF @InsumoFaltante IS NOT NULL
+            THROW 52033, @InsumoFaltante, 1;
+
+        DECLARE @LoteID INT;
+        INSERT INTO [produccion].[ProduccionLotes] (ProductoID, CantidadProducida)
+        VALUES (@ProductoID, @CantidadProducida);
+        SET @LoteID = SCOPE_IDENTITY();
+
+        UPDATE m
+        SET m.StockActual = m.StockActual - (r.CantidadNecesaria * @CantidadProducida)
+        FROM [produccion].[MateriaPrima] m
+        JOIN [produccion].[RecetaProducto] r ON r.MateriaPrimaID = m.ID
+        WHERE r.ProductoID = @ProductoID;
+
+        INSERT INTO [produccion].[ConsumoLote] (LoteID, MateriaPrimaID, CantidadUsada)
+        SELECT @LoteID, r.MateriaPrimaID, (r.CantidadNecesaria * @CantidadProducida)
+        FROM [produccion].[RecetaProducto] r
+        WHERE r.ProductoID = @ProductoID;
+
+        IF @OwnTran = 1
+            COMMIT TRANSACTION;
+
+        SELECT @LoteID AS LoteID;
+    END TRY
+    BEGIN CATCH
+        IF @OwnTran = 1 AND XACT_STATE() <> 0
+            ROLLBACK TRANSACTION;
+        EXEC [seguridad].[sp_RegistrarErrorBD] @Procedimiento = N'produccion.sp_RegistrarLoteProduccion';
+        THROW;
+    END CATCH
+END
+GO
+
+-- ============================================================================
+-- 10. PERMISOS PARA ROLES DE BASE DE DATOS EN PROCEDIMIENTOS NUEVOS/ACTUALIZADOS
+-- ============================================================================
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_VerificarBloqueoLogin] TO [db_rol_cajero_pos];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_VerificarBloqueoLogin] TO [db_rol_produccion];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_VerificarBloqueoLogin] TO [db_rol_kiosco];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_VerificarBloqueoLogin] TO [db_rol_portal_cliente];
+
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_ObtenerFallosTOTPRecientes] TO [db_rol_cajero_pos];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_ObtenerFallosTOTPRecientes] TO [db_rol_produccion];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_ObtenerFallosTOTPRecientes] TO [db_rol_kiosco];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_ObtenerFallosTOTPRecientes] TO [db_rol_portal_cliente];
+
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_LimpiarFallosTOTPUsuario] TO [db_rol_cajero_pos];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_LimpiarFallosTOTPUsuario] TO [db_rol_produccion];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_LimpiarFallosTOTPUsuario] TO [db_rol_kiosco];
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_LimpiarFallosTOTPUsuario] TO [db_rol_portal_cliente];
+
+GRANT EXECUTE ON OBJECT::[seguridad].[sp_ObtenerConfiguracionGlobal] TO [db_rol_produccion];
+GRANT EXECUTE ON OBJECT::[fiscal].[sp_RegistrarBitacoraFiscal] TO [db_rol_produccion];
+GRANT EXECUTE ON OBJECT::[ventas].[sp_RegistrarEventoFiscalOperacion] TO [db_rol_produccion];
+GO
+GO
+
+
+-- ============================================================================
+-- PLANILLA ESTRUCTURADA EN 3 PARTES, VACACIONES, PRESTAMOS Y COBROS POR PERDIDAS (2026-10-25)
+-- ============================================================================
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+
+-- 1. Agregar columnas a rrhh.Nomina si no existen
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='Viaticos')
+    ALTER TABLE [rrhh].[Nomina] ADD [Viaticos] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_Viaticos DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='DepreciacionVehiculo')
+    ALTER TABLE [rrhh].[Nomina] ADD [DepreciacionVehiculo] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_DepreciacionVehiculo DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='Incentivos')
+    ALTER TABLE [rrhh].[Nomina] ADD [Incentivos] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_Incentivos DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='RiesgoLaboral')
+    ALTER TABLE [rrhh].[Nomina] ADD [RiesgoLaboral] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_RiesgoLaboral DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='SueldoExtraordinario')
+    ALTER TABLE [rrhh].[Nomina] ADD [SueldoExtraordinario] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_SueldoExtraordinario DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='PrestamosDescontados')
+    ALTER TABLE [rrhh].[Nomina] ADD [PrestamosDescontados] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_PrestamosDescontados DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='CobrosPerdidas')
+    ALTER TABLE [rrhh].[Nomina] ADD [CobrosPerdidas] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_CobrosPerdidas DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='ProvisionVacaciones')
+    ALTER TABLE [rrhh].[Nomina] ADD [ProvisionVacaciones] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_ProvisionVacaciones DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='ProvisionAguinaldo')
+    ALTER TABLE [rrhh].[Nomina] ADD [ProvisionAguinaldo] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_ProvisionAguinaldo DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='ProvisionIndemnizacion')
+    ALTER TABLE [rrhh].[Nomina] ADD [ProvisionIndemnizacion] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_ProvisionIndemnizacion DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='CostoTotalEmpresa')
+    ALTER TABLE [rrhh].[Nomina] ADD [CostoTotalEmpresa] DECIMAL(18,2) NOT NULL CONSTRAINT DF_Nomina_CostoTotalEmpresa DEFAULT 0.00;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='PromedioAsistencia')
+    ALTER TABLE [rrhh].[Nomina] ADD [PromedioAsistencia] DECIMAL(5,2) NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='rrhh' AND TABLE_NAME='Nomina' AND COLUMN_NAME='PromedioPuntualidad')
+    ALTER TABLE [rrhh].[Nomina] ADD [PromedioPuntualidad] DECIMAL(5,2) NULL;
+GO
+
+-- 2. Tabla de Préstamos a Empleados
+IF OBJECT_ID('rrhh.PrestamosEmpleados', 'U') IS NULL
+BEGIN
+    CREATE TABLE [rrhh].[PrestamosEmpleados] (
+        [ID] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        [EmpleadoID] INT NOT NULL REFERENCES [rrhh].[Empleados]([ID]),
+        [MontoTotal] DECIMAL(18,2) NOT NULL,
+        [CuotaMensual] DECIMAL(18,2) NOT NULL,
+        [SaldoPendiente] DECIMAL(18,2) NOT NULL,
+        [Motivo] NVARCHAR(255) NULL,
+        [FechaInicio] DATE NOT NULL,
+        [Estado] NVARCHAR(20) NOT NULL CONSTRAINT DF_PrestamosEmpleados_Estado DEFAULT 'Activo',
+        [CreadoEn] DATETIME2 NOT NULL CONSTRAINT DF_PrestamosEmpleados_CreadoEn DEFAULT SYSUTCDATETIME(),
+        [CreadoPor] INT NULL REFERENCES [seguridad].[Usuarios]([ID])
+    );
+END
+GO
+
+-- 3. Tabla de Cobros por Pérdidas
+IF OBJECT_ID('rrhh.CobrosPerdidasEmpleados', 'U') IS NULL
+BEGIN
+    CREATE TABLE [rrhh].[CobrosPerdidasEmpleados] (
+        [ID] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        [EmpleadoID] INT NOT NULL REFERENCES [rrhh].[Empleados]([ID]),
+        [Descripcion] NVARCHAR(255) NOT NULL,
+        [MontoTotal] DECIMAL(18,2) NOT NULL,
+        [SaldoPendiente] DECIMAL(18,2) NOT NULL,
+        [NumeroDocumento] NVARCHAR(100) NULL,
+        [FechaIncidente] DATE NOT NULL,
+        [Estado] NVARCHAR(20) NOT NULL CONSTRAINT DF_CobrosPerdidas_Estado DEFAULT 'Pendiente',
+        [CreadoEn] DATETIME2 NOT NULL CONSTRAINT DF_CobrosPerdidas_CreadoEn DEFAULT SYSUTCDATETIME(),
+        [CreadoPor] INT NULL REFERENCES [seguridad].[Usuarios]([ID])
+    );
+END
+GO
+
+-- 4. Tabla de Propuestas y Plan de Vacaciones
+IF OBJECT_ID('rrhh.PropuestasVacaciones', 'U') IS NULL
+BEGIN
+    CREATE TABLE [rrhh].[PropuestasVacaciones] (
+        [ID] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        [EmpleadoID] INT NOT NULL REFERENCES [rrhh].[Empleados]([ID]),
+        [FechaInicio] DATE NOT NULL,
+        [FechaFin] DATE NOT NULL,
+        [Dias] INT NOT NULL,
+        [Motivo] NVARCHAR(255) NULL CONSTRAINT DF_PropuestasVac_Motivo DEFAULT 'Plan Rotativo Semestral',
+        [Estado] NVARCHAR(20) NOT NULL CONSTRAINT DF_PropuestasVac_Estado DEFAULT 'Propuesta',
+        [CreadoEn] DATETIME2 NOT NULL CONSTRAINT DF_PropuestasVac_CreadoEn DEFAULT SYSUTCDATETIME(),
+        [AprobadoPor] INT NULL REFERENCES [seguridad].[Usuarios]([ID]),
+        [AprobadoEn] DATETIME2 NULL
+    );
+END
+GO
+
+-- ============================================================================
+-- STORED PROCEDURES
+-- ============================================================================
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_InsertarDetalleNomina]
+    @NominaID INT,
+    @Concepto VARCHAR(100),
+    @Tipo VARCHAR(20),
+    @Monto DECIMAL(18,2),
+    @Descripcion VARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO [rrhh].[DetalleNomina] (NominaID, Concepto, Tipo, Monto, Descripcion)
+    VALUES (@NominaID, @Concepto, @Tipo, @Monto, @Descripcion);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerDetallesNomina]
+    @NominaID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, NominaID, Concepto, Tipo, Monto, Descripcion
+    FROM [rrhh].[DetalleNomina]
+    WHERE NominaID = @NominaID
+    ORDER BY CASE Tipo WHEN 'Ingreso' THEN 1 WHEN 'Deduccion' THEN 2 WHEN 'Patronal' THEN 3 ELSE 4 END, ID ASC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarPrestamosActivosEmpleado]
+    @EmpleadoID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, EmpleadoID, MontoTotal, CuotaMensual, SaldoPendiente, Motivo, FechaInicio, Estado
+    FROM [rrhh].[PrestamosEmpleados]
+    WHERE EmpleadoID = @EmpleadoID AND Estado = 'Activo' AND SaldoPendiente > 0;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_RegistrarAbonoPrestamo]
+    @PrestamoID INT,
+    @MontoAbono DECIMAL(18,2)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[PrestamosEmpleados]
+    SET SaldoPendiente = CASE WHEN SaldoPendiente <= @MontoAbono THEN 0.00 ELSE SaldoPendiente - @MontoAbono END,
+        Estado = CASE WHEN SaldoPendiente <= @MontoAbono THEN 'Pagado' ELSE 'Activo' END
+    WHERE ID = @PrestamoID;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarCobrosPerdidasPendientesEmpleado]
+    @EmpleadoID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT ID, EmpleadoID, Descripcion, MontoTotal, SaldoPendiente, NumeroDocumento, FechaIncidente, Estado
+    FROM [rrhh].[CobrosPerdidasEmpleados]
+    WHERE EmpleadoID = @EmpleadoID AND Estado = 'Pendiente' AND SaldoPendiente > 0;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_RegistrarCobroPerdida]
+    @CobroID INT,
+    @MontoDescontado DECIMAL(18,2)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[CobrosPerdidasEmpleados]
+    SET SaldoPendiente = CASE WHEN SaldoPendiente <= @MontoDescontado THEN 0.00 ELSE SaldoPendiente - @MontoDescontado END,
+        Estado = CASE WHEN SaldoPendiente <= @MontoDescontado THEN 'Descontado' ELSE 'Pendiente' END
+    WHERE ID = @CobroID;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_GuardarPropuestaVacaciones]
+    @EmpleadoID INT,
+    @FechaInicio DATE,
+    @FechaFin DATE,
+    @Dias INT,
+    @Motivo NVARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO [rrhh].[PropuestasVacaciones] (EmpleadoID, FechaInicio, FechaFin, Dias, Motivo, Estado)
+    OUTPUT INSERTED.ID
+    VALUES (@EmpleadoID, @FechaInicio, @FechaFin, @Dias, @Motivo, 'Propuesta');
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_AprobarPropuestaVacaciones]
+    @PropuestaID INT,
+    @AprobadoPor INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @EmpID INT, @Ini DATE, @Fin DATE, @Dias INT, @Motivo NVARCHAR(255);
+    SELECT @EmpID = EmpleadoID, @Ini = FechaInicio, @Fin = FechaFin, @Dias = Dias, @Motivo = Motivo
+    FROM [rrhh].[PropuestasVacaciones] WHERE ID = @PropuestaID;
+
+    IF @EmpID IS NULL THROW 51055, 'Propuesta de vacaciones no encontrada.', 1;
+
+    UPDATE [rrhh].[PropuestasVacaciones]
+    SET Estado = 'Aprobada', AprobadoPor = @AprobadoPor, AprobadoEn = SYSUTCDATETIME()
+    WHERE ID = @PropuestaID;
+
+    INSERT INTO [rrhh].[LicenciasEmpleados] (EmpleadoID, TipoLicencia, FechaInicio, FechaFin, DiasOtorgados, PagoEmpleador, PagoINSS, Observaciones, AprobadoPor)
+    VALUES (@EmpID, 'Vacaciones', @Ini, @Fin, @Dias, 100.00, 0.00, ISNULL(@Motivo, 'Plan de Vacaciones Aprobado'), @AprobadoPor);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarPropuestasVacaciones]
+    @Anio INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT p.ID, p.EmpleadoID, e.NombreCompleto, e.Cargo, p.FechaInicio, p.FechaFin, p.Dias, p.Motivo, p.Estado, p.CreadoEn, p.AprobadoPor
+    FROM [rrhh].[PropuestasVacaciones] p
+    JOIN [rrhh].[Empleados] e ON p.EmpleadoID = e.ID
+    WHERE (@Anio IS NULL OR YEAR(p.FechaInicio) = @Anio)
+    ORDER BY p.FechaInicio ASC;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerHistoricoRentaAnualEmpleado]
+    @EmpleadoID INT,
+    @Anio INT,
+    @MesLimite INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        ISNULL(SUM(TotalDevengado - INSSLaboral), 0) AS RentaGravableAcumulada,
+        ISNULL(SUM(IRMensual), 0) AS IRRetenidoAcumulado,
+        COUNT(*) AS MesesCalculados
+    FROM [rrhh].[Nomina]
+    WHERE EmpleadoID = @EmpleadoID
+      AND YEAR(PeriodoFin) = @Anio
+      AND MONTH(PeriodoFin) < @MesLimite
+      AND Estado IN ('Contabilizada', 'Pagada');
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ActualizarNominaEstructurada]
+    @NominaID INT,
+    @Viaticos DECIMAL(18,2) = 0,
+    @DepreciacionVehiculo DECIMAL(18,2) = 0,
+    @Incentivos DECIMAL(18,2) = 0,
+    @RiesgoLaboral DECIMAL(18,2) = 0,
+    @SueldoExtraordinario DECIMAL(18,2) = 0,
+    @PrestamosDescontados DECIMAL(18,2) = 0,
+    @CobrosPerdidas DECIMAL(18,2) = 0,
+    @ProvisionVacaciones DECIMAL(18,2) = 0,
+    @ProvisionAguinaldo DECIMAL(18,2) = 0,
+    @ProvisionIndemnizacion DECIMAL(18,2) = 0,
+    @CostoTotalEmpresa DECIMAL(18,2) = 0,
+    @PromedioAsistencia DECIMAL(5,2) = NULL,
+    @PromedioPuntualidad DECIMAL(5,2) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE [rrhh].[Nomina]
+    SET Viaticos = @Viaticos,
+        DepreciacionVehiculo = @DepreciacionVehiculo,
+        Incentivos = @Incentivos,
+        RiesgoLaboral = @RiesgoLaboral,
+        SueldoExtraordinario = @SueldoExtraordinario,
+        PrestamosDescontados = @PrestamosDescontados,
+        CobrosPerdidas = @CobrosPerdidas,
+        ProvisionVacaciones = @ProvisionVacaciones,
+        ProvisionAguinaldo = @ProvisionAguinaldo,
+        ProvisionIndemnizacion = @ProvisionIndemnizacion,
+        CostoTotalEmpresa = @CostoTotalEmpresa,
+        PromedioAsistencia = @PromedioAsistencia,
+        PromedioPuntualidad = @PromedioPuntualidad
+    WHERE ID = @NominaID;
+END
+GO
+
+-- Permisos
+GRANT EXECUTE ON SCHEMA::[rrhh] TO [db_rol_superadmin];
+GRANT EXECUTE ON SCHEMA::[rrhh] TO [db_rol_gerencia];
+GO
+
+
+-- HR SPs extension
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerMetricasAsistenciaPeriodo]
+    @EmpleadoID INT,
+    @FechaInicio DATE,
+    @FechaFin DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        COUNT(*) AS TotalAsistencias,
+        SUM(CASE WHEN EstadoEntrada IN ('A Tiempo', 'Puntual') THEN 1 ELSE 0 END) AS Puntuales,
+        SUM(CASE WHEN EstadoEntrada IN ('Llegada Tardia', 'Tarde') THEN 1 ELSE 0 END) AS Tardanzas
+    FROM [rrhh].[Asistencia]
+    WHERE EmpleadoID = @EmpleadoID AND Fecha >= @FechaInicio AND Fecha <= @FechaFin;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerTotalVacacionesGozadasPorEmpleado]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT EmpleadoID, ISNULL(SUM(DiasOtorgados), 0) AS TotalGozadas
+    FROM [rrhh].[LicenciasEmpleados]
+    WHERE TipoLicencia = 'Vacaciones'
+    GROUP BY EmpleadoID;
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_InsertarPrestamoEmpleado]
+    @EmpleadoID INT,
+    @MontoTotal DECIMAL(18,2),
+    @CuotaMensual DECIMAL(18,2),
+    @SaldoPendiente DECIMAL(18,2),
+    @Motivo NVARCHAR(255),
+    @FechaInicio DATE,
+    @CreadoPor INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO [rrhh].[PrestamosEmpleados] (EmpleadoID, MontoTotal, CuotaMensual, SaldoPendiente, Motivo, FechaInicio, Estado, CreadoPor)
+    OUTPUT INSERTED.ID
+    VALUES (@EmpleadoID, @MontoTotal, @CuotaMensual, @SaldoPendiente, @Motivo, @FechaInicio, 'Activo', @CreadoPor);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_InsertarCobroPerdidaEmpleado]
+    @EmpleadoID INT,
+    @Descripcion NVARCHAR(255),
+    @MontoTotal DECIMAL(18,2),
+    @SaldoPendiente DECIMAL(18,2),
+    @CuotaMensual DECIMAL(18,2) = NULL,
+    @NumeroDocumento NVARCHAR(100) = NULL,
+    @FechaIncidente DATE,
+    @CreadoPor INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO [rrhh].[CobrosPerdidasEmpleados] (EmpleadoID, Descripcion, MontoTotal, SaldoPendiente, NumeroDocumento, FechaIncidente, Estado, CreadoPor)
+    OUTPUT INSERTED.ID
+    VALUES (@EmpleadoID, @Descripcion, @MontoTotal, @SaldoPendiente, @NumeroDocumento, @FechaIncidente, 'Pendiente', @CreadoPor);
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarTodosPrestamosActivos]
+    @EmpleadoID INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT p.ID, p.EmpleadoID, e.NombreCompleto, p.MontoTotal, p.CuotaMensual, p.SaldoPendiente, p.Motivo, p.FechaInicio, p.Estado
+    FROM [rrhh].[PrestamosEmpleados] p
+    JOIN [rrhh].[Empleados] e ON p.EmpleadoID = e.ID
+    WHERE (@EmpleadoID IS NULL OR p.EmpleadoID = @EmpleadoID) AND p.Estado = 'Activo';
+END
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ListarTodosCobrosPerdidasPendientes]
+    @EmpleadoID INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT c.ID, c.EmpleadoID, e.NombreCompleto, c.Descripcion, c.MontoTotal, c.SaldoPendiente, c.NumeroDocumento, c.FechaIncidente, c.Estado
+    FROM [rrhh].[CobrosPerdidasEmpleados] c
+    JOIN [rrhh].[Empleados] e ON c.EmpleadoID = e.ID
+    WHERE (@EmpleadoID IS NULL OR c.EmpleadoID = @EmpleadoID) AND c.Estado = 'Pendiente';
+END
+GO
+
+GRANT EXECUTE ON [rrhh].[sp_ObtenerMetricasAsistenciaPeriodo] TO [db_rol_superadmin];
+GRANT EXECUTE ON [rrhh].[sp_ObtenerMetricasAsistenciaPeriodo] TO [db_rol_gerencia];
+GRANT EXECUTE ON [rrhh].[sp_ObtenerTotalVacacionesGozadasPorEmpleado] TO [db_rol_superadmin];
+GRANT EXECUTE ON [rrhh].[sp_ObtenerTotalVacacionesGozadasPorEmpleado] TO [db_rol_gerencia];
+GRANT EXECUTE ON [rrhh].[sp_InsertarPrestamoEmpleado] TO [db_rol_superadmin];
+GRANT EXECUTE ON [rrhh].[sp_InsertarPrestamoEmpleado] TO [db_rol_gerencia];
+GRANT EXECUTE ON [rrhh].[sp_InsertarCobroPerdidaEmpleado] TO [db_rol_superadmin];
+GRANT EXECUTE ON [rrhh].[sp_InsertarCobroPerdidaEmpleado] TO [db_rol_gerencia];
+GRANT EXECUTE ON [rrhh].[sp_ListarTodosPrestamosActivos] TO [db_rol_superadmin];
+GRANT EXECUTE ON [rrhh].[sp_ListarTodosPrestamosActivos] TO [db_rol_gerencia];
+GRANT EXECUTE ON [rrhh].[sp_ListarTodosCobrosPerdidasPendientes] TO [db_rol_superadmin];
+GRANT EXECUTE ON [rrhh].[sp_ListarTodosCobrosPerdidasPendientes] TO [db_rol_gerencia];
+GO
+
+GRANT EXECUTE ON SCHEMA::rrhh TO [db_rol_superadmin];
+GRANT EXECUTE ON SCHEMA::rrhh TO [db_rol_gerencia];
+GRANT SELECT ON SCHEMA::rrhh TO [db_rol_superadmin];
+GRANT SELECT ON SCHEMA::rrhh TO [db_rol_gerencia];
+GRANT INSERT, UPDATE, DELETE ON OBJECT::[rrhh].[PropuestasVacaciones] TO [db_rol_superadmin];
+GRANT INSERT, UPDATE, DELETE ON OBJECT::[rrhh].[PropuestasVacaciones] TO [db_rol_gerencia];
+GRANT INSERT, UPDATE, DELETE ON OBJECT::[rrhh].[PrestamosEmpleados] TO [db_rol_superadmin];
+GRANT INSERT, UPDATE, DELETE ON OBJECT::[rrhh].[PrestamosEmpleados] TO [db_rol_gerencia];
+GRANT INSERT, UPDATE, DELETE ON OBJECT::[rrhh].[CobrosPerdidasEmpleados] TO [db_rol_superadmin];
+GRANT INSERT, UPDATE, DELETE ON OBJECT::[rrhh].[CobrosPerdidasEmpleados] TO [db_rol_gerencia];
+GRANT INSERT, UPDATE, DELETE ON OBJECT::[rrhh].[DetalleNomina] TO [db_rol_superadmin];
+GRANT INSERT, UPDATE, DELETE ON OBJECT::[rrhh].[DetalleNomina] TO [db_rol_gerencia];
+GO
+
+GO
+
+CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerAsistenciaConTurnoPorEmpleadoRango]
+    @EmpleadoID INT,
+    @FechaInicio DATE,
+    @FechaFin DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT a.Fecha, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada,
+           t.HoraEntrada AS TurnoEntrada, t.HoraSalida AS TurnoSalida
+    FROM [rrhh].[Asistencia] a
+    LEFT JOIN [rrhh].[TurnosLaborales] t ON a.TurnoID = t.ID
+    WHERE a.EmpleadoID = @EmpleadoID AND a.Fecha >= @FechaInicio AND a.Fecha <= @FechaFin
+    ORDER BY a.Fecha ASC;
+END
+
+GO
+GRANT EXECUTE ON [rrhh].[sp_ObtenerAsistenciaConTurnoPorEmpleadoRango] TO [db_rol_superadmin];
+GRANT EXECUTE ON [rrhh].[sp_ObtenerAsistenciaConTurnoPorEmpleadoRango] TO [db_rol_gerencia];
+GO

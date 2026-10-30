@@ -48,6 +48,7 @@ def calculate_sale(cursor, items, config):
         for key in ('fiscal_razon_social', 'fiscal_ruc', 'fiscal_direccion', 'fiscal_telefono', 'fiscal_autorizacion'):
             required_text(config.get(key), key.replace('fiscal_', ''), 255)
     lines = []
+    seen_cotizaciones = set()
     for item in items:
         if not isinstance(item, dict):
             raise ValueError('Línea de carrito inválida.')
@@ -56,18 +57,21 @@ def calculate_sale(cursor, items, config):
         cotizacion_id = None
         if raw_id.startswith('custom_'):
             cotizacion_id = positive_int(raw_id.split('_', 1)[1], 'Cotización')
+            if cotizacion_id in seen_cotizaciones:
+                raise ValueError('La cotización personalizada solo puede convertirse en factura una única vez.')
+            seen_cotizaciones.add(cotizacion_id)
             execute_sp(
                 cursor,
                 'crm.sp_ObtenerCotizacionParaCalculoVenta',
                 (cotizacion_id,),
                 fallback_sql=(
-                    "SELECT ID, Especificaciones, PrecioCotizado FROM Cotizaciones "
+                    "SELECT ID, Especificaciones, PrecioCotizado FROM Cotizaciones WITH (UPDLOCK, HOLDLOCK) "
                     "WHERE ID=? AND Estado IN ('Cotizada', 'Aceptada') AND PrecioCotizado IS NOT NULL"
                 ),
             )
             cot_row = cursor.fetchone()
-            if not cot_row:
-                raise ValueError('La cotización personalizada no existe o aún no tiene precio autorizado.')
+            if not cot_row or (len(cot_row) > 3 and cot_row[3] not in ('Cotizada', 'Aceptada')):
+                raise ValueError('La cotización personalizada no existe, ya fue facturada o aún no tiene precio autorizado.')
             execute_sp(
                 cursor,
                 'catalogo.sp_ObtenerProductoBaseParaCotizacion',

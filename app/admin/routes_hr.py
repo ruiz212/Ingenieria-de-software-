@@ -12,9 +12,25 @@ from app.db import get_db_connection, execute_sp
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime, date, timedelta
-from app.services.validation import amount, positive_int, required_text
-from app.services.hr_calculations import as_date, absent_dates, liquidation, can_mark_exit
+from decimal import Decimal
+from app.services.validation import amount, positive_int, required_text, validate_cedula_nicaragua, validate_telefono_nicaragua
+from app.services.hr_calculations import (
+    as_date, absent_dates, liquidation, can_mark_exit,
+    resolver_horario_y_clasificar_asistencia,
+)
+from app.services.payroll_engine import (
+    calcular_planilla_completa,
+    calcular_saldo_vacaciones_empleado,
+    generar_plan_recomendado_vacaciones,
+    calcular_tasa_provision_indemnizacion,
+)
 from app.services.business_time import business_now
+
+
+class _NominaConflictError(ValueError):
+    """Conflicto de estado / idempotencia en operaciones de nómina (HTTP 409)."""
+    pass
+
 
 def _fecha_contable_periodo(periodo_fin):
     """Retorna la fecha contable dentro del mes del período sin quedar en el futuro si es el mes en curso."""
@@ -25,6 +41,18 @@ def _fecha_contable_periodo(periodo_fin):
     return datetime(fin.year, fin.month, fin.day, 17, 0, 0)
 
 
+def _validar_no_periodo_futuro(inicio, fin, aguinaldo=False):
+    inicio_dt = as_date(inicio)
+    fin_dt = as_date(fin)
+    hoy = business_now().date()
+    if not aguinaldo:
+        if (inicio_dt.year, inicio_dt.month) > (hoy.year, hoy.month) or (fin_dt.year, fin_dt.month) > (hoy.year, hoy.month):
+            raise ValueError('No se puede generar ni contabilizar nómina para períodos futuros.')
+    else:
+        if fin_dt.year > hoy.year:
+            raise ValueError('No se puede generar ni contabilizar aguinaldo para años futuros.')
+
+
 def validar_periodo_nomina(cursor, empleado_id, inicio, fin, aguinaldo=False):
     inicio = date.fromisoformat(str(inicio)); fin = date.fromisoformat(str(fin))
     if not aguinaldo:
@@ -33,6 +61,7 @@ def validar_periodo_nomina(cursor, empleado_id, inicio, fin, aguinaldo=False):
             raise ValueError('El cálculo mensual requiere el primer y último día del mismo mes.')
     if fin < inicio:
         raise ValueError('El período final no puede ser anterior al inicial.')
+    _validar_no_periodo_futuro(inicio, fin, aguinaldo=aguinaldo)
     execute_sp(
         cursor,
         'rrhh.sp_ObtenerEmpleadoBloqueo',
@@ -58,6 +87,107 @@ def validar_periodo_nomina(cursor, empleado_id, inicio, fin, aguinaldo=False):
         'rrhh.sp_LimpiarBorradoresNominaPeriodo',
         (empleado_id, fin, inicio, 1 if aguinaldo else 0),
         fallback_sql=f"DELETE FROM Nomina WHERE EmpleadoID=? AND PeriodoInicio<=? AND PeriodoFin>=? AND SalarioBruto {comparison} 0 AND Estado = 'Borrador'",
+    )
+
+
+def _calcular_y_aplicar_vales_periodo(cursor, usuario_id, fecha_fin_periodo, neto_disponible):
+    """Filtra vales pendientes por Fecha <= fecha_fin_periodo y aplica hasta neto_disponible (orden cronológico)."""
+    neto_disp = max(Decimal('0.00'), amount(neto_disponible))
+    if not usuario_id or neto_disp <= Decimal('0.00'):
+        return Decimal('0.00')
+
+    fecha_fin_iso = as_date(fecha_fin_periodo).isoformat()
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ListarValesPendientesUsuarioHastaFecha',
+        (int(usuario_id), fecha_fin_iso),
+        fallback_sql=(
+            "SELECT ID, Monto, Fecha FROM ValesEmpleados "
+            "WHERE EmpleadoID = ? AND Descontado = 0 AND CAST(Fecha AS DATE) <= ? "
+            "ORDER BY Fecha ASC, ID ASC"
+        ),
+    )
+    rows = cursor.fetchall() or []
+    restante = neto_disp
+    total_descontado = Decimal('0.00')
+    completos_ids = []
+    parcial = None
+
+    for row in rows:
+        if restante <= Decimal('0.00'):
+            break
+        vid = getattr(row, 'ID', None)
+        monto_raw = getattr(row, 'Monto', None)
+        if vid is None and isinstance(row, (tuple, list)):
+            vid = row[0]
+            monto_raw = row[1] if len(row) > 1 else row[0]
+        monto_vale = amount(monto_raw or 0)
+        if monto_vale <= Decimal('0.00'):
+            continue
+        if monto_vale <= restante:
+            total_descontado += monto_vale
+            restante -= monto_vale
+            if vid is not None:
+                completos_ids.append(int(vid))
+        else:
+            aplicado = restante
+            nuevo_saldo = amount(monto_vale - aplicado)
+            total_descontado += aplicado
+            restante = Decimal('0.00')
+            if vid is not None:
+                parcial = (int(vid), nuevo_saldo)
+            break
+
+    for vid in completos_ids:
+        execute_sp(
+            cursor,
+            'contabilidad.sp_MarcarValeDescontadoPorID',
+            (vid,),
+            fallback_sql="UPDATE ValesEmpleados SET Descontado = 1 WHERE ID = ? AND Descontado = 0",
+        )
+    if parcial is not None:
+        vid, nuevo_saldo = parcial
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ActualizarSaldoValeParcialPorID',
+            (nuevo_saldo, vid),
+            fallback_sql="UPDATE ValesEmpleados SET Monto = ?, Descontado = 0 WHERE ID = ? AND Descontado = 0",
+        )
+
+    return amount(total_descontado)
+
+
+def _contabilizar_nomina_segura(cursor, usuario_id, nomina_id, empleado_nombre, salario_bruto,
+                                inss_laboral, ir_retenido, inss_patronal, inatec,
+                                pension_alimenticia=0, vales_descontados=0, salario_neto=0,
+                                cargo='Admin', ip=None, fecha=None,
+                                provision_vacaciones=0, provision_aguinaldo=0, provision_indemnizacion=0,
+                                deduccion_prestamos=0, cobro_perdidas=0, viaticos=0, depreciacion_vehiculo=0):
+    """Contabiliza la nómina integrando ingresos salariales/no salariales, deducciones y provisiones patronales."""
+    from app.services.contabilidad_service import ContabilidadService
+    return ContabilidadService.contabilizar_nomina(
+        cursor=cursor,
+        usuario_id=usuario_id,
+        nomina_id=nomina_id,
+        empleado_nombre=empleado_nombre,
+        salario_bruto=salario_bruto,
+        inss_laboral=inss_laboral,
+        ir_retenido=ir_retenido,
+        inss_patronal=inss_patronal,
+        inatec=inatec,
+        pension_alimenticia=pension_alimenticia,
+        vales_descontados=vales_descontados,
+        salario_neto=salario_neto,
+        cargo=cargo,
+        ip=ip,
+        fecha=fecha,
+        provision_vacaciones=provision_vacaciones,
+        provision_aguinaldo=provision_aguinaldo,
+        provision_indemnizacion=provision_indemnizacion,
+        deduccion_prestamos=deduccion_prestamos,
+        cobro_perdidas=cobro_perdidas,
+        viaticos=viaticos,
+        depreciacion_vehiculo=depreciacion_vehiculo,
     )
 
 
@@ -350,6 +480,11 @@ def crear_empleado():
         date.fromisoformat(str(datos['fecha_ingreso']))
     except ValueError:
         return jsonify(error='Fecha de ingreso inválida.'), 400
+    try:
+        cedula_validada = validate_cedula_nicaragua(datos.get('cedula'), field_name='Cédula', optional=False)
+        telefono_validado = validate_telefono_nicaragua(datos.get('telefono'), field_name='Teléfono', optional=True)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -391,9 +526,9 @@ def crear_empleado():
             cursor,
             'rrhh.sp_CrearEmpleado',
             (
-                datos.get('nombre'), datos.get('cedula'),
+                datos.get('nombre'), cedula_validada,
                 datos.get('fecha_nacimiento') or None, datos.get('genero') or None,
-                datos.get('direccion') or None, datos.get('telefono') or None,
+                datos.get('direccion') or None, telefono_validado or None,
                 datos.get('correo') or None, datos.get('numero_inss') or None,
                 datos.get('cargo'), datos.get('fecha_ingreso'),
                 datos.get('tipo_contrato', 'Indefinido'),
@@ -641,10 +776,11 @@ def incidentes_laborales():
     finally:
         conn.close()
 
-def obtener_dias_ausentes_auto(cursor, empleado_id, periodo_inicio, periodo_fin):
+def obtener_dias_ausentes_auto(cursor, empleado_id, periodo_inicio, periodo_fin, as_of_date=None):
     inicio, fin = as_date(periodo_inicio), as_date(periodo_fin)
     if fin < inicio:
         raise ValueError('El período final no puede ser anterior al inicial.')
+    cutoff = business_now().date() if as_of_date is None else as_date(as_of_date)
     execute_sp(
         cursor,
         'rrhh.sp_ObtenerFechasIngresoEgresoEmpleado',
@@ -657,6 +793,7 @@ def obtener_dias_ausentes_auto(cursor, empleado_id, periodo_inicio, periodo_fin)
     inicio = max(inicio, as_date(empleado.FechaIngreso))
     if empleado.FechaEgreso:
         fin = min(fin, as_date(empleado.FechaEgreso))
+    fin = min(fin, cutoff)
     if fin < inicio:
         return 0
     # Conservar la salvaguarda cuando la empresa no utilizó el módulo ese mes.
@@ -684,14 +821,185 @@ def obtener_dias_ausentes_auto(cursor, empleado_id, periodo_inicio, periodo_fin)
             "WHERE EmpleadoID = ? AND FechaInicio <= ? AND FechaFin >= ?"
         ),
     )
-    return len(absent_dates(inicio, fin, asistidas, cursor.fetchall()))
+    return len(absent_dates(inicio, fin, asistidas, cursor.fetchall(), as_of_date=cutoff))
 
+
+
+
+def _es_feriado_nacional_ni(d: date) -> bool:
+    """Identifica feriados nacionales de descanso obligatorio conforme al Art. 66 del Código del Trabajo de Nicaragua."""
+    if (d.month, d.day) in [(1, 1), (5, 1), (7, 19), (9, 14), (9, 15), (12, 8), (12, 25)]:
+        return True
+    y = d.year
+    a = y % 19
+    b = y // 100
+    c = y % 100
+    d_div = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d_div - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    domingo_pascua = date(y, month, day)
+    return d == domingo_pascua - timedelta(days=3) or d == domingo_pascua - timedelta(days=2)
+
+
+@admin_bp.route('/api/rrhh/nomina/precargar_datos', methods=['GET'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def precargar_datos_nomina_individual():
+    """Calcula y devuelve automáticamente horas extras, feriados trabajados, ausencias, préstamos y cobros por pérdidas."""
+    empleado_id = request.args.get('empleado_id', type=int)
+    inicio_str = request.args.get('periodo_inicio')
+    fin_str = request.args.get('periodo_fin')
+
+    if not empleado_id or not inicio_str or not fin_str:
+        return jsonify({'error': 'Parámetros empleado_id, periodo_inicio y periodo_fin son requeridos.'}), 400
+
+    try:
+        inicio = datetime.strptime(inicio_str, '%Y-%m-%d').date()
+        fin = datetime.strptime(fin_str, '%Y-%m-%d').date()
+    except Exception:
+        return jsonify({'error': 'Formato de fecha inválido. Utilice YYYY-MM-DD.'}), 400
+
+    if fin < inicio:
+        return jsonify({'error': 'El período final no puede ser anterior al inicial.'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerEmpleadoActivoCompleto',
+            (empleado_id,),
+            fallback_sql="SELECT ID, NombreCompleto, Cargo, SalarioBase, FechaIngreso FROM Empleados WHERE ID = ? AND EstadoEmpleado = 'Activo'"
+        )
+        emp = cursor.fetchone()
+        if not emp:
+            return jsonify({'error': 'Empleado no encontrado o inactivo.'}), 404
+
+        salario_base = float(emp.SalarioBase)
+        salario_diario = salario_base / 30.0
+
+        # 1. Días Ausentes automáticos
+        try:
+            dias_ausentes = obtener_dias_ausentes_auto(cursor, empleado_id, inicio, fin)
+        except Exception:
+            dias_ausentes = 0
+
+        # 2. Préstamos activos
+        execute_sp(
+            cursor,
+            'rrhh.sp_ListarPrestamosActivosEmpleado',
+            (empleado_id,),
+            fallback_sql="SELECT ID, MontoTotal, CuotaMensual, SaldoPendiente, Motivo FROM PrestamosEmpleados WHERE EmpleadoID = ? AND Estado = 'Activo' AND SaldoPendiente > 0"
+        )
+        prestamos_rows = cursor.fetchall() or []
+        cuota_prestamos = sum(float(min(p.CuotaMensual, p.SaldoPendiente)) for p in prestamos_rows)
+        prestamos_info = [{
+            'id': p.ID,
+            'cuota': float(p.CuotaMensual),
+            'saldo': float(p.SaldoPendiente),
+            'motivo': getattr(p, 'Motivo', '')
+        } for p in prestamos_rows]
+
+        # 3. Cobros por pérdidas pendientes
+        execute_sp(
+            cursor,
+            'rrhh.sp_ListarCobrosPerdidasPendientesEmpleado',
+            (empleado_id,),
+            fallback_sql="SELECT ID, Descripcion, MontoTotal, SaldoPendiente FROM CobrosPerdidasEmpleados WHERE EmpleadoID = ? AND Estado = 'Pendiente' AND SaldoPendiente > 0"
+        )
+        perdidas_rows = cursor.fetchall() or []
+        saldo_perdidas = sum(float(p.SaldoPendiente) for p in perdidas_rows)
+        cuota_perdidas = min(saldo_perdidas, round(salario_base * 0.10, 2))
+        perdidas_info = [{
+            'id': p.ID,
+            'descripcion': p.Descripcion,
+            'saldo': float(p.SaldoPendiente)
+        } for p in perdidas_rows]
+
+        # 4. Asistencia: Horas Extras y Feriados Trabajados
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerAsistenciaConTurnoPorEmpleadoRango',
+            (empleado_id, str(inicio), str(fin)),
+            fallback_sql="""
+                SELECT a.Fecha, a.HoraEntrada, a.HoraSalida, a.EstadoEntrada,
+                       t.HoraEntrada AS TurnoEntrada, t.HoraSalida AS TurnoSalida
+                FROM Asistencia a
+                LEFT JOIN TurnosLaborales t ON a.TurnoID = t.ID
+                WHERE a.EmpleadoID = ? AND a.Fecha >= ? AND a.Fecha <= ?
+            """
+        )
+        asistencias = cursor.fetchall() or []
+        horas_extras = 0.0
+        feriados_trabajados = 0
+
+        for r in asistencias:
+            f = as_date(r.Fecha)
+            if _es_feriado_nacional_ni(f):
+                feriados_trabajados += 1
+
+            if r.HoraEntrada and r.HoraSalida:
+                try:
+                    dt_in = datetime.combine(f, r.HoraEntrada)
+                    dt_out = datetime.combine(f, r.HoraSalida)
+                    if dt_out < dt_in:
+                        dt_out += timedelta(days=1)
+                    hrs_trabajadas = (dt_out - dt_in).total_seconds() / 3600.0
+
+                    turno_duracion = 8.0
+                    if getattr(r, 'TurnoSalida', None) and getattr(r, 'TurnoEntrada', None):
+                        s_in = datetime.combine(f, r.TurnoEntrada)
+                        s_out = datetime.combine(f, r.TurnoSalida)
+                        if s_out < s_in:
+                            s_out += timedelta(days=1)
+                        turno_duracion = (s_out - s_in).total_seconds() / 3600.0
+
+                    he = max(0.0, hrs_trabajadas - turno_duracion)
+                    horas_extras += he
+                except Exception:
+                    pass
+
+        # 5. Sueldo extraordinario sugerido por feriados trabajados
+        sueldo_extraordinario = round(feriados_trabajados * salario_diario, 2)
+
+        return jsonify({
+            'status': 'success',
+            'empleado': {
+                'id': emp.ID,
+                'nombre': emp.NombreCompleto,
+                'cargo': emp.Cargo,
+                'salario_base': salario_base,
+            },
+            'automaticos': {
+                'horas_extras': round(horas_extras, 1),
+                'feriados_trabajados': feriados_trabajados,
+                'dias_ausentes': dias_ausentes,
+                'sueldo_extraordinario': sueldo_extraordinario,
+                'deduccion_prestamos': round(cuota_prestamos, 2),
+                'cobros_perdidas': round(cuota_perdidas, 2),
+                'prestamos_info': prestamos_info,
+                'perdidas_info': perdidas_info,
+            }
+        })
+    except Exception as e:
+        current_app.logger.exception('Error al precargar datos de nómina individual')
+        return jsonify({'error': 'Error al precargar datos automáticos de nómina.'}), 500
+    finally:
+        conn.close()
 
 @admin_bp.route('/api/rrhh/nomina/calcular', methods=['POST'])
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def calcular_nomina():
-    datos = request.json
+    datos = request.json or {}
     empleado_id = datos.get('empleado_id')
     periodo_inicio = datos.get('periodo_inicio')
     periodo_fin = datos.get('periodo_fin')
@@ -746,67 +1054,144 @@ def calcular_nomina():
         monto_horas_extras = horas_extras * hora_ordinaria * 2
         monto_feriados = dias_feriados_trabajados * salario_diario
         monto_ausencias = dias_ausentes * salario_diario * 1.1667
-        salario_base_efectivo = salario_base - monto_ausencias
+        salario_base_efectivo = max(0.0, salario_base - monto_ausencias)
 
-        total_devengado = salario_base_efectivo + monto_horas_extras + monto_feriados + otros_ingresos
+        # Campos Parte 1: Ingresos adicionales salariales y no salariales
+        incentivos = float(amount(datos.get('incentivos', 0)))
+        sueldo_extraordinario = float(amount(datos.get('sueldo_extraordinario', monto_feriados)))
+        riesgo_laboral = float(amount(datos.get('riesgo_laboral', 0)))
+        viaticos = float(amount(datos.get('viaticos', 0)))
+        depreciacion_vehiculo = float(amount(datos.get('depreciacion_vehiculo', 0)))
 
-        inss_laboral = total_devengado * (tasa_inss_laboral / 100)
+        total_devengado_salarial = salario_base_efectivo + monto_horas_extras + sueldo_extraordinario + incentivos + riesgo_laboral + otros_ingresos
+        if total_devengado_salarial <= 0:
+            raise ValueError('Revise las ausencias: no hay salario devengado para contabilizar.')
 
-        renta_neta_mensual = total_devengado - inss_laboral
-        renta_neta_anual = renta_neta_mensual * 12
+        inss_laboral = total_devengado_salarial * (tasa_inss_laboral / 100)
 
-        ir_anual = 0
-        tabla_ir = json.loads(config.get('ir_tabla', '[]'))
-        for estrato in tabla_ir:
-            if renta_neta_anual >= estrato['desde'] and renta_neta_anual <= estrato['hasta']:
-                ir_anual = ((renta_neta_anual - estrato['exceso']) * estrato['tasa'] / 100) + estrato['base']
-                break
+        # IR Ley 822 acumulado
+        periodo_fin_dt = as_date(periodo_fin)
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerHistoricoRentaAnualEmpleado',
+            (int(empleado_id), periodo_fin_dt.year, periodo_fin_dt.month),
+            fallback_sql="""
+                SELECT
+                    ISNULL(SUM(TotalDevengado - INSSLaboral), 0) AS RentaGravableAcumulada,
+                    ISNULL(SUM(IRMensual), 0) AS IRRetenidoAcumulado,
+                    COUNT(*) AS MesesCalculados
+                FROM Nomina
+                WHERE EmpleadoID = ? AND YEAR(PeriodoFin) = ? AND MONTH(PeriodoFin) < ?
+                  AND Estado IN ('Contabilizada', 'Pagada')
+            """
+        )
+        hist_ir = cursor.fetchone()
+        acum_gravable = float(hist_ir[0] or 0) if hist_ir else 0.0
+        ir_acum = float(hist_ir[1] or 0) if hist_ir else 0.0
 
-        ir_mensual = ir_anual / 12
+        if acum_gravable > 0 or (hist_ir and hist_ir[2] > 0):
+            from app.services.payroll_engine import calcular_ir_metodo_acumulado
+            gravable_mes = total_devengado_salarial - inss_laboral
+            ir_mensual = float(calcular_ir_metodo_acumulado(gravable_mes, acum_gravable, ir_acum, periodo_fin_dt.month))
+            renta_neta_anual = (acum_gravable + gravable_mes) / periodo_fin_dt.month * 12
+        else:
+            renta_neta_mensual = total_devengado_salarial - inss_laboral
+            renta_neta_anual = renta_neta_mensual * 12
+            ir_anual = 0
+            tabla_ir = json.loads(config.get('ir_tabla', '[]'))
+            for estrato in tabla_ir:
+                if renta_neta_anual >= estrato['desde'] and renta_neta_anual <= estrato['hasta']:
+                    ir_anual = ((renta_neta_anual - estrato['exceso']) * estrato['tasa'] / 100) + estrato['base']
+                    break
+            ir_mensual = ir_anual / 12
 
-        vales_descontados = 0
-        if emp.UsuarioID:
-            execute_sp(
-                cursor,
-                'contabilidad.sp_ObtenerSumaValesPendientesUsuario',
-                (emp.UsuarioID,),
-                fallback_sql="SELECT ISNULL(SUM(Monto), 0) FROM ValesEmpleados WHERE EmpleadoID = ? AND Descontado = 0",
-            )
-            vales_pendientes = float(cursor.fetchone()[0])
-            vales_descontados = vales_pendientes
-
-        salario_neto_pre = total_devengado - inss_laboral - ir_mensual
+        salario_neto_pre = total_devengado_salarial - inss_laboral - ir_mensual
         pension_alimenticia = calcular_deducciones_judiciales(
             cursor, int(empleado_id), salario_neto_pre, periodo_fin
         )
 
-        total_deducciones = inss_laboral + ir_mensual + pension_alimenticia + vales_descontados
-        salario_neto = total_devengado - total_deducciones
+        neto_disponible_vales = max(Decimal('0.00'), amount(total_devengado_salarial) - amount(inss_laboral) - amount(ir_mensual) - amount(pension_alimenticia))
+        vales_descontados = _calcular_y_aplicar_vales_periodo(
+            cursor, getattr(emp, 'UsuarioID', None), periodo_fin, neto_disponible_vales
+        )
 
-        inss_patronal = total_devengado * (tasa_inss_patronal / 100)
-        inatec = total_devengado * (tasa_inatec / 100)
+        # Parte 2: Deducciones por préstamos y cobro por pérdidas
+        neto_disponible_prestamos = max(Decimal('0.00'), neto_disponible_vales - vales_descontados)
+        prestamos_rows = []
+        if 'deduccion_prestamo' in datos:
+            deduccion_prestamos = min(amount(datos['deduccion_prestamo']), neto_disponible_prestamos)
+        else:
+            execute_sp(
+                cursor,
+                'rrhh.sp_ListarPrestamosActivosEmpleado',
+                (int(empleado_id),),
+                fallback_sql="SELECT ID, MontoTotal, CuotaMensual, SaldoPendiente FROM PrestamosEmpleados WHERE EmpleadoID = ? AND Estado = 'Activo' AND SaldoPendiente > 0"
+            )
+            prestamos_rows = cursor.fetchall() or []
+            cuota_prestamos_total = sum(min(Decimal(str(p.CuotaMensual)), Decimal(str(p.SaldoPendiente))) for p in prestamos_rows)
+            deduccion_prestamos = min(cuota_prestamos_total, neto_disponible_prestamos)
 
-        salario_base_efectivo = float(amount(salario_base_efectivo, 'Salario efectivo'))
-        monto_horas_extras = float(amount(monto_horas_extras))
-        otros_ingresos = float(amount(otros_ingresos))
-        monto_feriados = float(amount(monto_feriados))
-        total_devengado = amount(salario_base_efectivo) + amount(monto_horas_extras) + amount(otros_ingresos) + amount(monto_feriados)
-        inss_laboral = amount(inss_laboral); ir_mensual = amount(ir_mensual)
-        pension_alimenticia = amount(pension_alimenticia); vales_descontados = amount(vales_descontados)
-        total_deducciones = inss_laboral + ir_mensual + pension_alimenticia + vales_descontados
-        salario_neto = amount(total_devengado - total_deducciones, 'Salario neto')
-        inss_patronal = amount(inss_patronal); inatec = amount(inatec)
-        if total_devengado <= 0:
-            raise ValueError('Revise las ausencias: no hay salario devengado para contabilizar.')
+        neto_disponible_perdidas = max(Decimal('0.00'), neto_disponible_prestamos - deduccion_prestamos)
+        perdidas_rows = []
+        tope_perdidas = round(amount(total_devengado_salarial) * Decimal('0.10'), 2)
+        if 'cobro_perdida' in datos:
+            cobros_perdidas = min(amount(datos['cobro_perdida']), neto_disponible_perdidas, tope_perdidas)
+        else:
+            execute_sp(
+                cursor,
+                'rrhh.sp_ListarCobrosPerdidasPendientesEmpleado',
+                (int(empleado_id),),
+                fallback_sql="SELECT ID, Descripcion, MontoTotal, SaldoPendiente FROM CobrosPerdidasEmpleados WHERE EmpleadoID = ? AND Estado = 'Pendiente' AND SaldoPendiente > 0"
+            )
+            perdidas_rows = cursor.fetchall() or []
+            cuota_perdidas_total = sum(Decimal(str(getattr(p, 'SaldoPendiente', 0))) for p in perdidas_rows)
+            cobros_perdidas = min(cuota_perdidas_total, neto_disponible_perdidas, tope_perdidas)
+
+        total_ingresos = amount(total_devengado_salarial) + amount(viaticos) + amount(depreciacion_vehiculo)
+        total_deducciones = amount(inss_laboral) + amount(ir_mensual) + amount(pension_alimenticia) + amount(vales_descontados) + amount(deduccion_prestamos) + amount(cobros_perdidas)
+        salario_neto = amount(max(Decimal('0.00'), total_ingresos - total_deducciones), 'Salario neto')
+
+        # Parte 3: Provisiones y cargas patronales
+        inss_patronal = round(amount(total_devengado_salarial) * Decimal(str(tasa_inss_patronal)) / Decimal('100'), 2)
+        inatec = round(amount(total_devengado_salarial) * Decimal(str(tasa_inatec)) / Decimal('100'), 2)
+        provision_vacaciones = round(amount(total_devengado_salarial) * Decimal('2.5') / Decimal('30'), 2)
+        provision_aguinaldo = round(amount(total_devengado_salarial) / Decimal('12'), 2)
+
+        fecha_ingreso = as_date(emp.FechaIngreso)
+        anios_antiguedad = max(0.0, (periodo_fin_dt - fecha_ingreso).days / 365.25)
+        tasa_indem = calcular_tasa_provision_indemnizacion(anios_antiguedad)
+        provision_indemnizacion = round(amount(total_devengado_salarial) * tasa_indem, 2)
+        total_patronal = inss_patronal + inatec + provision_vacaciones + provision_aguinaldo + provision_indemnizacion
+        costo_total_empresa = total_ingresos + total_patronal
+
+        # Métricas de asistencia
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerMetricasAsistenciaPeriodo',
+            (int(empleado_id), periodo_inicio, periodo_fin),
+            fallback_sql="""
+                SELECT
+                    COUNT(*) AS TotalAsistencias,
+                    SUM(CASE WHEN EstadoEntrada = 'A Tiempo' OR EstadoEntrada = 'Puntual' THEN 1 ELSE 0 END) AS Puntuales,
+                    SUM(CASE WHEN EstadoEntrada = 'Llegada Tardia' OR EstadoEntrada = 'Tarde' THEN 1 ELSE 0 END) AS Tardanzas
+                FROM Asistencia
+                WHERE EmpleadoID = ? AND Fecha >= ? AND Fecha <= ?
+            """
+        )
+        att_row = cursor.fetchone()
+        tot_asist = att_row[0] if att_row else 0
+        puntuales = att_row[1] if att_row and att_row[1] is not None else 0
+        promedio_asistencia = min(100.0, round((tot_asist / 30.0) * 100.0, 2)) if tot_asist > 0 else (100.0 if dias_ausentes == 0 else max(0.0, round(((30.0 - dias_ausentes) / 30.0) * 100.0, 2)))
+        promedio_puntualidad = round((puntuales / tot_asist) * 100.0, 2) if tot_asist > 0 else 100.0
 
         execute_sp(
             cursor,
             'rrhh.sp_InsertarNominaMensual',
             (
-                int(empleado_id), periodo_inicio, periodo_fin, salario_base_efectivo,
-                horas_extras, monto_horas_extras, (otros_ingresos + monto_feriados), total_devengado,
-                inss_laboral, ir_mensual, pension_alimenticia, vales_descontados,
-                total_deducciones, salario_neto, inss_patronal, inatec, current_user.id
+                int(empleado_id), periodo_inicio, periodo_fin, float(salario_base_efectivo),
+                horas_extras, float(monto_horas_extras), float(otros_ingresos + sueldo_extraordinario), float(total_devengado_salarial),
+                float(inss_laboral), float(ir_mensual), float(pension_alimenticia), float(vales_descontados),
+                float(total_deducciones), float(salario_neto), float(inss_patronal), float(inatec), current_user.id
             ),
             fallback_sql="""
             INSERT INTO Nomina (EmpleadoID, PeriodoInicio, PeriodoFin, SalarioBruto,
@@ -819,21 +1204,105 @@ def calcular_nomina():
         )
         nomina_id = cursor.fetchone()[0]
 
-        if vales_descontados > 0 and emp.UsuarioID:
-            execute_sp(
-                cursor,
-                'contabilidad.sp_MarcarValesDescontadosUsuario',
-                (emp.UsuarioID,),
-                fallback_sql="UPDATE ValesEmpleados SET Descontado = 1 WHERE EmpleadoID = ? AND Descontado = 0",
-            )
+        # Actualizar campos estructurados en rrhh.Nomina
+        execute_sp(
+            cursor,
+            'rrhh.sp_ActualizarNominaEstructurada',
+            (
+                nomina_id,
+                float(viaticos),
+                float(depreciacion_vehiculo),
+                float(incentivos),
+                float(riesgo_laboral),
+                float(sueldo_extraordinario),
+                float(deduccion_prestamos),
+                float(cobros_perdidas),
+                float(provision_vacaciones),
+                float(provision_aguinaldo),
+                float(provision_indemnizacion),
+                float(costo_total_empresa),
+                float(promedio_asistencia),
+                float(promedio_puntualidad),
+            ),
+            fallback_sql="""
+                UPDATE Nomina SET
+                    Viaticos = ?, DepreciacionVehiculo = ?, Incentivos = ?, RiesgoLaboral = ?,
+                    SueldoExtraordinario = ?, PrestamosDescontados = ?, CobrosPerdidas = ?,
+                    ProvisionVacaciones = ?, ProvisionAguinaldo = ?, ProvisionIndemnizacion = ?,
+                    CostoTotalEmpresa = ?, PromedioAsistencia = ?, PromedioPuntualidad = ?
+                WHERE ID = ?
+            """
+        )
 
-        from app.services.contabilidad_service import ContabilidadService
-        ContabilidadService.contabilizar_nomina(
+        # Detalle de ingresos
+        execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Sueldo Base Efectivo', 'Ingreso', float(salario_base_efectivo), 'Salario ordinario ajustado por ausencias'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Ingreso', ?, ?)")
+        if monto_horas_extras > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, f'Horas Extras ({horas_extras}h)', 'Ingreso', float(monto_horas_extras), 'Horas extras al 100%'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Ingreso', ?, ?)")
+        if sueldo_extraordinario > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Sueldo Extraordinario', 'Ingreso', float(sueldo_extraordinario), 'Feriados o descanso trabajado al doble'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Ingreso', ?, ?)")
+        if incentivos > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Incentivos', 'Ingreso', float(incentivos), 'Bonificaciones por productividad'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Ingreso', ?, ?)")
+        if riesgo_laboral > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Riesgo Laboral 1.5%', 'Ingreso', float(riesgo_laboral), 'Compensación por riesgo de puesto'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Ingreso', ?, ?)")
+        if otros_ingresos > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Otros Ingresos', 'Ingreso', float(otros_ingresos), 'Ingresos varios'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Ingreso', ?, ?)")
+        if viaticos > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Viáticos', 'Ingreso', float(viaticos), 'No salarial / rendición de gastos'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Ingreso', ?, ?)")
+        if depreciacion_vehiculo > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Depreciación de Vehículo', 'Ingreso', float(depreciacion_vehiculo), 'No salarial / depreciación herramienta trabajo'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Ingreso', ?, ?)")
+
+        # Detalle de deducciones
+        if float(inss_laboral) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, f'INSS Laboral ({tasa_inss_laboral}%)', 'Deduccion', float(inss_laboral), 'Aporte de seguridad social'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+        if float(ir_mensual) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'IR Laboral Ley 822', 'Deduccion', float(ir_mensual), 'Retención progresiva'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+        if float(pension_alimenticia) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Pensión Alimenticia / Embargo', 'Deduccion', float(pension_alimenticia), 'Orden judicial'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+        if float(vales_descontados) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Vales / Adelantos Descontados', 'Deduccion', float(vales_descontados), 'Anticipos recibidos en el período'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+        if float(deduccion_prestamos) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Deducción por Préstamos', 'Deduccion', float(deduccion_prestamos), 'Amortización cuota de préstamo'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+        if float(cobros_perdidas) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Cobro por Pérdidas', 'Deduccion', float(cobros_perdidas), 'Recuperación autorizada por mermas/pérdidas'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+
+        # Detalle de cargas y provisiones patronales
+        if float(inss_patronal) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, f'INSS Patronal ({tasa_inss_patronal}%)', 'Patronal', float(inss_patronal), 'Aporte patronal INSS'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Patronal', ?, ?)")
+        if float(inatec) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, f'INATEC ({tasa_inatec}%)', 'Patronal', float(inatec), 'Aporte patronal capacitación'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Patronal', ?, ?)")
+        if float(provision_vacaciones) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Provisión Vacaciones (8.33%)', 'Patronal', float(provision_vacaciones), '2.5 días por mes trabajado'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Patronal', ?, ?)")
+        if float(provision_aguinaldo) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Provisión Aguinaldo (8.33%)', 'Patronal', float(provision_aguinaldo), '1/12 por mes trabajado'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Patronal', ?, ?)")
+        if float(provision_indemnizacion) > 0:
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Provisión Indemnización', 'Patronal', float(provision_indemnizacion), 'Indemnización por antigüedad'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Patronal', ?, ?)")
+
+        # Registrar abonos a préstamos
+        if prestamos_rows and deduccion_prestamos > 0:
+            restante_abono = float(deduccion_prestamos)
+            for pr in prestamos_rows:
+                if restante_abono <= 0: break
+                abono = min(float(pr.CuotaMensual), float(pr.SaldoPendiente), restante_abono)
+                if abono > 0:
+                    execute_sp(cursor, 'rrhh.sp_RegistrarAbonoPrestamo', (pr.ID, abono), fallback_sql="UPDATE PrestamosEmpleados SET SaldoPendiente = CASE WHEN SaldoPendiente <= ? THEN 0 ELSE SaldoPendiente - ? END WHERE ID = ?")
+                    restante_abono -= abono
+
+        # Registrar deducciones por pérdidas
+        if perdidas_rows and cobros_perdidas > 0:
+            restante_cobro = float(cobros_perdidas)
+            for pd in perdidas_rows:
+                if restante_cobro <= 0: break
+                desc = min(float(getattr(pd, 'SaldoPendiente', 0)), restante_cobro)
+                if desc > 0:
+                    execute_sp(cursor, 'rrhh.sp_RegistrarCobroPerdida', (pd.ID, desc), fallback_sql="UPDATE CobrosPerdidasEmpleados SET SaldoPendiente = CASE WHEN SaldoPendiente <= ? THEN 0 ELSE SaldoPendiente - ? END WHERE ID = ?")
+                    restante_cobro -= desc
+
+        _contabilizar_nomina_segura(
             cursor=cursor,
             usuario_id=current_user.id,
             nomina_id=nomina_id,
             empleado_nombre=emp.NombreCompleto,
-            salario_bruto=total_devengado,
+            salario_bruto=total_devengado_salarial,
             inss_laboral=inss_laboral,
             ir_retenido=ir_mensual,
             inss_patronal=inss_patronal,
@@ -843,7 +1312,14 @@ def calcular_nomina():
             salario_neto=salario_neto,
             cargo=emp.Cargo,
             ip=request.remote_addr,
-            fecha=_fecha_contable_periodo(periodo_fin)
+            fecha=_fecha_contable_periodo(periodo_fin),
+            provision_vacaciones=provision_vacaciones,
+            provision_aguinaldo=provision_aguinaldo,
+            provision_indemnizacion=provision_indemnizacion,
+            deduccion_prestamos=deduccion_prestamos,
+            cobro_perdidas=cobros_perdidas,
+            viaticos=viaticos,
+            depreciacion_vehiculo=depreciacion_vehiculo,
         )
 
         conn.commit()
@@ -859,19 +1335,33 @@ def calcular_nomina():
                 'horas_extras': horas_extras,
                 'monto_horas_extras': round(monto_horas_extras, 2),
                 'otros_ingresos': otros_ingresos,
-                'total_devengado': round(total_devengado, 2),
-                'inss_laboral': round(inss_laboral, 2),
+                'total_devengado': round(float(total_devengado_salarial), 2),
+                'inss_laboral': round(float(inss_laboral), 2),
                 'tasa_inss_laboral': tasa_inss_laboral,
-                'ir_mensual': round(ir_mensual, 2),
-                'renta_neta_anual_proyectada': round(renta_neta_anual, 2),
-                'pension_alimenticia': round(pension_alimenticia, 2),
-                'vales_descontados': round(vales_descontados, 2),
-                'total_deducciones': round(total_deducciones, 2),
-                'salario_neto': round(salario_neto, 2),
-                'inss_patronal': round(inss_patronal, 2),
+                'ir_mensual': round(float(ir_mensual), 2),
+                'renta_neta_anual_proyectada': round(float(renta_neta_anual), 2),
+                'pension_alimenticia': round(float(pension_alimenticia), 2),
+                'vales_descontados': round(float(vales_descontados), 2),
+                'total_deducciones': round(float(total_deducciones), 2),
+                'salario_neto': round(float(salario_neto), 2),
+                'inss_patronal': round(float(inss_patronal), 2),
                 'tasa_inss_patronal': tasa_inss_patronal,
-                'inatec': round(inatec, 2),
-                'total_empleados': total_empleados
+                'inatec': round(float(inatec), 2),
+                'total_empleados': total_empleados,
+                # Campos Parte 1, 2 y 3
+                'viaticos': round(float(viaticos), 2),
+                'depreciacion_vehiculo': round(float(depreciacion_vehiculo), 2),
+                'incentivos': round(float(incentivos), 2),
+                'riesgo_laboral': round(float(riesgo_laboral), 2),
+                'sueldo_extraordinario': round(float(sueldo_extraordinario), 2),
+                'deduccion_prestamos': round(float(deduccion_prestamos), 2),
+                'cobros_perdidas': round(float(cobros_perdidas), 2),
+                'provision_vacaciones': round(float(provision_vacaciones), 2),
+                'provision_aguinaldo': round(float(provision_aguinaldo), 2),
+                'provision_indemnizacion': round(float(provision_indemnizacion), 2),
+                'costo_total_empresa': round(float(costo_total_empresa), 2),
+                'promedio_asistencia_pct': float(promedio_asistencia),
+                'promedio_puntualidad_pct': float(promedio_puntualidad),
             }
         })
     except ValueError as e:
@@ -980,7 +1470,7 @@ def reporte_liquidacion():
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def calcular_nomina_batch():
-    datos = request.json
+    datos = request.json or {}
     periodo_inicio = datos.get('periodo_inicio')
     periodo_fin = datos.get('periodo_fin')
     
@@ -1024,6 +1514,7 @@ def calcular_nomina_batch():
             raise ValueError('El cálculo mensual requiere el primer y último día del mismo mes.')
         if fin_dt < inicio_dt:
             raise ValueError('El período final no puede ser anterior al inicial.')
+        _validar_no_periodo_futuro(inicio_dt, fin_dt, aguinaldo=False)
 
         for emp in empleados:
             execute_sp(
@@ -1041,58 +1532,108 @@ def calcular_nomina_batch():
             
             dias_ausentes = obtener_dias_ausentes_auto(cursor, emp.ID, periodo_inicio, periodo_fin)
             monto_ausencias = dias_ausentes * salario_diario * 1.1667
-            salario_base_efectivo = max(0, salario_base - monto_ausencias)
+            salario_base_efectivo = max(0.0, salario_base - monto_ausencias)
             
-            total_devengado = salario_base_efectivo
+            total_devengado_salarial = salario_base_efectivo
+            if total_devengado_salarial <= 0:
+                raise ValueError(f'Revise las ausencias de {emp.NombreCompleto}: no hay salario devengado.')
             
-            inss_laboral = total_devengado * (tasa_inss_laboral / 100)
+            inss_laboral = total_devengado_salarial * (tasa_inss_laboral / 100)
             
-            renta_neta_anual = (total_devengado - inss_laboral) * 12
-            ir_anual = 0
-            for estrato in tabla_ir:
-                if renta_neta_anual >= estrato['desde'] and renta_neta_anual <= estrato['hasta']:
-                    ir_anual = ((renta_neta_anual - estrato['exceso']) * estrato['tasa'] / 100) + estrato['base']
-                    break
-            ir_mensual = ir_anual / 12
+            # IR Ley 822 acumulado
+            execute_sp(
+                cursor,
+                'rrhh.sp_ObtenerHistoricoRentaAnualEmpleado',
+                (emp.ID, fin_dt.year, fin_dt.month),
+                fallback_sql="""
+                    SELECT
+                        ISNULL(SUM(TotalDevengado - INSSLaboral), 0) AS RentaGravableAcumulada,
+                        ISNULL(SUM(IRMensual), 0) AS IRRetenidoAcumulado,
+                        COUNT(*) AS MesesCalculados
+                    FROM Nomina
+                    WHERE EmpleadoID = ? AND YEAR(PeriodoFin) = ? AND MONTH(PeriodoFin) < ?
+                      AND Estado IN ('Contabilizada', 'Pagada')
+                """
+            )
+            hist_ir = cursor.fetchone()
+            acum_gravable = float(hist_ir[0] or 0) if hist_ir else 0.0
+            ir_acum = float(hist_ir[1] or 0) if hist_ir else 0.0
+
+            if acum_gravable > 0 or (hist_ir and hist_ir[2] > 0):
+                from app.services.payroll_engine import calcular_ir_metodo_acumulado
+                gravable_mes = total_devengado_salarial - inss_laboral
+                ir_mensual = float(calcular_ir_metodo_acumulado(gravable_mes, acum_gravable, ir_acum, fin_dt.month))
+            else:
+                renta_neta_anual = (total_devengado_salarial - inss_laboral) * 12
+                ir_anual = 0
+                for estrato in tabla_ir:
+                    if renta_neta_anual >= estrato['desde'] and renta_neta_anual <= estrato['hasta']:
+                        ir_anual = ((renta_neta_anual - estrato['exceso']) * estrato['tasa'] / 100) + estrato['base']
+                        break
+                ir_mensual = ir_anual / 12
             
-            vales_descontados = 0
-            if emp.UsuarioID:
-                execute_sp(
-                    cursor,
-                    'contabilidad.sp_ObtenerSumaValesPendientesUsuario',
-                    (emp.UsuarioID,),
-                    fallback_sql="SELECT ISNULL(SUM(Monto), 0) FROM ValesEmpleados WHERE EmpleadoID = ? AND Descontado = 0",
-                )
-                vales_descontados = float(cursor.fetchone()[0])
-            
-            salario_neto_pre = total_devengado - inss_laboral - ir_mensual
+            salario_neto_pre = total_devengado_salarial - inss_laboral - ir_mensual
             pension_alimenticia = calcular_deducciones_judiciales(
                 cursor, emp.ID, salario_neto_pre, periodo_fin
             )
             
-            total_deducciones = inss_laboral + ir_mensual + pension_alimenticia + vales_descontados
-            salario_neto = total_devengado - total_deducciones
-            
-            inss_patronal = total_devengado * (tasa_inss_patronal / 100)
-            inatec = total_devengado * (tasa_inatec / 100)
-            
-            salario_base_efectivo = amount(salario_base_efectivo)
-            total_devengado = salario_base_efectivo
-            inss_laboral = amount(inss_laboral); ir_mensual = amount(ir_mensual)
-            pension_alimenticia = amount(pension_alimenticia); vales_descontados = amount(vales_descontados)
-            total_deducciones = inss_laboral + ir_mensual + pension_alimenticia + vales_descontados
-            salario_neto = amount(total_devengado - total_deducciones, 'Salario neto')
-            inss_patronal = amount(inss_patronal); inatec = amount(inatec)
-            if total_devengado <= 0:
-                raise ValueError(f'Revise las ausencias de {emp.NombreCompleto}: no hay salario devengado.')
+            neto_disponible_vales = max(Decimal('0.00'), amount(total_devengado_salarial) - amount(inss_laboral) - amount(ir_mensual) - amount(pension_alimenticia))
+            vales_descontados = _calcular_y_aplicar_vales_periodo(
+                cursor, getattr(emp, 'UsuarioID', None), periodo_fin, neto_disponible_vales
+            )
+
+            # Préstamos activos del empleado
+            neto_disponible_prestamos = max(Decimal('0.00'), neto_disponible_vales - vales_descontados)
+            execute_sp(
+                cursor,
+                'rrhh.sp_ListarPrestamosActivosEmpleado',
+                (emp.ID,),
+                fallback_sql="SELECT ID, MontoTotal, CuotaMensual, SaldoPendiente FROM PrestamosEmpleados WHERE EmpleadoID = ? AND Estado = 'Activo' AND SaldoPendiente > 0"
+            )
+            prestamos_rows = cursor.fetchall() or []
+            cuota_prestamos_total = sum(min(Decimal(str(p.CuotaMensual)), Decimal(str(p.SaldoPendiente))) for p in prestamos_rows)
+            deduccion_prestamos = min(cuota_prestamos_total, neto_disponible_prestamos)
+
+            # Cobros por pérdidas pendientes
+            neto_disponible_perdidas = max(Decimal('0.00'), neto_disponible_prestamos - deduccion_prestamos)
+            tope_perdidas = round(amount(total_devengado_salarial) * Decimal('0.10'), 2)
+            execute_sp(
+                cursor,
+                'rrhh.sp_ListarCobrosPerdidasPendientesEmpleado',
+                (emp.ID,),
+                fallback_sql="SELECT ID, Descripcion, MontoTotal, SaldoPendiente FROM CobrosPerdidasEmpleados WHERE EmpleadoID = ? AND Estado = 'Pendiente' AND SaldoPendiente > 0"
+            )
+            perdidas_rows = cursor.fetchall() or []
+            cuota_perdidas_total = sum(Decimal(str(getattr(p, 'SaldoPendiente', 0))) for p in perdidas_rows)
+            cobros_perdidas = min(cuota_perdidas_total, neto_disponible_perdidas, tope_perdidas)
+
+            total_deducciones = amount(inss_laboral) + amount(ir_mensual) + amount(pension_alimenticia) + amount(vales_descontados) + amount(deduccion_prestamos) + amount(cobros_perdidas)
+            salario_neto = amount(max(Decimal('0.00'), amount(total_devengado_salarial) - total_deducciones), 'Salario neto')
+
+            # Provisiones y cargas patronales
+            inss_patronal = round(amount(total_devengado_salarial) * Decimal(str(tasa_inss_patronal)) / Decimal('100'), 2)
+            inatec = round(amount(total_devengado_salarial) * Decimal(str(tasa_inatec)) / Decimal('100'), 2)
+            provision_vacaciones = round(amount(total_devengado_salarial) * Decimal('2.5') / Decimal('30'), 2)
+            provision_aguinaldo = round(amount(total_devengado_salarial) / Decimal('12'), 2)
+
+            fecha_ingreso = as_date(emp.FechaIngreso)
+            anios_antiguedad = max(0.0, (fin_dt - fecha_ingreso).days / 365.25)
+            tasa_indem = calcular_tasa_provision_indemnizacion(anios_antiguedad)
+            provision_indemnizacion = round(amount(total_devengado_salarial) * tasa_indem, 2)
+            total_patronal = inss_patronal + inatec + provision_vacaciones + provision_aguinaldo + provision_indemnizacion
+            costo_total_empresa = amount(total_devengado_salarial) + total_patronal
+
+            # Métricas de asistencia
+            promedio_asistencia = 100.0 if dias_ausentes == 0 else max(0.0, round(((30.0 - dias_ausentes) / 30.0) * 100.0, 2))
+            promedio_puntualidad = 100.0
 
             execute_sp(
                 cursor,
                 'rrhh.sp_InsertarNominaBatch',
                 (
-                    emp.ID, periodo_inicio, periodo_fin, salario_base_efectivo, total_devengado,
-                    inss_laboral, ir_mensual, pension_alimenticia, vales_descontados,
-                    total_deducciones, salario_neto, inss_patronal, inatec, current_user.id
+                    emp.ID, periodo_inicio, periodo_fin, float(salario_base_efectivo), float(total_devengado_salarial),
+                    float(inss_laboral), float(ir_mensual), float(pension_alimenticia), float(vales_descontados),
+                    float(total_deducciones), float(salario_neto), float(inss_patronal), float(inatec), current_user.id
                 ),
                 fallback_sql="""
                 INSERT INTO Nomina (EmpleadoID, PeriodoInicio, PeriodoFin, SalarioBruto,
@@ -1105,19 +1646,95 @@ def calcular_nomina_batch():
             )
             nomina_id = cursor.fetchone()[0]
             nomina_ids.append(nomina_id)
-            from app.services.contabilidad_service import ContabilidadService
-            ContabilidadService.contabilizar_nomina(cursor, current_user.id, nomina_id,
-                emp.NombreCompleto, total_devengado, inss_laboral, ir_mensual,
-                inss_patronal, inatec, pension_alimenticia, vales_descontados,
-                salario_neto, emp.Cargo, request.remote_addr, fecha=_fecha_contable_periodo(periodo_fin))
-            
-            if vales_descontados > 0 and emp.UsuarioID:
-                execute_sp(
-                    cursor,
-                    'contabilidad.sp_MarcarValesDescontadosUsuario',
-                    (emp.UsuarioID,),
-                    fallback_sql="UPDATE ValesEmpleados SET Descontado = 1 WHERE EmpleadoID = ? AND Descontado = 0",
-                )
+
+            # Actualizar campos extendidos
+            execute_sp(
+                cursor,
+                'rrhh.sp_ActualizarNominaEstructurada',
+                (
+                    nomina_id, 0.0, 0.0, 0.0, 0.0, 0.0,
+                    float(deduccion_prestamos), float(cobros_perdidas),
+                    float(provision_vacaciones), float(provision_aguinaldo), float(provision_indemnizacion),
+                    float(costo_total_empresa), float(promedio_asistencia), float(promedio_puntualidad),
+                ),
+                fallback_sql="""
+                    UPDATE Nomina SET
+                        Viaticos = 0, DepreciacionVehiculo = 0, Incentivos = 0, RiesgoLaboral = 0,
+                        SueldoExtraordinario = 0, PrestamosDescontados = ?, CobrosPerdidas = ?,
+                        ProvisionVacaciones = ?, ProvisionAguinaldo = ?, ProvisionIndemnizacion = ?,
+                        CostoTotalEmpresa = ?, PromedioAsistencia = ?, PromedioPuntualidad = ?
+                    WHERE ID = ?
+                """
+            )
+
+            # Insertar detalle nómina
+            execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Sueldo Base Efectivo', 'Ingreso', float(salario_base_efectivo), 'Salario ordinario ajustado'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Ingreso', ?, ?)")
+            if float(inss_laboral) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, f'INSS Laboral ({tasa_inss_laboral}%)', 'Deduccion', float(inss_laboral), 'Aporte de seguridad social'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+            if float(ir_mensual) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'IR Laboral Ley 822', 'Deduccion', float(ir_mensual), 'Retención progresiva'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+            if float(pension_alimenticia) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Pensión Alimenticia / Embargo', 'Deduccion', float(pension_alimenticia), 'Orden judicial'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+            if float(vales_descontados) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Vales / Adelantos Descontados', 'Deduccion', float(vales_descontados), 'Anticipos recibidos'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+            if float(deduccion_prestamos) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Deducción por Préstamos', 'Deduccion', float(deduccion_prestamos), 'Amortización préstamo'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+            if float(cobros_perdidas) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Cobro por Pérdidas', 'Deduccion', float(cobros_perdidas), 'Recuperación autorizada'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Deduccion', ?, ?)")
+            if float(inss_patronal) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, f'INSS Patronal ({tasa_inss_patronal}%)', 'Patronal', float(inss_patronal), 'Aporte patronal INSS'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Patronal', ?, ?)")
+            if float(inatec) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, f'INATEC ({tasa_inatec}%)', 'Patronal', float(inatec), 'Aporte patronal capacitación'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Patronal', ?, ?)")
+            if float(provision_vacaciones) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Provisión Vacaciones (8.33%)', 'Patronal', float(provision_vacaciones), '2.5 días por mes trabajado'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Patronal', ?, ?)")
+            if float(provision_aguinaldo) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Provisión Aguinaldo (8.33%)', 'Patronal', float(provision_aguinaldo), '1/12 por mes trabajado'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Patronal', ?, ?)")
+            if float(provision_indemnizacion) > 0:
+                execute_sp(cursor, 'rrhh.sp_InsertarDetalleNomina', (nomina_id, 'Provisión Indemnización', 'Patronal', float(provision_indemnizacion), 'Indemnización por antigüedad'), fallback_sql="INSERT INTO DetalleNomina (NominaID, Concepto, Tipo, Monto, Descripcion) VALUES (?, ?, 'Patronal', ?, ?)")
+
+            # Registrar abonos
+            if prestamos_rows and deduccion_prestamos > 0:
+                restante_abono = float(deduccion_prestamos)
+                for pr in prestamos_rows:
+                    if restante_abono <= 0: break
+                    abono = min(float(pr.CuotaMensual), float(pr.SaldoPendiente), restante_abono)
+                    if abono > 0:
+                        execute_sp(cursor, 'rrhh.sp_RegistrarAbonoPrestamo', (pr.ID, abono), fallback_sql="UPDATE PrestamosEmpleados SET SaldoPendiente = CASE WHEN SaldoPendiente <= ? THEN 0 ELSE SaldoPendiente - ? END WHERE ID = ?")
+                        restante_abono -= abono
+
+            if perdidas_rows and cobros_perdidas > 0:
+                restante_cobro = float(cobros_perdidas)
+                for pd in perdidas_rows:
+                    if restante_cobro <= 0: break
+                    desc = min(float(getattr(pd, 'SaldoPendiente', 0)), restante_cobro)
+                    if desc > 0:
+                        execute_sp(cursor, 'rrhh.sp_RegistrarCobroPerdida', (pd.ID, desc), fallback_sql="UPDATE CobrosPerdidasEmpleados SET SaldoPendiente = CASE WHEN SaldoPendiente <= ? THEN 0 ELSE SaldoPendiente - ? END WHERE ID = ?")
+                        restante_cobro -= desc
+
+            _contabilizar_nomina_segura(
+                cursor=cursor,
+                usuario_id=current_user.id,
+                nomina_id=nomina_id,
+                empleado_nombre=emp.NombreCompleto,
+                salario_bruto=total_devengado_salarial,
+                inss_laboral=inss_laboral,
+                ir_retenido=ir_mensual,
+                inss_patronal=inss_patronal,
+                inatec=inatec,
+                pension_alimenticia=pension_alimenticia,
+                vales_descontados=vales_descontados,
+                salario_neto=salario_neto,
+                cargo=emp.Cargo,
+                ip=request.remote_addr,
+                fecha=_fecha_contable_periodo(periodo_fin),
+                provision_vacaciones=provision_vacaciones,
+                provision_aguinaldo=provision_aguinaldo,
+                provision_indemnizacion=provision_indemnizacion,
+                deduccion_prestamos=deduccion_prestamos,
+                cobro_perdidas=cobros_perdidas,
+                viaticos=0,
+                depreciacion_vehiculo=0,
+            )
 
         if not nomina_ids and omitidos_contabilizados > 0:
             raise ValueError('Todos los empleados activos ya tienen su planilla generada y contabilizada para este período.')
@@ -1133,10 +1750,11 @@ def calcular_nomina_batch():
     except Exception as e:
         conn.rollback()
         import logging
-        logging.error(f"Internal server error in batch payroll: {e}")
-        return jsonify({'error': 'Error procesando la planilla batch. Rollback ejecutado.'}), 500
+        logging.error(f"Internal server error: {e}")
+        return jsonify({'error': 'Error interno del servidor al procesar la solicitud.'}), 500
     finally:
         conn.close()
+
 
 @admin_bp.route('/api/rrhh/aguinaldo/calcular_batch', methods=['POST'])
 @login_required
@@ -1279,6 +1897,7 @@ def contabilizar_nomina_borrador(nomina_id):
 
         from app.services.contabilidad_service import ContabilidadService
         es_aguinaldo = float(nom.SalarioBruto) == 0 and float(nom.OtrosIngresos) > 0
+        _validar_no_periodo_futuro(nom.PeriodoInicio, nom.PeriodoFin, aguinaldo=es_aguinaldo)
         if es_aguinaldo:
             asiento = ContabilidadService.contabilizar_aguinaldo(
                 cursor=cursor,
@@ -1291,7 +1910,7 @@ def contabilizar_nomina_borrador(nomina_id):
                 fecha=_fecha_contable_periodo(nom.PeriodoFin),
             )
         else:
-            asiento = ContabilidadService.contabilizar_nomina(
+            asiento = _contabilizar_nomina_segura(
                 cursor=cursor,
                 usuario_id=current_user.id,
                 nomina_id=nom.ID,
@@ -1331,6 +1950,664 @@ def contabilizar_nomina_borrador(nomina_id):
         return jsonify({'error': f'Error al contabilizar nómina: {str(e)}'}), 500
     finally:
         conn.close()
+
+
+def _desembolsar_nomina_individual(cursor, nomina_id, metodo_pago, usuario_id, ip):
+    """Ejecuta el desembolso verificable de una nómina Contabilizada dentro de la transacción activa."""
+    from app.services.contabilidad_service import ContabilidadService, ContabilidadError
+
+    metodo = str(metodo_pago or 'Efectivo').strip()
+    cuentas_origen = {
+        'Efectivo': ContabilidadService.CAJA_GENERAL_CS,
+        'Transferencia': ContabilidadService.BANCOS_MN,
+    }
+    if metodo not in cuentas_origen:
+        raise ValueError("Método de pago inválido. Use 'Efectivo' o 'Transferencia'.")
+    cuenta_pago = cuentas_origen[metodo]
+
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerNominaPorIDParaContabilizar',
+        (int(nomina_id),),
+        fallback_sql="""
+        SELECT n.ID, n.EmpleadoID, e.NombreCompleto, e.Cargo, e.SalarioBase, e.UsuarioID,
+               n.PeriodoInicio, n.PeriodoFin, n.SalarioBruto, n.HorasExtras, n.MontoHorasExtras,
+               n.OtrosIngresos, n.TotalDevengado, n.INSSLaboral, n.IRMensual,
+               n.PensionAlimenticia, n.ValesDescontados, n.TotalDeducciones,
+               n.SalarioNeto, n.INSSPatronal, n.INATEC, n.Estado
+        FROM Nomina n WITH (UPDLOCK, HOLDLOCK)
+        JOIN Empleados e ON n.EmpleadoID = e.ID
+        WHERE n.ID = ?
+    """,
+    )
+    nom = cursor.fetchone()
+    if not nom:
+        raise LookupError('Nómina no encontrada.')
+    if nom.Estado == 'Pagada':
+        raise _NominaConflictError(
+            f'La nómina #{nom.ID} ya se encuentra en estado Pagada. '
+            'Operación idempotente rechazada para evitar doble desembolso.'
+        )
+    if nom.Estado != 'Contabilizada':
+        raise ValueError(
+            f'Solo se pueden desembolsar nóminas en estado Contabilizada (estado actual: {nom.Estado}).'
+        )
+
+    ref_pago = f'PAG-NOM-{nom.ID}'
+    execute_sp(
+        cursor,
+        'rrhh.sp_VerificarAsientoPagoNominaExistente',
+        (ref_pago,),
+        fallback_sql="""
+        SELECT TOP 1 ID, NumeroComprobante
+        FROM AsientosDiario WITH (UPDLOCK, HOLDLOCK)
+        WHERE ReferenciaExterna = ? AND Estado = 'Contabilizado'
+        ORDER BY ID DESC
+    """,
+    )
+    if cursor.fetchone():
+        raise _NominaConflictError(
+            f'Ya existe un comprobante de pago contabilizado ({ref_pago}) para esta nómina.'
+        )
+
+    monto_neto = amount(nom.SalarioNeto, 'Salario neto')
+    asiento = None
+    if monto_neto > Decimal('0.00'):
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerSaldoDisponibleCuentaBloqueo',
+            (cuenta_pago,),
+            fallback_sql="""
+            SELECT ISNULL(SUM(d.Debe - d.Haber), 0) AS SaldoDisponible
+            FROM CatalogoCuentas c WITH (UPDLOCK, HOLDLOCK)
+            LEFT JOIN DetalleAsientos d WITH (UPDLOCK, HOLDLOCK) ON d.CuentaID = c.ID
+            LEFT JOIN AsientosDiario a WITH (UPDLOCK, HOLDLOCK)
+                ON a.ID = d.AsientoID AND a.Estado = 'Contabilizado'
+            WHERE c.Codigo = ? AND c.Activa = 1
+        """,
+        )
+        row_saldo = cursor.fetchone()
+        raw_saldo = row_saldo[0] if row_saldo and row_saldo[0] is not None else 0
+        saldo_disponible = Decimal(str(raw_saldo)).quantize(Decimal('0.01'))
+        if saldo_disponible < monto_neto:
+            raise ValueError(
+                f'Fondos insuficientes en {metodo} ({cuenta_pago}): '
+                f'disponible C${saldo_disponible:,.2f}, requerido C${monto_neto:,.2f}. '
+                'El desembolso fue rechazado y la nómina se mantiene Contabilizada.'
+            )
+
+        fecha_pago = _fecha_contable_periodo(nom.PeriodoFin)
+        try:
+            asiento = ContabilidadService.crear_asiento(
+                cursor=cursor,
+                descripcion=f'Pago de nómina #{nom.ID} - {nom.NombreCompleto} ({metodo})',
+                detalles=[
+                    (
+                        ContabilidadService.SUELDOS_POR_PAGAR,
+                        monto_neto,
+                        Decimal('0.00'),
+                        f'Cancelación sueldos por pagar {nom.NombreCompleto}',
+                    ),
+                    (
+                        cuenta_pago,
+                        Decimal('0.00'),
+                        monto_neto,
+                        f'Desembolso nómina #{nom.ID} ({metodo})',
+                    ),
+                ],
+                usuario_id=usuario_id,
+                tipo_comprobante='EG',
+                referencia_externa=ref_pago,
+                tipo_documento='PagoNomina',
+                ip=ip,
+                fecha=fecha_pago,
+            )
+        except ContabilidadError as cerr:
+            if 'cerrado' in str(cerr).lower():
+                asiento = ContabilidadService.crear_asiento(
+                    cursor=cursor,
+                    descripcion=f'Pago de nómina #{nom.ID} - {nom.NombreCompleto} ({metodo})',
+                    detalles=[
+                        (
+                            ContabilidadService.SUELDOS_POR_PAGAR,
+                            monto_neto,
+                            Decimal('0.00'),
+                            f'Cancelación sueldos por pagar {nom.NombreCompleto}',
+                        ),
+                        (
+                            cuenta_pago,
+                            Decimal('0.00'),
+                            monto_neto,
+                            f'Desembolso nómina #{nom.ID} ({metodo})',
+                        ),
+                    ],
+                    usuario_id=usuario_id,
+                    tipo_comprobante='EG',
+                    referencia_externa=ref_pago,
+                    tipo_documento='PagoNomina',
+                    ip=ip,
+                    fecha=business_now(),
+                )
+            else:
+                raise ValueError(str(cerr)) from cerr
+
+    execute_sp(
+        cursor,
+        'rrhh.sp_MarcarNominaPagada',
+        (int(nom.ID),),
+        fallback_sql="UPDATE Nomina SET Estado = 'Pagada' WHERE ID = ? AND Estado = 'Contabilizada'",
+    )
+
+    detalle_audit = json.dumps(
+        {
+            'nomina_id': int(nom.ID),
+            'empleado_id': int(nom.EmpleadoID),
+            'empleado': nom.NombreCompleto,
+            'salario_neto': float(monto_neto),
+            'metodo_pago': metodo,
+            'cuenta_origen': cuenta_pago,
+            'referencia_pago': ref_pago,
+            'asiento_id': asiento['asiento_id'] if asiento else None,
+            'numero_comprobante': asiento['numero_comprobante'] if asiento else None,
+        },
+        ensure_ascii=False,
+    )
+    execute_sp(
+        cursor,
+        'seguridad.sp_RegistrarAuditoria',
+        (
+            usuario_id,
+            'PAGO_NOMINA',
+            'Nomina',
+            int(nom.ID),
+            json.dumps({'Estado': 'Contabilizada'}, ensure_ascii=False),
+            detalle_audit,
+            ip,
+        ),
+        fallback_sql="""
+        INSERT INTO AuditLog (UsuarioID, Accion, Entidad, EntidadID, DatosAntes, DatosDespues, IP)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """,
+    )
+
+    return {
+        'nomina_id': int(nom.ID),
+        'empleado': nom.NombreCompleto,
+        'estado': 'Pagada',
+        'metodo_pago': metodo,
+        'cuenta_origen': cuenta_pago,
+        'monto_pagado': float(monto_neto),
+        'asiento_id': asiento['asiento_id'] if asiento else None,
+        'numero_comprobante': asiento['numero_comprobante'] if asiento else None,
+    }
+
+
+@admin_bp.route('/rrhh/nomina/pagar/<int:nomina_id>', methods=['POST'])
+@admin_bp.route('/api/rrhh/nomina/pagar/<int:nomina_id>', methods=['POST'])
+@admin_bp.route('/api/rrhh/nomina/<int:nomina_id>/pagar', methods=['POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def pagar_nomina(nomina_id):
+    """Desembolsa una nómina Contabilizada validando disponibilidad de Caja/Bancos e idempotencia."""
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        datos = request.form.to_dict() if request.form else {}
+    metodo_pago = datos.get('metodo_pago', 'Efectivo')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        resultado = _desembolsar_nomina_individual(
+            cursor=cursor,
+            nomina_id=nomina_id,
+            metodo_pago=metodo_pago,
+            usuario_id=current_user.id,
+            ip=request.remote_addr,
+        )
+        conn.commit()
+        comp_txt = f" ({resultado['numero_comprobante']})" if resultado['numero_comprobante'] else ''
+        msg = (
+            f"Nómina #{resultado['nomina_id']} de {resultado['empleado']} pagada "
+            f"por C${resultado['monto_pagado']:,.2f} vía {resultado['metodo_pago']}{comp_txt}."
+        )
+        return jsonify({
+            'status': 'success',
+            'mensaje': msg,
+            **resultado,
+        }), 200
+    except LookupError as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'error': str(e), 'mensaje': str(e)}), 404
+    except _NominaConflictError as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'error': str(e), 'mensaje': str(e)}), 409
+    except ValueError as e:
+        conn.rollback()
+        try:
+            flash(str(e), 'warning')
+        except Exception:
+            pass
+        return jsonify({'status': 'error', 'error': str(e), 'mensaje': str(e)}), 400
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.error(f"Error desembolsando nómina #{nomina_id}: {e}")
+        return jsonify({'status': 'error', 'error': f'Error interno al desembolsar nómina: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/rrhh/nomina/pagar-lote', methods=['POST'])
+@admin_bp.route('/api/rrhh/nomina/pagar-lote', methods=['POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def pagar_nomina_lote():
+    """Desembolsa un lote de nóminas en estado Contabilizada de forma atómica."""
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        datos = request.form.to_dict() if request.form else {}
+    metodo_pago = datos.get('metodo_pago', 'Efectivo')
+    nomina_ids = datos.get('nomina_ids')
+    periodo_inicio = datos.get('periodo_inicio')
+    periodo_fin = datos.get('periodo_fin')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if not nomina_ids and periodo_inicio and periodo_fin:
+            execute_sp(
+                cursor,
+                'rrhh.sp_ListarNominasContabilizadasPorPeriodoBloqueo',
+                (as_date(periodo_inicio), as_date(periodo_fin)),
+                fallback_sql=(
+                    "SELECT ID FROM Nomina WITH (UPDLOCK, HOLDLOCK) "
+                    "WHERE PeriodoInicio >= ? AND PeriodoFin <= ? AND Estado = 'Contabilizada' "
+                    "ORDER BY ID ASC"
+                ),
+            )
+            nomina_ids = [int(r[0]) for r in cursor.fetchall()]
+
+        if not nomina_ids or not isinstance(nomina_ids, (list, tuple)):
+            raise ValueError('No se encontraron nóminas en estado Contabilizada para desembolsar.')
+
+        pagadas = []
+        for nid in nomina_ids:
+            pagadas.append(
+                _desembolsar_nomina_individual(
+                    cursor=cursor,
+                    nomina_id=int(nid),
+                    metodo_pago=metodo_pago,
+                    usuario_id=current_user.id,
+                    ip=request.remote_addr,
+                )
+            )
+        conn.commit()
+        total_desembolsado = sum(item['monto_pagado'] for item in pagadas)
+        return jsonify({
+            'status': 'success',
+            'mensaje': f"Se desembolsaron {len(pagadas)} nóminas por un total de C${total_desembolsado:,.2f}.",
+            'pagadas': pagadas,
+            'total_desembolsado': round(total_desembolsado, 2),
+        }), 200
+    except LookupError as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'error': str(e), 'mensaje': str(e)}), 404
+    except _NominaConflictError as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'error': str(e), 'mensaje': str(e)}), 409
+    except ValueError as e:
+        conn.rollback()
+        try:
+            flash(str(e), 'warning')
+        except Exception:
+            pass
+        return jsonify({'status': 'error', 'error': str(e), 'mensaje': str(e)}), 400
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.error(f"Error desembolsando lote de nóminas: {e}")
+        return jsonify({'status': 'error', 'error': f'Error interno al desembolsar lote: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+# ==============================================================================
+# GESTIÓN DE VACACIONES, SALDOS Y RECOMENDACIÓN ROTATIVA SEMESTRAL
+# ==============================================================================
+
+@admin_bp.route('/api/rrhh/vacaciones/saldos', methods=['GET'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def obtener_saldos_vacaciones():
+    """Calcula el balance de vacaciones y semáforo de riesgo para todos los empleados activos."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        execute_sp(
+            cursor,
+            'rrhh.sp_ListarEmpleadosActivosCompletos',
+            fallback_sql="""
+                SELECT ID, NombreCompleto, Cargo, Cedula, FechaIngreso
+                FROM Empleados WHERE EstadoEmpleado = 'Activo'
+            """
+        )
+        empleados = cursor.fetchall()
+        
+        # Obtener vacaciones tomadas por empleado
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerTotalVacacionesGozadasPorEmpleado',
+            fallback_sql="""
+                SELECT EmpleadoID, ISNULL(SUM(DiasOtorgados), 0) AS TotalGozadas
+                FROM LicenciasEmpleados
+                WHERE TipoLicencia = 'Vacaciones'
+                GROUP BY EmpleadoID
+            """
+        )
+        gozadas_map = {row[0]: float(row[1]) for row in cursor.fetchall()}
+        
+        resultado = []
+        hoy = business_now().date()
+        for emp in empleados:
+            dias_gozados = gozadas_map.get(emp.ID, 0.0)
+            saldo = calcular_saldo_vacaciones_empleado(
+                fecha_ingreso=emp.FechaIngreso,
+                dias_gozados=dias_gozados,
+                as_of=hoy
+            )
+            saldo['empleado_id'] = emp.ID
+            saldo['nombre'] = emp.NombreCompleto
+            saldo['cargo'] = emp.Cargo
+            saldo['cedula'] = getattr(emp, 'Cedula', '')
+            saldo['fecha_ingreso'] = as_date(emp.FechaIngreso).isoformat()
+            resultado.append(saldo)
+            
+        return jsonify({'status': 'success', 'saldos': resultado})
+    except Exception as e:
+        current_app.logger.exception('Error al obtener saldos de vacaciones')
+        return jsonify({'error': 'Error interno al consultar saldos de vacaciones.'}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/rrhh/vacaciones/recomendar', methods=['POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def generar_recomendacion_vacaciones():
+    """Genera y guarda el plan sugerido de vacaciones rotativas para evitar acumulación."""
+    datos = request.get_json(silent=True) or {}
+    meses_proyeccion = int(datos.get('meses', 6))
+    guardar = bool(datos.get('guardar', True))
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        execute_sp(
+            cursor,
+            'rrhh.sp_ListarEmpleadosActivosCompletos',
+            fallback_sql="SELECT ID, NombreCompleto, Cargo, FechaIngreso FROM Empleados WHERE EstadoEmpleado = 'Activo'"
+        )
+        empleados = cursor.fetchall()
+        
+        execute_sp(
+            cursor,
+            'rrhh.sp_ObtenerTotalVacacionesGozadasPorEmpleado',
+            fallback_sql="""
+                SELECT EmpleadoID, ISNULL(SUM(DiasOtorgados), 0) AS TotalGozadas
+                FROM LicenciasEmpleados
+                WHERE TipoLicencia = 'Vacaciones'
+                GROUP BY EmpleadoID
+            """
+        )
+        gozadas_map = {row[0]: float(row[1]) for row in cursor.fetchall()}
+        
+        hoy = business_now().date()
+        saldos_empleados = []
+        for emp in empleados:
+            dias_gozados = gozadas_map.get(emp.ID, 0.0)
+            saldo = calcular_saldo_vacaciones_empleado(emp.FechaIngreso, dias_gozados, as_of=hoy)
+            saldos_empleados.append({
+                'empleado_id': emp.ID,
+                'nombre': emp.NombreCompleto,
+                'cargo': emp.Cargo,
+                'dias_disponibles': saldo['dias_disponibles'],
+                'alerta_semaforo': saldo['alerta_semaforo'],
+            })
+            
+        inicio_plan = hoy + timedelta(days=7)
+        propuestas = generar_plan_recomendado_vacaciones(
+            empleados_saldos=saldos_empleados,
+            fecha_inicio_plan=inicio_plan,
+            meses_proyeccion=meses_proyeccion,
+            max_por_cargo=1
+        )
+        
+        guardadas = []
+        if guardar:
+            for p in propuestas:
+                execute_sp(
+                    cursor,
+                    'rrhh.sp_GuardarPropuestaVacaciones',
+                    (p['empleado_id'], p['fecha_inicio'], p['fecha_fin'], p['dias'], p['motivo']),
+                    fallback_sql="""
+                        INSERT INTO PropuestasVacaciones (EmpleadoID, FechaInicio, FechaFin, Dias, Motivo, Estado)
+                        OUTPUT INSERTED.ID
+                        VALUES (?, ?, ?, ?, ?, 'Propuesta')
+                    """
+                )
+                row = cursor.fetchone() if cursor.description else None
+                prop_id = row[0] if row else None
+                p_copy = dict(p)
+                p_copy['id'] = prop_id
+                guardadas.append(p_copy)
+            conn.commit()
+        else:
+            guardadas = propuestas
+            
+        return jsonify({'status': 'success', 'propuestas': guardadas})
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.exception('Error al generar propuestas de vacaciones')
+        return jsonify({'error': 'Error interno al generar propuesta de vacaciones.'}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/rrhh/vacaciones/propuestas', methods=['GET'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def listar_propuestas_vacaciones():
+    """Lista propuestas de vacaciones registradas."""
+    anio = request.args.get('anio', type=int)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        execute_sp(
+            cursor,
+            'rrhh.sp_ListarPropuestasVacaciones',
+            (anio,),
+            fallback_sql="""
+                SELECT p.ID, p.EmpleadoID, e.NombreCompleto, e.Cargo, p.FechaInicio, p.FechaFin, p.Dias, p.Motivo, p.Estado, p.CreadoEn
+                FROM PropuestasVacaciones p
+                JOIN Empleados e ON p.EmpleadoID = e.ID
+                WHERE (? IS NULL OR YEAR(p.FechaInicio) = ?)
+                ORDER BY p.FechaInicio ASC
+            """
+        )
+        rows = cursor.fetchall() or []
+        res = []
+        for r in rows:
+            res.append({
+                'id': r[0],
+                'empleado_id': r[1],
+                'nombre': r[2],
+                'cargo': r[3],
+                'fecha_inicio': as_date(r[4]).isoformat(),
+                'fecha_fin': as_date(r[5]).isoformat(),
+                'dias': r[6],
+                'motivo': r[7],
+                'estado': r[8],
+            })
+        return jsonify({'status': 'success', 'propuestas': res})
+    except Exception as e:
+        current_app.logger.exception('Error al listar propuestas de vacaciones')
+        return jsonify({'error': 'Error al consultar propuestas.'}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/rrhh/vacaciones/aprobar/<int:propuesta_id>', methods=['POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def aprobar_propuesta_vacaciones(propuesta_id):
+    """Aprueba una propuesta de vacaciones y genera la licencia formal."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        execute_sp(
+            cursor,
+            'rrhh.sp_AprobarPropuestaVacaciones',
+            (propuesta_id, current_user.id),
+            fallback_sql="""
+                DECLARE @EmpID INT, @Ini DATE, @Fin DATE, @Dias INT, @Motivo NVARCHAR(255);
+                SELECT @EmpID = EmpleadoID, @Ini = FechaInicio, @Fin = FechaFin, @Dias = Dias, @Motivo = Motivo
+                FROM PropuestasVacaciones WHERE ID = ?;
+                UPDATE PropuestasVacaciones SET Estado = 'Aprobada', AprobadoPor = ?, AprobadoEn = CURRENT_TIMESTAMP WHERE ID = ?;
+                INSERT INTO LicenciasEmpleados (EmpleadoID, TipoLicencia, FechaInicio, FechaFin, DiasOtorgados, PagoEmpleador, PagoINSS, Observaciones, AprobadoPor)
+                VALUES (@EmpID, 'Vacaciones', @Ini, @Fin, @Dias, 100.00, 0.00, ISNULL(@Motivo, 'Plan de Vacaciones'), ?);
+            """
+        )
+        conn.commit()
+        return jsonify({'status': 'success', 'mensaje': 'Propuesta de vacaciones aprobada y registrada en licencias.'})
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.exception('Error al aprobar propuesta de vacaciones')
+        return jsonify({'error': 'Error al aprobar propuesta de vacaciones.'}), 500
+    finally:
+        conn.close()
+
+
+# ==============================================================================
+# GESTIÓN DE PRÉSTAMOS Y COBROS POR PÉRDIDAS
+# ==============================================================================
+
+@admin_bp.route('/api/rrhh/prestamos', methods=['GET', 'POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def gestionar_prestamos():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if request.method == 'POST':
+            datos = request.json or {}
+            empleado_id = positive_int(datos.get('empleado_id'), 'Empleado')
+            monto_total = float(amount(datos.get('monto_total'), 'Monto total'))
+            cuota_mensual = float(amount(datos.get('cuota_mensual'), 'Cuota mensual'))
+            motivo = required_text(datos.get('motivo', 'Préstamo a empleado'), 'Motivo', 200)
+            fecha_inicio = as_date(datos.get('fecha_inicio', business_now().date())).isoformat()
+            
+            execute_sp(
+                cursor,
+                'rrhh.sp_InsertarPrestamoEmpleado',
+                (empleado_id, monto_total, cuota_mensual, monto_total, motivo, fecha_inicio, current_user.id),
+                fallback_sql="""
+                    INSERT INTO PrestamosEmpleados (EmpleadoID, MontoTotal, CuotaMensual, SaldoPendiente, Motivo, FechaInicio, Estado, CreadoPor)
+                    OUTPUT INSERTED.ID
+                    VALUES (?, ?, ?, ?, ?, ?, 'Activo', ?)
+                """
+            )
+            prestamo_id = cursor.fetchone()[0]
+            conn.commit()
+            return jsonify({'status': 'success', 'mensaje': 'Préstamo registrado exitosamente.', 'id': prestamo_id})
+        else:
+            empleado_id = request.args.get('empleado_id', type=int)
+            execute_sp(
+                cursor,
+                'rrhh.sp_ListarTodosPrestamosActivos',
+                (empleado_id,),
+                fallback_sql="""
+                    SELECT p.ID, p.EmpleadoID, e.NombreCompleto, p.MontoTotal, p.CuotaMensual, p.SaldoPendiente, p.Motivo, p.FechaInicio, p.Estado
+                    FROM PrestamosEmpleados p
+                    JOIN Empleados e ON p.EmpleadoID = e.ID
+                    WHERE (? IS NULL OR p.EmpleadoID = ?) AND p.Estado = 'Activo'
+                """
+            )
+            rows = cursor.fetchall() or []
+            prestamos = [{
+                'id': r[0], 'empleado_id': r[1], 'nombre': r[2], 'monto_total': float(r[3]),
+                'cuota_mensual': float(r[4]), 'saldo_pendiente': float(r[5]), 'motivo': r[6],
+                'fecha_inicio': as_date(r[7]).isoformat(), 'estado': r[8]
+            } for r in rows]
+            return jsonify({'status': 'success', 'prestamos': prestamos})
+    except ValueError as ve:
+        conn.rollback()
+        return jsonify({'error': str(ve)}), 400
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.exception('Error al gestionar préstamos')
+        return jsonify({'error': 'Error interno en préstamos.'}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/rrhh/perdidas', methods=['GET', 'POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def gestionar_cobros_perdidas():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if request.method == 'POST':
+            datos = request.json or {}
+            empleado_id = positive_int(datos.get('empleado_id'), 'Empleado')
+            descripcion = required_text(datos.get('descripcion'), 'Descripción', 250)
+            monto_total = float(amount(datos.get('monto_total'), 'Monto total'))
+            cuota_mensual = float(amount(datos.get('cuota_mensual', monto_total), 'Cuota mensual'))
+            numero_documento = datos.get('numero_documento', '')
+            fecha_incidente = as_date(datos.get('fecha_incidente', business_now().date())).isoformat()
+            
+            execute_sp(
+                cursor,
+                'rrhh.sp_InsertarCobroPerdidaEmpleado',
+                (empleado_id, descripcion, monto_total, monto_total, cuota_mensual, numero_documento, fecha_incidente, current_user.id),
+                fallback_sql="""
+                    INSERT INTO CobrosPerdidasEmpleados (EmpleadoID, Descripcion, MontoTotal, SaldoPendiente, CuotaMensual, NumeroDocumento, FechaIncidente, Estado, CreadoPor)
+                    OUTPUT INSERTED.ID
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?)
+                """
+            )
+            cobro_id = cursor.fetchone()[0]
+            conn.commit()
+            return jsonify({'status': 'success', 'mensaje': 'Cobro por pérdida registrado exitosamente.', 'id': cobro_id})
+        else:
+            empleado_id = request.args.get('empleado_id', type=int)
+            execute_sp(
+                cursor,
+                'rrhh.sp_ListarTodosCobrosPerdidasPendientes',
+                (empleado_id,),
+                fallback_sql="""
+                    SELECT c.ID, c.EmpleadoID, e.NombreCompleto, c.Descripcion, c.MontoTotal, c.SaldoPendiente, c.NumeroDocumento, c.FechaIncidente, c.Estado
+                    FROM CobrosPerdidasEmpleados c
+                    JOIN Empleados e ON c.EmpleadoID = e.ID
+                    WHERE (? IS NULL OR c.EmpleadoID = ?) AND c.Estado = 'Pendiente'
+                """
+            )
+            rows = cursor.fetchall() or []
+            cobros = [{
+                'id': r[0], 'empleado_id': r[1], 'nombre': r[2], 'descripcion': r[3], 'monto_total': float(r[4]),
+                'saldo_pendiente': float(r[5]), 'cuota_mensual': float(r[6] or r[5]), 'numero_documento': r[7],
+                'fecha_incidente': as_date(r[8]).isoformat(), 'estado': r[9]
+            } for r in rows]
+            return jsonify({'status': 'success', 'cobros_perdidas': cobros})
+    except ValueError as ve:
+        conn.rollback()
+        return jsonify({'error': str(ve)}), 400
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.exception('Error al gestionar cobros por pérdidas')
+        return jsonify({'error': 'Error interno en cobros por pérdidas.'}), 500
+    finally:
+        conn.close()
+
 
 @admin_bp.route('/rrhh/nomina/<int:nomina_id>/colilla')
 @login_required
@@ -1385,7 +2662,23 @@ def colilla_pago(nomina_id):
             'salario_max_6m': round(salario_max_6m, 2)
         }
         
-    return render_template('admin/colilla_pago.html', nomina=nomina, datetime=datetime, aguinaldo_detalles=aguinaldo_detalles)
+    # Obtener detalles desglosados de DetalleNomina
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    execute_sp(
+        cursor,
+        'rrhh.sp_ObtenerDetallesNomina',
+        (nomina_id,),
+        fallback_sql="""
+            SELECT ID, NominaID, Concepto, Tipo, Monto, Descripcion
+            FROM DetalleNomina WHERE NominaID = ?
+            ORDER BY CASE Tipo WHEN 'Ingreso' THEN 1 WHEN 'Deduccion' THEN 2 WHEN 'Patronal' THEN 3 ELSE 4 END, ID ASC
+        """
+    )
+    detalles_rows = cursor.fetchall() or []
+    conn.close()
+
+    return render_template('admin/colilla_pago.html', nomina=nomina, datetime=datetime, aguinaldo_detalles=aguinaldo_detalles, detalles=detalles_rows)
 
 @admin_bp.route('/rrhh/reportes/inss_patronal')
 @login_required
@@ -1592,10 +2885,11 @@ def kiosco_marcar():
         execute_sp(
             cursor,
             'rrhh.sp_ObtenerTurnoLaboralActivoDefecto',
-            fallback_sql="SELECT TOP 1 ID, HoraEntrada, ToleranciaMinutos FROM TurnosLaborales WHERE Activo = 1",
+            fallback_sql="SELECT TOP 1 ID, HoraEntrada, ToleranciaMinutos FROM TurnosLaborales WHERE Activo = 1 ORDER BY ID ASC",
         )
         turno = cursor.fetchone()
-        turno_id = turno.ID if turno else 1
+        clasificacion = resolver_horario_y_clasificar_asistencia(empleado, turno, ahora)
+        turno_id = clasificacion['turno_id']
         
         execute_sp(
             cursor,
@@ -1610,20 +2904,7 @@ def kiosco_marcar():
                 return jsonify(status='success', tipo='entrada', repetido=True,
                                mensaje=f'Hola {nombre}, ya tienes entrada registrada hoy.')
                 
-            estado_entrada = 'A Tiempo'
-            from datetime import datetime as dt, timedelta
-            
-            if empleado.HoraEntrada:
-                hora_limite = (dt.combine(ahora.date(), empleado.HoraEntrada) + timedelta(minutes=15)).time()
-            elif turno:
-                hora_limite = (dt.combine(ahora.date(), turno.HoraEntrada) + timedelta(minutes=turno.ToleranciaMinutos or 0)).time()
-            else:
-                hora_limite = None
-
-            if hora_limite:
-                hora_actual = ahora.time()
-                if hora_actual > hora_limite:
-                    estado_entrada = 'Llegada Tardia'
+            estado_entrada = clasificacion['estado']
             
             if not asistencia:
                 execute_sp(

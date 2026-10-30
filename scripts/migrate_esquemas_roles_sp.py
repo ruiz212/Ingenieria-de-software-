@@ -10,11 +10,18 @@ import re
 from pathlib import Path
 import pyodbc
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 SQL_FILES = (
     '01_esquemas_migracion.sql',
     '02_roles_y_seguridad_bd.sql',
     '03_stored_procedures.sql',
     '04_alertas_outbox.sql',
+    '05_mercadotecnia.sql',
 )
 
 
@@ -46,13 +53,14 @@ def verify_target_database(connection, expected_db: str | None = None) -> str:
     return actual_db
 
 
-def migrate(connection, expected_db: str | None = None):
+def migrate(connection, expected_db: str | None = None, sql_files: tuple | list | None = None):
     verify_target_database(connection, expected_db)
     db_dir = Path(__file__).resolve().parents[1] / 'database'
     cursor = connection.cursor()
     cursor.execute("EXEC sys.sp_set_session_context @key=N'allow_ddl_migration', @value=1;")
+    files_to_run = sql_files if sql_files is not None else SQL_FILES
     try:
-        for filename in SQL_FILES:
+        for filename in files_to_run:
             sql_path = db_dir / filename
             sql_text = sql_path.read_text(encoding='utf-8')
             for batch in split_sql_batches(sql_text):
@@ -70,6 +78,7 @@ if __name__ == '__main__':
     group.add_argument('--connection-env', help='Variable de entorno con la cadena de conexión ODBC')
     group.add_argument('--connection-string', help='Cadena de conexión ODBC explícita')
     parser.add_argument('--expected-db', help='Nombre exacto esperado de la base de datos antes de aplicar cambios')
+    parser.add_argument('--file', help='Archivo SQL específico a ejecutar (opcional)')
     args = parser.parse_args()
 
     conn_str = os.environ.get(args.connection_env) if args.connection_env else args.connection_string
@@ -80,7 +89,8 @@ if __name__ == '__main__':
     conn = pyodbc.connect(conn_str)
     try:
         db_name = verify_target_database(conn, expected_db)
-        migrate(conn, expected_db=db_name)
+        target_files = (args.file,) if args.file else SQL_FILES
+        migrate(conn, expected_db=db_name, sql_files=target_files)
         conn.commit()
         print(f'Migración de esquemas, roles y Stored Procedures completada en [{db_name}].')
     except Exception:

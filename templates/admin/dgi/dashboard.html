@@ -84,7 +84,7 @@
       <option value="Validada">Validadas</option>
       <option value="Borrador">Borradores</option>
     </select>
-    <span id="dgi-revisions-counter" class="dgi-muted" style="margin-left: auto;">{{ reviews|length }} revisión(es)</span>
+    <span id="dgi-revisions-counter" class="dgi-muted">{{ reviews|length }} revisión(es)</span>
   </div>
   {% endif %}
   <div class="dgi-table"><table id="dgi-revisions-table"><thead><tr><th>Revisión</th><th>Propósito</th><th>Estado interno</th><th>Resultado</th><th>Fecha (Nicaragua)</th><th>Responsables</th></tr></thead><tbody>
@@ -93,7 +93,7 @@
     <td>{% if not r.actual %}Reglas anteriores; abra y revalide{% elif r.errores %}{{ r.errores }} {{ 'error' if r.errores==1 else 'errores' }} en los datos{% else %}Sin errores bloqueantes{% if r.pendientes %}<br><small>Configuración fiscal pendiente</small>{% endif %}{% endif %}</td>
     <td>{{ r.CreadoEn|dgi_time }}</td><td>Elaboró #{{ r.CreadoPor }}{% if r.AprobadoPor %}<br>Validó #{{ r.AprobadoPor }}{% endif %}</td>
   </tr>{% else %}<tr><td colspan="6">Aún no hay un diagnóstico en este mes. Use Analizar período.</td></tr>{% endfor %}
-  <tr id="dgi-revisions-no-match" class="hidden"><td colspan="6" class="dgi-muted" style="text-align: center; padding: 20px;">No se encontraron revisiones con los filtros seleccionados.</td></tr>
+  <tr id="dgi-revisions-no-match" class="hidden"><td colspan="6" class="dgi-muted text-center py-4">No se encontraron revisiones con los filtros seleccionados.</td></tr>
   </tbody></table></div>
 </section>
 <script>

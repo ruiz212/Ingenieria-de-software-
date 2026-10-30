@@ -41,7 +41,7 @@
   },
   "pages/customer/store": {
     "file": "dist/pages/customer/store.css",
-    "version": "5fab73a96ade"
+    "version": "aae2fffa2a4a"
   },
   "pages/admin/arqueos": {
     "file": "dist/pages/admin/arqueos.css",
@@ -81,7 +81,7 @@
   },
   "print/colilla_pago": {
     "file": "dist/print/colilla_pago.css",
-    "version": "beea3a351b40"
+    "version": "e66e7064e466"
   },
   "print/comprobante_imprimir": {
     "file": "dist/print/comprobante_imprimir.css",
@@ -98,6 +98,10 @@
   "pages/admin/estadistica": {
     "file": "dist/pages/admin/estadistica.css",
     "version": "5bd47000b6d7"
+  },
+  "pages/admin/mercadotecnia": {
+    "file": "dist/pages/admin/mercadotecnia.css",
+    "version": "e7416a7b592e"
   },
   "pages/admin/estado_resultados": {
     "file": "dist/pages/admin/estado_resultados.css",
@@ -141,7 +145,7 @@
   },
   "pages/admin/rrhh": {
     "file": "dist/pages/admin/rrhh.css",
-    "version": "232ba4feaf30"
+    "version": "f27369153cdd"
   },
   "pages/admin/setup_totp": {
     "file": "dist/pages/admin/setup_totp.css",

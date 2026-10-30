@@ -331,6 +331,70 @@
     </div>
 </div>
 
+<!-- Gestión de Vacaciones, Días Libres y Plan Rotativo Semestral -->
+<div class="panel panel-full panel-accent-primary mb-3" id="panel-vacaciones">
+    <div class="panel-header flex-between">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+            Gestión de Vacaciones, Días Libres y Plan Rotativo Semestral
+        </h3>
+        <div class="rrhh-nominas-controls">
+            <button type="button" class="btn btn-outline btn-sm" onclick="cargarSaldosVacaciones()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Actualizar Saldos
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="recomendarPlanVacaciones()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                Recomendar Plan Rotativo
+            </button>
+        </div>
+    </div>
+    <div class="panel-body">
+        <p class="subtitle mb-2">Monitoreo de acumulación de vacaciones de ley (2.5 días/mes, art. 76 Ley 185) con semáforo de riesgo y recomendador rotativo para evitar pasivos laborales acumulados.</p>
+        
+        <div class="table-responsive mb-3">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Colaborador</th>
+                        <th>Cargo</th>
+                        <th>Ingreso</th>
+                        <th>Días Devengados</th>
+                        <th>Días Gozados</th>
+                        <th>Días Disponibles</th>
+                        <th>Semáforo de Riesgo</th>
+                        <th>Días Vence Semestre</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-saldos-vacaciones">
+                    <tr><td colspan="8" class="text-center cell-muted">Cargando saldos de vacaciones...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4>Plan Sugerido de Vacaciones Rotativas</h4>
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Colaborador</th>
+                        <th>Cargo</th>
+                        <th>Fecha Inicio</th>
+                        <th>Fecha Fin</th>
+                        <th>Días</th>
+                        <th>Motivo / Prioridad</th>
+                        <th>Estado</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-propuestas-vacaciones">
+                    <tr><td colspan="8" class="text-center cell-muted">Sin propuestas pendientes. Haga clic en "Recomendar Plan Rotativo".</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <!-- Nóminas Recientes -->
 <div class="panel panel-full panel-accent-success">
     <div class="panel-header flex-between">
@@ -353,6 +417,10 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="rrhh-search-icon" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input type="search" id="filtro-nomina-colaborador" placeholder="Buscar colaborador..." class="form-input rrhh-nomina-search-input" oninput="aplicarFiltroNominasRRHH()" autocomplete="off">
             </div>
+            <select id="metodo-pago-nomina-rrhh" class="rrhh-filter-select" aria-label="Método de desembolso de nómina">
+                <option value="Efectivo">Desembolso: Efectivo (Caja General)</option>
+                <option value="Transferencia">Desembolso: Transferencia (Bancos MN)</option>
+            </select>
             <button class="btn btn-outline btn-sm" onclick="window.location.href='/admin/rrhh/reportes/inss_patronal'">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Reporte INSS Mensual
             </button>
@@ -392,7 +460,7 @@
                         <td class="cell-money text-success fw-700 rrhh-th-spacing">C${{ "{:,.2f}".format(n.neto) }}</td>
                         <td class="cell-money text-warning rrhh-th-spacing">C${{ "{:,.2f}".format((n.inss_patronal or 0) + (n.inatec or 0)) }}</td>
                         <td class="rrhh-th-spacing-2">
-                            <span class="badge {% if n.es_aguinaldo %}badge-primary{% elif n.estado in ['Pagada','Contabilizada'] %}badge-success{% elif n.estado == 'Borrador' %}badge-warning{% else %}badge-danger{% endif %}">{% if n.es_aguinaldo %}Aguinaldo ({{ n.estado }}){% else %}{{ n.estado }}{% endif %}</span>
+                            <span class="badge {% if n.es_aguinaldo %}badge-primary{% elif n.estado == 'Pagada' %}badge-success{% elif n.estado == 'Contabilizada' %}badge-warning{% elif n.estado == 'Borrador' %}badge-neutral{% else %}badge-danger{% endif %}">{% if n.es_aguinaldo %}Aguinaldo ({{ n.estado }}){% else %}{{ n.estado }}{% endif %}</span>
                         </td>
                         <td class="rrhh-th-spacing-2">
                             <div class="rrhh-actions-cell">
@@ -406,6 +474,11 @@
                                 {% elif n.estado == 'Borrador' %}
                                 <button type="button" class="btn btn-primary btn-sm" onclick="contabilizarNominaBorrador({{ n.id }})" title="Contabilizar en Diario NIIF">
                                     Contabilizar
+                                </button>
+                                {% endif %}
+                                {% if n.estado == 'Contabilizada' %}
+                                <button type="button" class="btn btn-primary btn-sm" onclick="pagarNominaContabilizada({{ n.id }})" title="Registrar desembolso y cancelar Sueldos por Pagar">
+                                    Pagar
                                 </button>
                                 {% endif %}
                             </div>
@@ -447,11 +520,11 @@
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">Cédula</label>
-                    <input type="text" id="ne-cedula" class="form-input" required>
+                    <input type="text" id="ne-cedula" class="form-input" placeholder="001-000000-0000A" data-mask="cedula" maxlength="16" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Teléfono</label>
-                    <input type="text" id="ne-telefono" class="form-input">
+                    <input type="tel" id="ne-telefono" class="form-input" placeholder="8888-8888" data-mask="telefono" maxlength="9">
                 </div>
             </div>
             <div class="form-row">
@@ -648,10 +721,17 @@
     <div class="modal-content rrhh-modal-content">
         <h2>Nómina Individual y Deducciones de Ley</h2>
         <p class="subtitle">Calcula retenciones (IR, INSS) y horas extras automáticamente.</p>
-        <form id="form-nomina">
+                <form id="form-nomina">
+            <div id="ni-auto-banner" class="rrhh-auto-banner hidden">
+                <div>
+                    <span class="rrhh-auto-badge">⚡ Cálculo Automático:</span>
+                    <span id="ni-auto-detalles" class="rrhh-auto-detalles">Seleccione empleado para calcular horas extras, ausencias y préstamos.</span>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" onclick="precargarDatosNominaIndividual()">↻ Recalcular</button>
+            </div>
             <div class="form-group">
                 <label class="form-label">Empleado</label>
-                <select id="ni-empleado" class="form-select" required>
+                <select id="ni-empleado" class="form-select" onchange="precargarDatosNominaIndividual()" required>
                     <option value="">Seleccione un empleado...</option>
                     {% for e in empleados %}
                         {% if e.estado == 'Activo' %}
@@ -720,6 +800,36 @@
                 <div class="form-group">
                     <label class="form-label">Otros Ingresos (C$)</label>
                     <input type="number" id="ni-otros-ingresos" class="form-input form-number" step="0.01" value="0">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Incentivos / Bonos (C$)</label>
+                    <input type="number" id="ni-incentivos" class="form-input form-number" step="0.01" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Sueldo Extraordinario (C$)</label>
+                    <input type="number" id="ni-sueldo-extra" class="form-input form-number" step="0.01" value="0" placeholder="Feriados al doble">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Viáticos (C$ - No Salarial)</label>
+                    <input type="number" id="ni-viaticos" class="form-input form-number" step="0.01" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Depreciación Vehículo (C$ - No Salarial)</label>
+                    <input type="number" id="ni-depreciacion" class="form-input form-number" step="0.01" value="0">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Deducción Préstamos (C$)</label>
+                    <input type="number" id="ni-prestamos" class="form-input form-number" step="0.01" value="0" placeholder="Auto si se omite">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cobros por Pérdidas (C$)</label>
+                    <input type="number" id="ni-perdidas" class="form-input form-number" step="0.01" value="0" placeholder="Auto si se omite">
                 </div>
             </div>
             <div class="modal-actions">
@@ -911,6 +1021,9 @@
         const rango = obtenerRangoMes(anioEl.value, mesEl.value);
         inicioEl.value = rango.inicio;
         finEl.value = rango.fin;
+        if (prefijo === 'ni' && typeof precargarDatosNominaIndividual === 'function') {
+            precargarDatosNominaIndividual();
+        }
     }
 
     function ajustarRangoMesDesdeFecha(prefijo) {
@@ -975,6 +1088,30 @@
                 setTimeout(() => location.reload(), 1000);
             } else {
                 showToast(result.error || 'Error al contabilizar nómina', true);
+            }
+        } catch (err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
+    }
+
+    async function pagarNominaContabilizada(id) {
+        const metodoEl = document.getElementById('metodo-pago-nomina-rrhh');
+        const metodoPago = metodoEl ? metodoEl.value : 'Efectivo';
+        showLoading();
+        try {
+            const res = await fetch(`/admin/rrhh/nomina/pagar/${id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ metodo_pago: metodoPago })
+            });
+            hideLoading();
+            const result = await res.json();
+            if (res.ok) {
+                showToast(result.mensaje || 'Nómina pagada y desembolsada');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(result.error || 'Error al desembolsar nómina', true);
             }
         } catch (err) {
             hideLoading();
@@ -1085,8 +1222,53 @@
         }
     });
 
-    function abrirModalNomina() {
+        async function precargarDatosNominaIndividual() {
+        const empEl = document.getElementById('ni-empleado');
+        const empId = empEl ? empEl.value : null;
+        const inicioEl = document.getElementById('ni-inicio');
+        const finEl = document.getElementById('ni-fin');
+        const inicio = inicioEl ? inicioEl.value : null;
+        const fin = finEl ? finEl.value : null;
+
+        const banner = document.getElementById('ni-auto-banner');
+        const detalles = document.getElementById('ni-auto-detalles');
+
+        if (!empId) {
+            if (banner) banner.classList.add('hidden');
+            return;
+        }
+
+        if (banner) banner.classList.remove('hidden');
+        if (detalles) detalles.textContent = 'Calculando automáticamente horas extras, feriados, ausencias y préstamos...';
+
+        try {
+            const resp = await fetch(`/admin/api/rrhh/nomina/precargar_datos?empleado_id=${encodeURIComponent(empId)}&periodo_inicio=${encodeURIComponent(inicio)}&periodo_fin=${encodeURIComponent(fin)}`);
+            const res = await resp.json();
+            if (resp.ok && res.status === 'success') {
+                const auto = res.automaticos;
+                document.getElementById('ni-horas-extras').value = auto.horas_extras || 0;
+                document.getElementById('ni-feriados').value = auto.feriados_trabajados || 0;
+                document.getElementById('ni-ausentes').value = auto.dias_ausentes || 0;
+                document.getElementById('ni-sueldo-extra').value = auto.sueldo_extraordinario || 0;
+                document.getElementById('ni-prestamos').value = auto.deduccion_prestamos || 0;
+                document.getElementById('ni-perdidas').value = auto.cobros_perdidas || 0;
+
+                let txt = `Ausencias: ${auto.dias_ausentes}d | Horas Extras: ${auto.horas_extras}h | Feriados: ${auto.feriados_trabajados}d`;
+                if (auto.deduccion_prestamos > 0) txt += ` | Préstamos: C$${auto.deduccion_prestamos}`;
+                if (auto.cobros_perdidas > 0) txt += ` | Pérdidas: C$${auto.cobros_perdidas}`;
+                txt += ' (Valores precargados, editables).';
+                if (detalles) detalles.textContent = txt;
+            } else {
+                if (detalles) detalles.textContent = 'Valores estándar cargados. Puede ajustarlos manualmente.';
+            }
+        } catch (e) {
+            if (detalles) detalles.textContent = 'No se pudo consultar el precálculo automático.';
+        }
+    }
+
+function abrirModalNomina() {
         inicializarSelectorMesActual('ni');
+        precargarDatosNominaIndividual();
         document.getElementById('modal-nomina').classList.remove('hidden');
     }
     function cerrarModalNomina() { document.getElementById('modal-nomina').classList.add('hidden'); }
@@ -1100,7 +1282,13 @@
             horas_extras: parseFloat(document.getElementById('ni-horas-extras').value) || 0,
             dias_feriados_trabajados: parseFloat(document.getElementById('ni-feriados').value) || 0,
             dias_ausentes: parseFloat(document.getElementById('ni-ausentes').value) || 0,
-            otros_ingresos: parseFloat(document.getElementById('ni-otros-ingresos').value) || 0
+            otros_ingresos: parseFloat(document.getElementById('ni-otros-ingresos').value) || 0,
+            incentivos: parseFloat(document.getElementById('ni-incentivos')?.value) || 0,
+            sueldo_extraordinario: parseFloat(document.getElementById('ni-sueldo-extra')?.value) || 0,
+            viaticos: parseFloat(document.getElementById('ni-viaticos')?.value) || 0,
+            depreciacion_vehiculo: parseFloat(document.getElementById('ni-depreciacion')?.value) || 0,
+            deduccion_prestamo: parseFloat(document.getElementById('ni-prestamos')?.value) || 0,
+            cobro_perdida: parseFloat(document.getElementById('ni-perdidas')?.value) || 0
         };
 
         const btn = document.getElementById('btn-submit-nomina');
@@ -1484,7 +1672,8 @@
                 showToast('Empleado registrado exitosamente');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast('Error al registrar empleado', true);
+                const errData = await res.json().catch(() => ({}));
+                showToast(errData.error || 'Error al registrar empleado', true);
             }
         } catch(err) {
             hideLoading();
@@ -1726,7 +1915,9 @@
             const cargo = card.dataset.cargo || '';
             const estado = card.dataset.estado || '';
 
-            const coincideQuery = !query || nombre.includes(query) || cedula.includes(query) || cargo.includes(query);
+            const cleanQ = query.replace(/[\s.-]/g, '');
+            const cleanC = cedula.replace(/[\s.-]/g, '');
+            const coincideQuery = !query || nombre.includes(query) || cedula.includes(query) || (cleanQ && cleanC.includes(cleanQ)) || cargo.includes(query);
             const coincideEstado = (estadoFiltroDossierActual === 'ALL' || estado === estadoFiltroDossierActual);
             const coincideCargo = (cargoFiltro === 'all' || cargo === cargoFiltro);
 
@@ -1761,9 +1952,122 @@
         if (elActivos) elActivos.textContent = activos;
         if (elLiquidados) elLiquidados.textContent = liquidados;
     }
+    // Funciones de Gestión y Recomendación de Vacaciones
+    async function cargarSaldosVacaciones() {
+        const tbody = document.getElementById('tbody-saldos-vacaciones');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center cell-muted">Cargando saldos de vacaciones...</td></tr>';
+        try {
+            const resp = await fetch('/admin/api/rrhh/vacaciones/saldos');
+            const data = await resp.json();
+            if (!resp.ok || !data.saldos || data.saldos.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center cell-muted">No se encontraron empleados activos.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.saldos.map(s => {
+                let badgeClass = 'badge-success';
+                if (s.alerta_semaforo === 'Amarillo') badgeClass = 'badge-warning';
+                else if (s.alerta_semaforo === 'Rojo') badgeClass = 'badge-danger';
+                return `<tr>
+                    <td class="cell-bold">${s.nombre}</td>
+                    <td class="cell-muted">${s.cargo}</td>
+                    <td>${s.fecha_ingreso}</td>
+                    <td class="text-right">${s.dias_devengados.toFixed(1)}</td>
+                    <td class="text-right">${s.dias_gozados.toFixed(1)}</td>
+                    <td class="text-right fw-600">${s.dias_disponibles.toFixed(1)}</td>
+                    <td><span class="badge ${badgeClass}">${s.alerta_semaforo}</span></td>
+                    <td class="text-right">${s.dias_para_vencer_semestre !== null ? s.dias_para_vencer_semestre + ' días' : 'Al día'}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center cell-danger">Error al cargar saldos.</td></tr>';
+        }
+    }
+
+    async function cargarPropuestasVacaciones() {
+        const tbody = document.getElementById('tbody-propuestas-vacaciones');
+        if (!tbody) return;
+        try {
+            const resp = await fetch('/admin/api/rrhh/vacaciones/propuestas');
+            const data = await resp.json();
+            if (!resp.ok || !data.propuestas || data.propuestas.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center cell-muted">Sin propuestas pendientes. Haga clic en "Recomendar Plan Rotativo".</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.propuestas.map(p => {
+                const btnAccion = p.estado === 'Propuesta' 
+                    ? `<button type="button" class="btn btn-outline btn-sm" onclick="aprobarPropuestaVacacion(${p.id})">Aprobar</button>`
+                    : `<span class="badge badge-success">Aprobada</span>`;
+                return `<tr>
+                    <td class="cell-bold">${p.nombre}</td>
+                    <td class="cell-muted">${p.cargo}</td>
+                    <td>${p.fecha_inicio}</td>
+                    <td>${p.fecha_fin}</td>
+                    <td class="text-right">${p.dias}</td>
+                    <td>${p.motivo}</td>
+                    <td><span class="badge ${p.estado === 'Aprobada' ? 'badge-success' : 'badge-warning'}">${p.estado}</span></td>
+                    <td>${btnAccion}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center cell-danger">Error al cargar propuestas.</td></tr>';
+        }
+    }
+
+    async function recomendarPlanVacaciones() {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        try {
+            const resp = await fetch('/admin/api/rrhh/vacaciones/recomendar', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ meses: 6, guardar: true })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                if (data.propuestas && data.propuestas.length > 0) {
+                    if (typeof showToast === 'function') showToast(`Plan rotativo generado con éxito (${data.propuestas.length} propuestas)`, 'success');
+                } else {
+                    if (typeof showToast === 'function') showToast('Todos los colaboradores están al día en sus vacaciones. No se requieren períodos forzosos actualmente.', 'info');
+                }
+                cargarPropuestasVacaciones();
+                cargarSaldosVacaciones();
+            } else {
+                alert(data.error || 'Error al generar plan rotativo');
+            }
+        } catch (err) {
+            alert('Error de conexión al generar plan rotativo.');
+        }
+    }
+
+    async function aprobarPropuestaVacacion(propuestaId) {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (!confirm('¿Desea aprobar esta propuesta de vacaciones y generar la licencia oficial?')) return;
+        try {
+            const resp = await fetch(`/admin/api/rrhh/vacaciones/aprobar/${propuestaId}`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken }
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                if (typeof showToast === 'function') showToast(data.mensaje || 'Vacación aprobada', 'success');
+                cargarPropuestasVacaciones();
+                cargarSaldosVacaciones();
+            } else {
+                alert(data.error || 'Error al aprobar vacación');
+            }
+        } catch (err) {
+            alert('Error al comunicarse con el servidor.');
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         actualizarContadoresDossier();
         inicializarCustomDropdownCargo();
+        cargarSaldosVacaciones();
+        cargarPropuestasVacaciones();
     });
 </script>
 {% endblock %}

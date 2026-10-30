@@ -94,6 +94,7 @@
     </script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/nicaragua_masks.js', v='1') }}" defer></script>
     <script>window.tasasProductos = Object.fromEntries({{ productos|tojson }}.map(p=>[p.id,p.tasa_iva]));</script>
     <link rel="stylesheet" href="{{ css_url('theme') }}">
     <link rel="stylesheet" href="{{ css_url('pages/customer/store') }}">
@@ -207,6 +208,42 @@
 
     <main class="pos-layout" id="catalogo-tienda">
         <div class="catalog-panel pos-main tienda-catalog-panel">
+
+            {% if recomendaciones %}
+            <section class="store-recs" aria-labelledby="store-recs-title">
+                <div class="store-recs-heading">
+                    <div>
+                        <h2 id="store-recs-title">Para acompañar tu pedido</h2>
+                        <p>Ideas de la vitrina basadas en compras recientes. Los descuentos los define la tienda.</p>
+                    </div>
+                    <span class="store-recs-count">{{ recomendaciones|length }} sugerencias</span>
+                </div>
+                <div class="store-recs-grid">
+                    {% for producto in recomendaciones %}
+                    {% set precio_final = producto.precio - (producto.precio * producto.descuento / 100) if producto.descuento > 0 else producto.precio %}
+                    <article class="product-card store-recs-card"
+                             data-id="{{ producto.id }}"
+                             data-nombre="{{ producto.nombre }}"
+                             data-precio="{{ producto.precio }}"
+                             data-categoria="{{ producto.categoria }}"
+                             data-descuento="{{ producto.descuento }}">
+                        <span class="store-recs-reason">{{ producto.motivo }}</span>
+                        <div class="store-recs-card-main">
+                            <div>
+                                <p class="store-recs-category">{{ producto.categoria }}</p>
+                                <h3>{{ producto.nombre }}</h3>
+                            </div>
+                            {% if producto.imagen_url %}<img src="{{ producto.imagen_url }}" alt="" loading="lazy" class="store-recs-image">{% endif %}
+                        </div>
+                        <div class="store-recs-card-footer">
+                            <span>C${{ '%.2f'|format(precio_final) }}{% if producto.descuento > 0 %} <small>−{{ '%.0f'|format(producto.descuento) }}%</small>{% endif %}</span>
+                            <button type="button" class="store-recs-add" aria-label="{{ 'Personalizar' if producto.categoria == 'Reposteria' else 'Agregar' }} {{ producto.nombre }} al pedido">{{ 'Personalizar' if producto.categoria == 'Reposteria' else 'Agregar' }}</button>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
 
             <!-- 4. Barra de Departamentos y Orden -->
             <div class="department-bar-wrap">
@@ -455,7 +492,7 @@
                     </div>
                     <div>
                         <label for="pastel-telefono">Teléfono / WhatsApp:</label>
-                        <input type="tel" id="pastel-telefono" class="form-control" required value="{{ user.telefono or '' }}" placeholder="Ej: 8888-1234">
+                        <input type="tel" id="pastel-telefono" class="form-control" required value="{{ user.telefono or '' }}" placeholder="8888-8888" data-mask="telefono" maxlength="9">
                     </div>
                 </div>
                 {% endif %}
@@ -517,7 +554,7 @@
                 </div>
                 <div>
                     <label for="modal-telefono-cliente">Teléfono / WhatsApp:</label>
-                    <input type="tel" id="modal-telefono-cliente" class="form-control" required value="{{ '' if (not user.telefono or user.telefono == '00000000') else user.telefono }}" placeholder="Ej: 8888-5555">
+                    <input type="tel" id="modal-telefono-cliente" class="form-control" required value="{{ '' if (not user.telefono or user.telefono == '00000000') else user.telefono }}" placeholder="8888-8888" data-mask="telefono" maxlength="9">
                 </div>
             </div>
 
@@ -677,6 +714,7 @@
     </script>
     <script src="{{ url_for('static', filename='js/api_services.js', v=8) }}"></script>
     <script src="{{ url_for('static', filename='js/pos.js', v=9) }}"></script>
+    <script src="{{ url_for('static', filename='js/marketing_recommendations.js', v=1) }}"></script>
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {

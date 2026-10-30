@@ -80,6 +80,7 @@
     </script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/nicaragua_masks.js', v='1') }}" defer></script>
     <link rel="stylesheet" href="{{ css_url('accessibility') }}">
 <script>window.tasasProductos = Object.fromEntries({{ productos|tojson }}.map(p=>[p.id,p.tasa_iva]));</script>
     <link rel="stylesheet" href="{{ css_url('theme') }}">
@@ -232,7 +233,7 @@
             </div>
             <div class="form-group pos-form-group">
                 <label>Teléfono del Cliente:</label>
-                <input type="tel" id="modal-telefono-cliente" class="form-control" placeholder="Ej. 8888-1234" required>
+                <input type="tel" id="modal-telefono-cliente" class="form-control" placeholder="8888-8888" data-mask="telefono" maxlength="9" required>
             </div>
 
             <div class="pos-row-2">

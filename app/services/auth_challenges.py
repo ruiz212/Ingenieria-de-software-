@@ -16,6 +16,7 @@ from app.db import get_db_connection, execute_sp
 
 TTL = 600
 MAX_ATTEMPTS = 5
+TOTP_WINDOW_SECONDS = 900
 SMS_RESEND_SECONDS = 60
 FIELDS = ('Token', 'Kind', 'Subject', 'Verifier', 'Secret', 'Binding',
           'ExpiresAt', 'Attempts', 'Verified', 'Consumed')
@@ -25,12 +26,20 @@ class ResendTooSoon(ValueError):
     pass
 
 
+class TOTPLocked(ValueError):
+    pass
+
+
 def normalize_phone(value):
     if not isinstance(value, str) or not re.fullmatch(r'[+\d\s().-]+', value.strip()):
         raise ValueError('El teléfono debe tener formato internacional válido.')
     phone = re.sub(r'[\s().-]', '', value)
     if re.fullmatch(r'\d{8}', phone):
         phone = '+505' + phone
+    elif re.fullmatch(r'505\d{8}', phone):
+        phone = '+' + phone
+    elif re.fullmatch(r'00505\d{8}', phone):
+        phone = '+' + phone[2:]
     if not re.fullmatch(r'\+[1-9]\d{7,14}', phone):
         raise ValueError('El teléfono debe tener formato internacional válido.')
     return phone
@@ -68,6 +77,49 @@ def _valid(row, kind=None):
                 and (kind is None or row['Kind'] == kind))
 
 
+def _totp_failures_in_window(cursor, subject: str, now_ts: int | None = None) -> int:
+    now_val = int(time.time()) if now_ts is None else int(now_ts)
+    min_expires = now_val + TTL - TOTP_WINDOW_SECONDS
+    row = execute_sp(
+        cursor,
+        'seguridad.sp_ObtenerFallosTOTPRecientes',
+        (str(subject), min_expires),
+        fallback_sql=(
+            "SELECT COALESCE(SUM(Attempts), 0) FROM AuthChallenges WITH (UPDLOCK, HOLDLOCK) "
+            "WHERE Subject = ? AND Kind LIKE 'totp%' AND Verified = 0 AND ExpiresAt > ?"
+        ),
+        fallback_params=(str(subject), min_expires),
+    ).fetchone()
+    return int(row[0] or 0) if row else 0
+
+
+def get_totp_failures(subject, user_type: str = 'emp') -> int:
+    conn = get_db_connection()
+    try:
+        return _totp_failures_in_window(conn.cursor(), str(subject))
+    finally:
+        conn.close()
+
+
+def is_totp_locked(subject, user_type: str = 'emp') -> bool:
+    return get_totp_failures(subject, user_type=user_type) >= MAX_ATTEMPTS
+
+
+def clear_totp_failures(subject, user_type: str = 'emp') -> None:
+    conn = get_db_connection()
+    try:
+        execute_sp(
+            conn.cursor(),
+            'seguridad.sp_LimpiarFallosTOTPUsuario',
+            (str(subject),),
+            fallback_sql="UPDATE AuthChallenges SET Verified = 1, Consumed = 1, Attempts = 0 WHERE Subject = ? AND Kind LIKE 'totp%'",
+            fallback_params=(str(subject),),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def create(kind, subject, verifier='', secret='', binding=''):
     token = secrets.token_urlsafe(32)
     conn = get_db_connection()
@@ -84,6 +136,9 @@ def create(kind, subject, verifier='', secret='', binding=''):
             ).fetchone()
             if previous and previous[0] is not None and int(previous[0]) - TTL + SMS_RESEND_SECONDS > int(time.time()):
                 raise ResendTooSoon('Espera 60 segundos antes de solicitar otro código para este teléfono.')
+        else:
+            if _totp_failures_in_window(cursor, str(subject)) >= MAX_ATTEMPTS:
+                raise TOTPLocked('Cuenta bloqueada temporalmente por exceso de intentos TOTP fallidos. Intente más tarde.')
         # A new challenge replaces every outstanding grant for this identity.
         family = 'sms' if kind == 'sms' else 'totp%'
         execute_sp(
@@ -186,8 +241,13 @@ def pending_totp(token, kind):
         return None
     conn = get_db_connection()
     try:
-        row = _read(conn.cursor(), token)
-        return row if _valid(row, kind) else None
+        cursor = conn.cursor()
+        row = _read(cursor, token)
+        if not _valid(row, kind):
+            return None
+        if _totp_failures_in_window(cursor, str(row['Subject'])) >= MAX_ATTEMPTS:
+            return None
+        return row
     finally:
         conn.close()
 
@@ -198,6 +258,15 @@ def complete_totp(token, code, kind):
         cursor = conn.cursor()
         row = _read(cursor, token, lock=True)
         if not _valid(row, kind):
+            return None
+        if _totp_failures_in_window(cursor, str(row['Subject'])) >= MAX_ATTEMPTS:
+            execute_sp(
+                cursor,
+                'seguridad.sp_RevocarDesafioPorToken',
+                (token,),
+                fallback_sql='UPDATE AuthChallenges SET Consumed = 1 WHERE Token = ?',
+            )
+            conn.commit()
             return None
         user = execute_sp(
             cursor,
@@ -215,12 +284,6 @@ def complete_totp(token, code, kind):
             conn.commit()
             return None
         secret = row['Secret'] if kind == 'totp_enroll' else user[0]
-        execute_sp(
-            cursor,
-            'seguridad.sp_IncrementarIntentosDesafio',
-            (token,),
-            fallback_sql='UPDATE AuthChallenges SET Attempts = Attempts + 1 WHERE Token = ?',
-        )
         ok = bool(secret and isinstance(code, str) and re.fullmatch(r'\d{6}', code)
                   and pyotp.TOTP(secret).verify(code))
         if ok:
@@ -233,11 +296,25 @@ def complete_totp(token, code, kind):
                 )
             execute_sp(
                 cursor,
-                'seguridad.sp_ConsumirDesafiosFamilia',
-                (row['Subject'], 'totp%'),
-                fallback_sql="UPDATE AuthChallenges SET Consumed = 1 WHERE Subject = ? AND Kind LIKE 'totp%'",
+                'seguridad.sp_LimpiarFallosTOTPUsuario',
+                (row['Subject'],),
+                fallback_sql="UPDATE AuthChallenges SET Verified = 1, Consumed = 1, Attempts = 0 WHERE Subject = ? AND Kind LIKE 'totp%'",
                 fallback_params=(row['Subject'],),
             )
+        else:
+            execute_sp(
+                cursor,
+                'seguridad.sp_IncrementarIntentosDesafio',
+                (token,),
+                fallback_sql='UPDATE AuthChallenges SET Attempts = Attempts + 1 WHERE Token = ?',
+            )
+            if _totp_failures_in_window(cursor, str(row['Subject'])) >= MAX_ATTEMPTS:
+                execute_sp(
+                    cursor,
+                    'seguridad.sp_RevocarDesafioPorToken',
+                    (token,),
+                    fallback_sql='UPDATE AuthChallenges SET Consumed = 1 WHERE Token = ?',
+                )
         conn.commit()
         return int(row['Subject']) if ok else None
     except Exception:

@@ -15,6 +15,12 @@ Diseñado utilizando SCRUM.
 
 La organización de estilos, convenciones de clases, sistema de movimiento y comandos de compilación se explican en [docs/CSS.md](docs/CSS.md). Después de editar una fuente CSS, ejecutar `python scripts/build_css.py`; validar la entrega con `python scripts/build_css.py --check`.
 
+## Mercadotecnia local
+
+La tienda pública (`/tienda`) y la vista de clientes muestran sugerencias de productos activos basadas en ventas emitidas y en el carrito actual. Solo los clientes registrados reciben sugerencias basadas en su propio historial; las visitas invitadas usan tendencias generales. La gerencia dispone de `/admin/mercadotecnia` para ver tendencias y acciones comerciales con su evidencia. El entrenamiento usa Python estándar en este servidor y guarda una instantánea compartida en SQL Server; no usa API de IA.
+
+Antes de activar el análisis en una base existente, aplique `database/05_mercadotecnia.sql` con la migración de esquemas (`python scripts/migrate_esquemas_roles_sp.py --connection-env TEST_DB_CONNECTION_STRING` primero en QA). El modelo se entrena automáticamente al entrar al panel de gerencia si falta o tiene 24 horas, y también se puede actualizar con su botón. Hasta el primer entrenamiento, la tienda recomienda desde el catálogo activo. Los descuentos siguen bajo control del Catálogo.
+
 ## Documentación del Corte 4
 
 La entrega revisada conserva ocho módulos y desarrolla los contenidos RUP

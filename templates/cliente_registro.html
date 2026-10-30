@@ -14,6 +14,7 @@
 
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/nicaragua_masks.js', v='1') }}" defer></script>
     <link rel="stylesheet" href="{{ css_url('accessibility') }}">
     <link rel="stylesheet" href="{{ css_url('pages/auth/registration') }}">
     <link rel="stylesheet" href="{{ css_url('motion') }}">
@@ -107,7 +108,7 @@
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="telefono">Teléfono Celular</label>
-                            <input type="tel" id="telefono" name="telefono" class="form-input" required placeholder="Ej: 88888888" maxlength="20">
+                            <input type="tel" id="telefono" name="telefono" class="form-input" required placeholder="8888-8888" data-mask="telefono" maxlength="9">
                             <button type="button" id="send-sms" class="btn btn-outline">Enviar código SMS</button>
                         </div>
                         <div class="form-group">

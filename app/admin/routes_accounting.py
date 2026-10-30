@@ -11,9 +11,9 @@ from app.db import get_db_connection, execute_sp
 from app.services.business_time import business_now
 from app.auth.decorators import roles_required
 from app.extensions import csrf
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.services.validation import amount, required_text
-from app.services.contabilidad_service import ContabilidadService
+from app.services.contabilidad_service import ContabilidadService, ContabilidadError
 
 @admin_bp.route('/contabilidad')
 @login_required
@@ -207,11 +207,21 @@ def contabilidad():
         for r in cursor.fetchall()
     ]
 
+    inicio_hoy = datetime(hoy_ni.year, hoy_ni.month, hoy_ni.day)
+    fin_hoy = inicio_hoy + timedelta(days=1)
+    inicio_mes = datetime(now_ni.year, now_ni.month, 1)
+    fin_mes = datetime(now_ni.year + 1, 1, 1) if now_ni.month == 12 else datetime(now_ni.year, now_ni.month + 1, 1)
+
+    resumen_hoy = ContabilidadService.obtener_resumen_financiero_rango(cursor, inicio_hoy, fin_hoy)
+    resumen_mes = ContabilidadService.obtener_resumen_financiero_rango(cursor, inicio_mes, fin_mes)
+
     conn.close()
 
     metricas = {
         'ingresos_mes': ingresos_mes,
+        'facturacion_bruta_mes': ingresos_mes,
         'compras_mes': compras_mes,
+        'compras_inventario_mes': compras_mes,
         'egresos_mes': egresos_mes,
         'salarios_devengados_mes': salarios_devengados_mes,
         'salarios_netos_mes': salarios_netos_mes,
@@ -221,11 +231,29 @@ def contabilidad():
         'ir_mes': ir_mes,
         'planilla_costo_total_mes': planilla_costo_total_mes,
         'cantidad_nominas_mes': cantidad_nominas_mes,
-        'balance_mes': ingresos_mes - compras_mes - egresos_mes - planilla_costo_total_mes,
+        'ingresos_contables_mes': resumen_mes['ingresos_contables'],
+        'costos_contables_mes': resumen_mes['costos_contables'],
+        'gastos_contables_mes': resumen_mes['gastos_contables'],
+        'utilidad_neta_mes': resumen_mes['utilidad_neta'],
+        'balance_mes': resumen_mes['utilidad_neta'],
+        'entradas_efectivo_mes': resumen_mes['entradas_efectivo'],
+        'salidas_efectivo_mes': resumen_mes['salidas_efectivo'],
+        'flujo_caja_operativo_mes': resumen_mes['flujo_caja_operativo'],
+        'flujo_caja_mes': resumen_mes['flujo_caja_operativo'],
         'ingresos_hoy': ingresos_hoy,
+        'facturacion_bruta_hoy': ingresos_hoy,
         'compras_hoy': compras_hoy,
+        'compras_inventario_hoy': compras_hoy,
         'egresos_hoy': egresos_hoy,
-        'balance_hoy': ingresos_hoy - compras_hoy - egresos_hoy,
+        'ingresos_contables_hoy': resumen_hoy['ingresos_contables'],
+        'costos_contables_hoy': resumen_hoy['costos_contables'],
+        'gastos_contables_hoy': resumen_hoy['gastos_contables'],
+        'utilidad_neta_hoy': resumen_hoy['utilidad_neta'],
+        'balance_hoy': resumen_hoy['utilidad_neta'],
+        'entradas_efectivo_hoy': resumen_hoy['entradas_efectivo'],
+        'salidas_efectivo_hoy': resumen_hoy['salidas_efectivo'],
+        'flujo_caja_operativo_hoy': resumen_hoy['flujo_caja_operativo'],
+        'flujo_caja_hoy': resumen_hoy['flujo_caja_operativo'],
         'total_vales_pendientes': total_vales_pendientes
     }
 
@@ -244,9 +272,13 @@ def contabilidad():
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def crear_egreso():
-    datos = request.json
+    datos = request.get_json(silent=True) if request.is_json else request.form
+    datos = datos or {}
     concepto = required_text(datos.get('concepto'), 'Concepto', 255)
     monto = amount(datos.get('monto'), 'Monto', minimum=0.01)
+    metodo_pago = (datos.get('metodo_pago') or 'Efectivo').strip()
+    cuenta_pago = datos.get('cuenta_pago')
+    permitir_sobregiro = str(datos.get('permitir_sobregiro', '')).lower() in ('1', 'true', 'yes')
 
     if not concepto or not monto:
         return jsonify({'error': 'Faltan datos'}), 400
@@ -255,6 +287,13 @@ def crear_egreso():
     cursor = conn.cursor()
     try:
         fecha = business_now()
+        cuenta_origen = ContabilidadService.resolver_cuenta_desembolso(
+            metodo_pago=metodo_pago, cuenta_pago=cuenta_pago
+        )
+        ContabilidadService.verificar_fondos_disponibles(
+            cursor, cuenta_origen, float(monto), permitir_sobregiro=permitir_sobregiro
+        )
+
         execute_sp(
             cursor,
             'contabilidad.sp_InsertarEgresoPrivado',
@@ -268,6 +307,9 @@ def crear_egreso():
             usuario_id=current_user.id,
             concepto=concepto,
             monto=float(monto),
+            metodo_pago=metodo_pago,
+            cuenta_pago=cuenta_origen,
+            permitir_sobregiro=permitir_sobregiro,
             referencia=f"EGR-{new_id}",
             ip=request.remote_addr,
             fecha=fecha
@@ -275,6 +317,11 @@ def crear_egreso():
 
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Egreso registrado y contabilizado', 'id': new_id})
+    except (ValueError, ContabilidadError) as e:
+        conn.rollback()
+        if not request.is_json:
+            flash(str(e), 'error')
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         conn.rollback()
         import logging
@@ -288,9 +335,13 @@ def crear_egreso():
 @login_required
 @roles_required('Admin', 'SuperAdmin')
 def crear_vale():
-    datos = request.json
+    datos = request.get_json(silent=True) if request.is_json else request.form
+    datos = datos or {}
     empleado_id = datos.get('empleado_id')
     monto = amount(datos.get('monto'), 'Monto', minimum=0.01)
+    metodo_pago = (datos.get('metodo_pago') or 'Efectivo').strip()
+    cuenta_pago = datos.get('cuenta_pago')
+    permitir_sobregiro = str(datos.get('permitir_sobregiro', '')).lower() in ('1', 'true', 'yes')
 
     if not empleado_id or not monto:
         return jsonify({'error': 'Faltan datos'}), 400
@@ -298,10 +349,18 @@ def crear_vale():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        fecha = business_now()
+        cuenta_origen = ContabilidadService.resolver_cuenta_desembolso(
+            metodo_pago=metodo_pago, cuenta_pago=cuenta_pago
+        )
+        ContabilidadService.verificar_fondos_disponibles(
+            cursor, cuenta_origen, float(monto), permitir_sobregiro=permitir_sobregiro
+        )
+
         execute_sp(
             cursor,
             'contabilidad.sp_InsertarValeEmpleado',
-            (int(empleado_id), float(monto), business_now()),
+            (int(empleado_id), float(monto), fecha),
             fallback_sql="INSERT INTO ValesEmpleados (EmpleadoID, Monto, Fecha) OUTPUT INSERTED.ID VALUES (?, ?, ?)",
         )
         new_id = cursor.fetchone()[0]
@@ -313,19 +372,31 @@ def crear_vale():
             (int(empleado_id),),
             fallback_sql="SELECT NombreCompleto FROM Usuarios WHERE ID = ?",
         )
-        emp_nombre = cursor.fetchone()[0]
+        emp_row = cursor.fetchone()
+        if not emp_row:
+            raise ValueError('Empleado no encontrado.')
+        emp_nombre = emp_row[0]
 
         ContabilidadService.contabilizar_vale(
             cursor=cursor,
             usuario_id=current_user.id,
             empleado_nombre=emp_nombre,
             monto=float(monto),
+            metodo_pago=metodo_pago,
+            cuenta_pago=cuenta_origen,
+            permitir_sobregiro=permitir_sobregiro,
             referencia=f"VALE-{new_id}",
-            ip=request.remote_addr
+            ip=request.remote_addr,
+            fecha=fecha
         )
 
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Vale registrado y contabilizado', 'id': new_id})
+    except (ValueError, ContabilidadError) as e:
+        conn.rollback()
+        if not request.is_json:
+            flash(str(e), 'error')
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         conn.rollback()
         import logging
@@ -354,8 +425,14 @@ def balance_general():
     cursor = conn.cursor()
 
     fecha_corte = request.args.get('fecha_corte', business_now().strftime('%Y-%m-%d'))
+    try:
+        fecha_corte_dt = datetime.strptime(str(fecha_corte)[:10], '%Y-%m-%d').date()
+    except ValueError:
+        fecha_corte_dt = business_now().date()
+        fecha_corte = fecha_corte_dt.strftime('%Y-%m-%d')
+    inicio_ejercicio = f"{fecha_corte_dt.year:04d}-01-01"
 
-    sql_balance = """
+    sql_balance = f"""
     WITH SaldosHistoricos AS (
         SELECT
             C.Clase,
@@ -364,7 +441,11 @@ def balance_general():
             C.Nombre AS Cuenta,
             C.Naturaleza,
             SUM(D.Debe) AS TotalDebe,
-            SUM(D.Haber) AS TotalHaber
+            SUM(D.Haber) AS TotalHaber,
+            SUM(CASE WHEN CAST(A.Fecha AS TEXT) < '{inicio_ejercicio}' THEN D.Debe ELSE 0 END) AS DebeAnterior,
+            SUM(CASE WHEN CAST(A.Fecha AS TEXT) < '{inicio_ejercicio}' THEN D.Haber ELSE 0 END) AS HaberAnterior,
+            SUM(CASE WHEN CAST(A.Fecha AS TEXT) >= '{inicio_ejercicio}' THEN D.Debe ELSE 0 END) AS DebeEjercicio,
+            SUM(CASE WHEN CAST(A.Fecha AS TEXT) >= '{inicio_ejercicio}' THEN D.Haber ELSE 0 END) AS HaberEjercicio
         FROM DetalleAsientos D
         JOIN AsientosDiario A ON D.AsientoID = A.ID
         JOIN CatalogoCuentas C ON D.CuentaID = C.ID
@@ -380,9 +461,19 @@ def balance_general():
         CASE
             WHEN Naturaleza = 'Deudora' THEN (TotalDebe - TotalHaber)
             ELSE (TotalHaber - TotalDebe)
-        END AS SaldoFinal
+        END AS SaldoFinal,
+        CASE
+            WHEN Naturaleza = 'Deudora' THEN (DebeAnterior - HaberAnterior)
+            ELSE (HaberAnterior - DebeAnterior)
+        END AS SaldoEjerciciosAnteriores,
+        CASE
+            WHEN Naturaleza = 'Deudora' THEN (DebeEjercicio - HaberEjercicio)
+            ELSE (HaberEjercicio - DebeEjercicio)
+        END AS SaldoEjercicioActual
     FROM SaldosHistoricos
     WHERE (TotalDebe - TotalHaber) != 0
+       OR (DebeAnterior - HaberAnterior) != 0
+       OR (DebeEjercicio - HaberEjercicio) != 0
     ORDER BY Codigo;
     """
 
@@ -399,41 +490,70 @@ def balance_general():
     pasivos = []
     capital = []
 
-    total_activos = 0
-    total_pasivos = 0
-    total_capital = 0
-    utilidad_ejercicio = 0
+    total_activos = 0.0
+    total_pasivos = 0.0
+    total_capital = 0.0
+    resultados_acumulados_anteriores = 0.0
+    utilidad_ejercicio = 0.0
 
     for row in cuentas:
+        saldo_final = float(getattr(row, 'SaldoFinal', row[4]))
+        saldo_anterior = float(getattr(row, 'SaldoEjerciciosAnteriores', row[5] if len(row) > 5 else 0.0))
+        saldo_actual = float(getattr(row, 'SaldoEjercicioActual', row[6] if len(row) > 6 else saldo_final))
+        clase = getattr(row, 'Clase', row[0])
+        codigo = getattr(row, 'Codigo', row[2])
+        nombre_cuenta = getattr(row, 'Cuenta', row[3])
+
         cuenta_obj = {
-            'Codigo': row.Codigo,
-            'Cuenta': row.Cuenta,
-            'SaldoFinal': float(row.SaldoFinal)
+            'Codigo': codigo,
+            'Cuenta': nombre_cuenta,
+            'SaldoFinal': saldo_final
         }
 
-        if row.Clase == 'Activo':
-            activos.append(cuenta_obj)
-            total_activos += cuenta_obj['SaldoFinal']
-        elif row.Clase == 'Pasivo':
-            pasivos.append(cuenta_obj)
-            total_pasivos += cuenta_obj['SaldoFinal']
-        elif row.Clase == 'Capital':
-            capital.append(cuenta_obj)
-            total_capital += cuenta_obj['SaldoFinal']
-        elif row.Clase == 'Ingreso':
-            utilidad_ejercicio += cuenta_obj['SaldoFinal']
-        elif row.Clase == 'Costo':
-            utilidad_ejercicio -= cuenta_obj['SaldoFinal']
-        elif row.Clase == 'Gasto':
-            utilidad_ejercicio -= cuenta_obj['SaldoFinal']
+        if clase == 'Activo':
+            if round(saldo_final, 2) != 0:
+                activos.append(cuenta_obj)
+                total_activos += saldo_final
+        elif clase == 'Pasivo':
+            if round(saldo_final, 2) != 0:
+                pasivos.append(cuenta_obj)
+                total_pasivos += saldo_final
+        elif clase == 'Capital':
+            if round(saldo_final, 2) != 0:
+                capital.append(cuenta_obj)
+                total_capital += saldo_final
+        elif clase == 'Ingreso':
+            resultados_acumulados_anteriores += saldo_anterior
+            utilidad_ejercicio += saldo_actual
+        elif clase == 'Costo':
+            resultados_acumulados_anteriores -= saldo_anterior
+            utilidad_ejercicio -= saldo_actual
+        elif clase == 'Gasto':
+            resultados_acumulados_anteriores -= saldo_anterior
+            utilidad_ejercicio -= saldo_actual
+
+    resultados_acumulados_anteriores = round(resultados_acumulados_anteriores, 2)
+    utilidad_ejercicio = round(utilidad_ejercicio, 2)
+
+    if resultados_acumulados_anteriores != 0:
+        capital.append({
+            'Codigo': '3.2.01.001',
+            'Cuenta': 'Resultados Acumulados de Ejercicios Anteriores',
+            'SaldoFinal': resultados_acumulados_anteriores
+        })
+        total_capital += resultados_acumulados_anteriores
 
     if utilidad_ejercicio != 0:
         capital.append({
-            'Codigo': '3.X',
+            'Codigo': '3.2.01.002',
             'Cuenta': 'Utilidad (Pérdida) del Ejercicio en Curso',
             'SaldoFinal': utilidad_ejercicio
         })
         total_capital += utilidad_ejercicio
+
+    total_activos = round(total_activos, 2)
+    total_pasivos = round(total_pasivos, 2)
+    total_capital = round(total_capital, 2)
 
     if request.args.get('print') == '1':
         return render_template('admin/balance_imprimir.html',
@@ -441,6 +561,8 @@ def balance_general():
                                activos=activos, total_activos=total_activos,
                                pasivos=pasivos, total_pasivos=total_pasivos,
                                capital=capital, total_capital=total_capital,
+                               resultados_acumulados_anteriores=resultados_acumulados_anteriores,
+                               utilidad_ejercicio=utilidad_ejercicio,
                                datetime=datetime)
 
     return render_template('admin/balance_general.html',
@@ -448,7 +570,9 @@ def balance_general():
                            fecha_corte=fecha_corte,
                            activos=activos, total_activos=total_activos,
                            pasivos=pasivos, total_pasivos=total_pasivos,
-                           capital=capital, total_capital=total_capital)
+                           capital=capital, total_capital=total_capital,
+                           resultados_acumulados_anteriores=resultados_acumulados_anteriores,
+                           utilidad_ejercicio=utilidad_ejercicio)
 
 
 @admin_bp.route('/contabilidad/asiento', methods=['POST'])
@@ -507,7 +631,10 @@ def cierre_periodo():
         cursor = conn.cursor()
         data = request.get_json() if request.is_json else request.form
         period = int(data.get('periodo_id', 0))
-        ContabilidadService.cerrar_periodo(cursor, period, current_user.id)
+        permitir_excepcion = str(data.get('permitir_excepcion', '')).lower() in ('1', 'true', 'yes')
+        ContabilidadService.cerrar_periodo(
+            cursor, period, current_user.id, permitir_excepcion=permitir_excepcion
+        )
         audit(cursor, current_user.id, 'CIERRE_MENSUAL', 'Periodo', period, {}, request.remote_addr)
         conn.commit()
         flash('Período cerrado. Ya no admite nuevos asientos.', 'success')

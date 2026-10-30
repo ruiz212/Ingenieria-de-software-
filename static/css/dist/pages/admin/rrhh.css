@@ -1466,3 +1466,33 @@ body.dark-theme .page-rrhh .dossier-btn-suspend:hover {
 .rrhh-input-readonly.loading-salary {
     opacity: 0.6;
 }
+
+
+
+.page-rrhh .rrhh-auto-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface-sunken, #f8f4ee);
+    border: 1px solid var(--border-light, #e0d5c8);
+    border-left: 4px solid var(--primary, #c47c3e);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    color: var(--text-main, #33261d);
+}
+
+.page-rrhh .rrhh-auto-banner.hidden {
+    display: none;
+}
+
+.page-rrhh .rrhh-auto-badge {
+    font-weight: 700;
+    color: var(--primary, #c47c3e);
+    margin-right: 6px;
+}
+
+.page-rrhh .rrhh-auto-detalles {
+    color: var(--text-muted, #7c6859);
+}

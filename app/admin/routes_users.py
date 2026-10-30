@@ -11,7 +11,58 @@ from app.extensions import csrf
 from datetime import datetime
 from app.services.fiscal_service import audit
 from app.services.audit import registrar_auditoria
-from app.services.validation import amount
+from app.services.validation import amount, validate_telefono_nicaragua
+
+
+LAST_SUPERADMIN_ERROR_MSG = 'No se puede desactivar ni cambiar el rol del último SuperAdmin activo del sistema'
+
+
+def _is_last_superadmin_error(exc: Exception) -> bool:
+    msg = str(exc or '').lower()
+    return (
+        '52005' in msg
+        or 'último superadmin' in msg
+        or 'ultimo superadmin' in msg
+    )
+
+
+def _check_last_active_superadmin(cursor, target_user_id: int) -> tuple[bool, str | None, bool, int]:
+    """Verifica bajo bloqueo (UPDLOCK, HOLDLOCK) cuántos otros SuperAdmin activos existen.
+    Retorna: (es_ultimo_superadmin_activo, rol_objetivo, activo_objetivo, otros_superadmins_activos)
+    """
+    execute_sp(
+        cursor,
+        'seguridad.sp_ContarSuperAdminsActivosBloqueo',
+        (int(target_user_id),),
+        fallback_sql=(
+            "SELECT "
+            "SUM(CASE WHEN r.Nombre = 'SuperAdmin' AND u.Activo = 1 AND u.ID <> ? THEN 1 ELSE 0 END) AS OtrosSuperAdminsActivos, "
+            "MAX(CASE WHEN u.ID = ? THEN r.Nombre END) AS RolObjetivo, "
+            "MAX(CASE WHEN u.ID = ? THEN CAST(u.Activo AS INT) END) AS ActivoObjetivo "
+            "FROM Usuarios u WITH (UPDLOCK, HOLDLOCK) "
+            "JOIN Roles r ON r.ID = u.RolID "
+            "WHERE (r.Nombre = 'SuperAdmin' AND u.Activo = 1) OR u.ID = ?"
+        ),
+        fallback_params=(int(target_user_id), int(target_user_id), int(target_user_id), int(target_user_id)),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return False, None, False, 0
+    if hasattr(row, 'SuperAdminsActivosRestantes'):
+        otros = int(row.SuperAdminsActivosRestantes or 0)
+        rol_obj = row.TargetRolNombre
+        activo_obj = bool(row.TargetActivo) if row.TargetActivo is not None else False
+    elif len(row) >= 5:
+        otros = int(row[4] or 0)
+        rol_obj = row[1]
+        activo_obj = bool(row[2]) if row[2] is not None else False
+    else:
+        otros = int(getattr(row, 'OtrosSuperAdminsActivos', row[0]) or 0)
+        rol_obj = getattr(row, 'RolObjetivo', row[1] if len(row) > 1 else None)
+        activo_raw = getattr(row, 'ActivoObjetivo', row[2] if len(row) > 2 else None)
+        activo_obj = bool(activo_raw) if activo_raw is not None else False
+    is_last = (rol_obj == 'SuperAdmin' and activo_obj and otros < 1)
+    return is_last, rol_obj, activo_obj, otros
 
 
 ROLE_ARCHITECTURE_MAP = {
@@ -273,6 +324,11 @@ def cambiar_rol_usuario(user_id):
         if not before:
             return jsonify({'error': 'Usuario no encontrado.'}), 404
 
+        is_last_sa, _, _, _ = _check_last_active_superadmin(cursor, user_id)
+        if is_last_sa and nuevo_rol_nombre != 'SuperAdmin':
+            conn.rollback()
+            return jsonify({'error': LAST_SUPERADMIN_ERROR_MSG}), 400
+
         execute_sp(
             cursor,
             'seguridad.sp_ActualizarRolUsuario',
@@ -303,6 +359,8 @@ def cambiar_rol_usuario(user_id):
         return jsonify({'status': 'success', 'mensaje': f'Rol actualizado a {nuevo_rol_nombre}'})
     except Exception as e:
         conn.rollback()
+        if _is_last_superadmin_error(e):
+            return jsonify({'error': LAST_SUPERADMIN_ERROR_MSG}), 400
         import logging
         logging.error(f"Error actualizando rol de usuario: {e}")
         return jsonify({'error': 'No se pudo actualizar el rol del usuario.'}), 500
@@ -383,6 +441,14 @@ def toggle_usuario(user_id):
             fallback_sql="SELECT NombreCompleto, Username, RolID, Activo FROM Usuarios WHERE ID=?",
         )
         before = cursor.fetchone()
+        if not before:
+            return jsonify({'error': 'Usuario no encontrado.'}), 404
+
+        is_last_sa, _, _, _ = _check_last_active_superadmin(cursor, user_id)
+        if is_last_sa and bool(before.Activo):
+            conn.rollback()
+            return jsonify({'error': LAST_SUPERADMIN_ERROR_MSG}), 400
+
         execute_sp(
             cursor,
             'seguridad.sp_ToggleActivoUsuario',
@@ -397,6 +463,8 @@ def toggle_usuario(user_id):
         return jsonify({'status': 'success', 'mensaje': 'Estado de usuario actualizado'})
     except Exception as e:
         conn.rollback()
+        if _is_last_superadmin_error(e):
+            return jsonify({'error': LAST_SUPERADMIN_ERROR_MSG}), 400
         import logging
         logging.error(f"Internal server error: {e}")
         return jsonify({'error': 'Error interno del servidor al procesar la solicitud.'}), 500
@@ -527,9 +595,13 @@ def api_smtp_test():
     """Envía un correo de prueba SMTP y registra el evento en seguridad.BitacoraErrores."""
     from app.services.smtp_alerts import notify_error, reset_rate_limit_cache
     datos = request.get_json(silent=True) or {}
-    destinatario = (datos.get('destinatario') or '').strip()
+    raw_dest = datos.get('destinatarios') if datos.get('destinatarios') is not None else datos.get('destinatario')
+    if isinstance(raw_dest, (list, tuple)):
+        override = [str(r).strip() for r in raw_dest if str(r).strip()] or None
+    else:
+        dest_str = (str(raw_dest or '')).strip()
+        override = [r.strip() for r in dest_str.split(',') if r.strip()] if dest_str else None
     mensaje = (datos.get('mensaje') or '').strip() or "Prueba manual de notificación de seguridad y errores por correo SMTP."
-    override = [destinatario] if destinatario else None
 
     reset_rate_limit_cache()
     resultado = notify_error(
@@ -573,6 +645,8 @@ def guardar_configuracion():
         for clave, valor in datos.items():
             if clave == 'tipo_cambio_usd':
                 valor = str(amount(valor, 'Tipo de cambio', minimum=0.01, maximum=999999))
+            elif clave == 'telefono_negocio' and valor:
+                valor = str(validate_telefono_nicaragua(valor, 'Teléfono de negocio', optional=True) or '')
             execute_sp(
                 cursor,
                 'seguridad.sp_GuardarConfiguracionSistema',
@@ -582,6 +656,9 @@ def guardar_configuracion():
             )
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Configuración guardada'})
+    except ValueError as e:
+        conn.rollback()
+        return jsonify(error=str(e)), 400
     except Exception as e:
         conn.rollback()
         import logging

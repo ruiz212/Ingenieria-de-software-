@@ -115,7 +115,7 @@
             <input type="hidden" id="cliente-id">
             <div class="form-group"><label class="form-label" for="cliente-nombre">Nombre</label><input id="cliente-nombre" class="form-input" required maxlength="100"></div>
             <div class="form-group"><label class="form-label" for="cliente-apellidos">Apellidos</label><input id="cliente-apellidos" class="form-input" maxlength="100"></div>
-            <div class="form-group"><label class="form-label" for="cliente-telefono">Teléfono</label><input id="cliente-telefono" class="form-input" required maxlength="30"></div>
+            <div class="form-group"><label class="form-label" for="cliente-telefono">Teléfono</label><input id="cliente-telefono" type="tel" class="form-input" placeholder="8888-8888" data-mask="telefono" required maxlength="9"></div>
             <div class="form-group"><label class="form-label" for="cliente-nivel">Nivel</label><select id="cliente-nivel" class="form-select"><option value="1">Nuevo</option><option value="2">Frecuente</option><option value="3">VIP</option></select></div>
             <div id="cliente-historial" class="cliente-history"></div>
             <div class="modal-actions"><button type="button" class="btn btn-outline" id="cliente-cerrar">Cancelar</button><button type="submit" class="btn btn-primary">Guardar cambios</button></div>

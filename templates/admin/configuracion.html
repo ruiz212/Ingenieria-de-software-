@@ -29,7 +29,7 @@
             <div class="form-group mb-3">
                 <label class="form-label configuracion-form-label">Teléfono de Contacto</label>
                 <div class="text-muted mb-1 configuracion-text-muted">Número visible para los clientes.</div>
-                <input type="text" class="form-input" id="cfg-telefono_negocio" value="{{ config.get('telefono_negocio', {}).get('valor', '') }}" placeholder="+505 8888-1234">
+                <input type="tel" class="form-input" id="cfg-telefono_negocio" value="{{ config.get('telefono_negocio', {}).get('valor', '') }}" placeholder="8888-8888" data-mask="telefono" maxlength="9">
             </div>
 
             <div class="form-group">

@@ -2,6 +2,7 @@
 from flask import render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
 import json
+import re
 import traceback
 
 from app.admin import admin_bp
@@ -9,7 +10,27 @@ from app.db import get_db_connection, execute_sp
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime
-from app.services.validation import required_text
+from app.services.validation import required_text, validate_telefono_nicaragua
+from app.services.auth_challenges import normalize_phone
+
+
+DUPLICATE_PHONE_MSG = 'El teléfono ya pertenece a otro cliente.'
+
+
+def normalize_customer_phone(raw_phone: str | None) -> str:
+    """Normaliza y valida teléfonos de clientes (con o sin +505, guiones, espacios o paréntesis) a 8 dígitos canónicos."""
+    return validate_telefono_nicaragua(raw_phone, 'Teléfono', optional=False, as_digits=True)
+
+
+def _is_duplicate_phone_error(exc: Exception) -> bool:
+    msg = str(exc or '').lower()
+    return (
+        '52020' in msg
+        or 'pertenece a otro cliente' in msg
+        or 'ux_clientes_telefono' in msg
+        or '2601' in msg
+        or '2627' in msg
+    )
 
 
 @admin_bp.route('/fidelizacion')
@@ -134,6 +155,71 @@ def detalle_cliente(cliente_id):
         conn.close()
 
 
+@admin_bp.route('/api/fidelizacion/clientes', methods=['POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def crear_cliente():
+    """Registra un nuevo cliente normalizando su teléfono y validando unicidad bajo bloqueo."""
+    data = request.get_json(silent=True) or {}
+    try:
+        nombre = required_text(data.get('nombre'), 'Nombre', 100)
+        apellidos = (data.get('apellidos') or '').strip()[:100]
+        telefono = normalize_customer_phone(data.get('telefono'))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        execute_sp(
+            cursor,
+            'crm.sp_VerificarTelefonoClienteDuplicado',
+            (telefono, 0),
+            fallback_sql=(
+                "SELECT ID FROM Clientes WITH (UPDLOCK, HOLDLOCK) "
+                "WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(Telefono, ''))), ' ', ''), '-', ''), '(', ''), ')', ''), '+505', ''), '+', '') = ? "
+                "AND ID <> ? AND ID > 1"
+            ),
+        )
+        if cursor.fetchone():
+            conn.rollback()
+            return jsonify(error=DUPLICATE_PHONE_MSG), 409
+
+        execute_sp(
+            cursor,
+            'crm.sp_InsertarClienteRapido',
+            (nombre, telefono),
+            fallback_sql=(
+                "INSERT INTO Clientes (Nombre, Telefono, NivelConfianzaID) "
+                "OUTPUT INSERTED.ID VALUES (?, ?, 1)"
+            ),
+        )
+        row = cursor.fetchone()
+        new_id = int(row[0]) if row else None
+        if new_id and apellidos:
+            execute_sp(
+                cursor,
+                'crm.sp_ActualizarClienteAdmin',
+                (nombre, apellidos, telefono, data.get('genero'), data.get('fecha_nacimiento'), int(data.get('nivel_id') or 1), new_id),
+                fallback_sql=(
+                    "UPDATE Clientes SET Nombre=?, Apellidos=?, Telefono=?, Genero=?, "
+                    "FechaNacimiento=?, NivelConfianzaID=? WHERE ID=? AND ID > 1"
+                ),
+            )
+        conn.commit()
+        return jsonify(status='success', id=new_id, telefono=telefono, mensaje='Cliente creado.'), 201
+    except ValueError as exc:
+        conn.rollback()
+        return jsonify(error=str(exc)), 400
+    except Exception as exc:
+        conn.rollback()
+        if _is_duplicate_phone_error(exc):
+            return jsonify(error=DUPLICATE_PHONE_MSG), 409
+        raise
+    finally:
+        conn.close()
+
+
 @admin_bp.route('/api/fidelizacion/clientes/<int:cliente_id>', methods=['PUT'])
 @login_required
 @roles_required('Admin', 'SuperAdmin')
@@ -142,7 +228,7 @@ def editar_cliente(cliente_id):
     data = request.get_json(silent=True) or {}
     nombre = required_text(data.get('nombre'), 'Nombre', 100)
     apellidos = (data.get('apellidos') or '').strip()[:100]
-    telefono = required_text(data.get('telefono'), 'Teléfono', 30)
+    telefono = normalize_customer_phone(data.get('telefono'))
     nivel_id = data.get('nivel_id')
     if nivel_id is None:
         raise ValueError('Seleccione un nivel de fidelidad.')
@@ -154,10 +240,15 @@ def editar_cliente(cliente_id):
             cursor,
             'crm.sp_VerificarTelefonoClienteDuplicado',
             (telefono, cliente_id),
-            fallback_sql="SELECT ID FROM Clientes WHERE Telefono = ? AND ID <> ?",
+            fallback_sql=(
+                "SELECT ID FROM Clientes WITH (UPDLOCK, HOLDLOCK) "
+                "WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(Telefono, ''))), ' ', ''), '-', ''), '(', ''), ')', ''), '+505', ''), '+', '') = ? "
+                "AND ID <> ? AND ID > 1"
+            ),
         )
         if cursor.fetchone():
-            return jsonify(error='El teléfono ya pertenece a otro cliente.'), 409
+            conn.rollback()
+            return jsonify(error=DUPLICATE_PHONE_MSG), 409
         execute_sp(
             cursor,
             'crm.sp_VerificarNivelConfianzaExiste',
@@ -165,6 +256,7 @@ def editar_cliente(cliente_id):
             fallback_sql="SELECT ID FROM NivelesConfianza WHERE ID = ?",
         )
         if not cursor.fetchone():
+            conn.rollback()
             return jsonify(error='Nivel de fidelidad inexistente.'), 400
         execute_sp(
             cursor,
@@ -176,11 +268,14 @@ def editar_cliente(cliente_id):
             ),
         )
         if cursor.rowcount != 1:
+            conn.rollback()
             return jsonify(error='Cliente no encontrado.'), 404
         conn.commit()
-        return jsonify(status='success', mensaje='Cliente actualizado.')
-    except Exception:
+        return jsonify(status='success', telefono=telefono, mensaje='Cliente actualizado.')
+    except Exception as exc:
         conn.rollback()
+        if _is_duplicate_phone_error(exc):
+            return jsonify(error=DUPLICATE_PHONE_MSG), 409
         raise
     finally:
         conn.close()

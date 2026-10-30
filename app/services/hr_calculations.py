@@ -1,5 +1,95 @@
 """Cálculos de RRHH puros, compartidos por API y reportes."""
 from datetime import date, datetime, timedelta, time
+from app.services.business_time import business_now
+
+
+class ResultadoHorarioAsistencia(dict):
+    """Diccionario de resultado de clasificación de asistencia con acceso por atributo."""
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+
+def _extraer_campo(obj, nombre, default=None):
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(nombre, default)
+    return getattr(obj, nombre, default)
+
+
+def _normalizar_hora(valor):
+    if valor is None or valor == '':
+        return None
+    if isinstance(valor, datetime):
+        return valor.time()
+    if isinstance(valor, time):
+        return valor
+    if isinstance(valor, str):
+        return time.fromisoformat(valor)
+    return None
+
+
+def resolver_horario_y_clasificar_asistencia(empleado, turno=None, ahora=None, tolerancia_default=15):
+    """Política única y determinista de horario y tolerancia para Kiosco y Administración.
+
+    Prioriza la HoraEntrada asignada al empleado si existe; de lo contrario utiliza la
+    HoraEntrada del turno activo por defecto, aplicando la misma tolerancia en minutos.
+    """
+    if ahora is None:
+        ahora_dt = business_now()
+    elif isinstance(ahora, datetime):
+        ahora_dt = ahora
+    elif isinstance(ahora, time):
+        ahora_dt = datetime.combine(business_now().date(), ahora)
+    elif isinstance(ahora, str):
+        if 'T' in ahora or '-' in ahora or ' ' in ahora:
+            ahora_dt = datetime.fromisoformat(ahora)
+        else:
+            ahora_dt = datetime.combine(business_now().date(), time.fromisoformat(ahora))
+    else:
+        raise TypeError('Formato de fecha/hora inválido para asistencia.')
+
+    turno_id_raw = _extraer_campo(empleado, 'TurnoID')
+    if turno_id_raw is None:
+        turno_id_raw = _extraer_campo(turno, 'ID')
+    turno_id = int(turno_id_raw) if turno_id_raw is not None else 1
+
+    hora_entrada_emp = _normalizar_hora(_extraer_campo(empleado, 'HoraEntrada'))
+    hora_entrada_turno = _normalizar_hora(_extraer_campo(turno, 'HoraEntrada'))
+    hora_entrada_objetivo = hora_entrada_emp if hora_entrada_emp is not None else hora_entrada_turno
+    fuente_horario = 'empleado' if hora_entrada_emp is not None else ('turno' if hora_entrada_turno is not None else 'ninguno')
+
+    tol_emp = _extraer_campo(empleado, 'ToleranciaMinutos')
+    tol_turno = _extraer_campo(turno, 'ToleranciaMinutos')
+    if tol_emp is not None:
+        tolerancia_minutos = int(tol_emp)
+    elif tol_turno is not None:
+        tolerancia_minutos = int(tol_turno)
+    else:
+        tolerancia_minutos = int(tolerancia_default)
+
+    estado = 'A Tiempo'
+    hora_limite = None
+    limite_dt = None
+    if hora_entrada_objetivo is not None:
+        limite_dt = datetime.combine(ahora_dt.date(), hora_entrada_objetivo) + timedelta(minutes=tolerancia_minutos)
+        hora_limite = limite_dt.time()
+        if ahora_dt > limite_dt:
+            estado = 'Llegada Tardia'
+
+    return ResultadoHorarioAsistencia(
+        estado=estado,
+        turno_id=turno_id,
+        hora_entrada=hora_entrada_objetivo,
+        tolerancia_minutos=tolerancia_minutos,
+        hora_limite=hora_limite,
+        limite_dt=limite_dt,
+        fuente_horario=fuente_horario,
+    )
 
 
 def can_mark_exit(entry_time, now):
@@ -14,21 +104,30 @@ def as_date(value):
         return value.date()
     if isinstance(value, date):
         return value
-    return date.fromisoformat(value)
+    return date.fromisoformat(str(value))
 
 
 def working_dates(start, end):
     start, end = as_date(start), as_date(end)
+    if end < start:
+        return set()
     return {start + timedelta(days=i) for i in range((end - start).days + 1)
             if (start + timedelta(days=i)).weekday() != 6}
 
 
-def absent_dates(start, end, attended, licenses):
-    expected = working_dates(start, end)
+def absent_dates(start, end, attended, licenses, as_of_date=None):
+    start, end = as_date(start), as_date(end)
+    cutoff = business_now().date() if as_of_date is None else as_date(as_of_date)
+    effective_end = min(end, cutoff)
+    if effective_end < start:
+        return set()
+    expected = working_dates(start, effective_end)
     justified = set()
     for license in licenses:
-        justified.update(working_dates(max(start, as_date(license.FechaInicio)),
-                                       min(end, as_date(license.FechaFin))))
+        lic_start = max(start, as_date(license.FechaInicio))
+        lic_end = min(effective_end, as_date(license.FechaFin))
+        if lic_start <= lic_end:
+            justified.update(working_dates(lic_start, lic_end))
     return expected - ({as_date(day) for day in attended} | justified)
 
 
