@@ -61,6 +61,14 @@ def test_statistics_charts_have_equivalent_data_tables():
     assert "VIP 2" in soup.select_one("#chart-clientes-nivel-datos").get_text(" ", strip=True)
 
 
+def test_sales_forecast_explains_when_there_are_no_recent_invoices():
+    soup = render("estadistica", ventas_por_hora=[], ventas_diarias=[], clientes_nivel=[],
+                  pronostico_ventas_data={"fechas": [], "historico": [], "prediccion": []},
+                  rotacion_productos=[], mermas_mes=[], rendimiento_lotes=[], arqueos=[], pronostico=[])
+    assert not soup.select_one("#chart-pronostico-ventas")
+    assert "No hay ventas facturadas en los últimos 30 días" in soup.get_text(" ", strip=True)
+
+
 def test_audit_record_keeps_details_out_of_main_columns():
     soup = render("auditoria", desde="", hasta="", entidad="", eventos=[{
         "fecha": "2026-10-01 10:00", "usuario": "Ana", "accion": "UPDATE",

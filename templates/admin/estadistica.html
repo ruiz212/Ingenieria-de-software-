@@ -60,6 +60,7 @@
         <span class="text-muted estadistica-text-muted">Modelo predictivo de Regresión Lineal</span>
     </div>
     <div class="panel-body">
+        {% if pronostico_ventas_data.fechas %}
         <div class="estadistica-div-spacing-2">
             <canvas id="chart-pronostico-ventas" role="img" aria-label="Ventas históricas y pronóstico en córdobas; datos disponibles en la tabla siguiente"></canvas>
         </div>
@@ -68,6 +69,11 @@
             {% for fecha in pronostico_ventas_data.fechas %}<tr><td>{{ fecha }}</td><td>{{ pronostico_ventas_data.historico[loop.index0] if pronostico_ventas_data.historico[loop.index0] is not none else '—' }}</td><td>{{ pronostico_ventas_data.prediccion[loop.index0] if pronostico_ventas_data.prediccion[loop.index0] is not none else '—' }}</td></tr>{% else %}<tr><td colspan="3">Sin datos de pronóstico.</td></tr>{% endfor %}
             </tbody></table></div>
         </details>
+        {% else %}
+        <div class="empty-state" role="status">
+            <p>No hay ventas facturadas en los últimos 30 días para calcular el pronóstico.</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 
