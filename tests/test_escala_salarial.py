@@ -232,6 +232,8 @@ def test_perfiles_render_con_estado_y_filtro_inactivos(app):
             {'cargo': 'Cajero', 'perfil': 'Caja', 'obligaciones': 'Cobrar', 'competencias': 'POS', 'activo': True},
             {'cargo': 'Ingeniero electronico', 'perfil': 'Soporte', 'obligaciones': 'Redes', 'competencias': 'Hardware', 'activo': False},
             {'cargo': 'Panadero', 'perfil': 'Panadería', 'obligaciones': 'Hornear', 'competencias': 'Masas', 'activo': True},
+            {'cargo': 'Panadero Aprendiz', 'perfil': 'Aprendiz', 'obligaciones': 'Apoyo', 'competencias': 'Masas', 'activo': False},
+            {'cargo': 'Panadero Junior', 'perfil': 'Junior', 'obligaciones': 'Hornear', 'competencias': 'Masas', 'activo': True},
         ]
         html = render_template('admin/rrhh.html',
             user=User(1, 'admin', 'Admin', 1, 'Admin'),
@@ -254,3 +256,7 @@ def test_perfiles_render_con_estado_y_filtro_inactivos(app):
         dropdown_html = html[html.find('id="cargo-select-dropdown"'):html.find('id="ne-ingreso"')]
         assert 'data-value="Cajero"' in dropdown_html
         assert 'data-value="Ingeniero electronico"' not in dropdown_html
+        # Y Panadero Aprendiz inactivo NO debe aparecer en el submenú de panadero
+        assert 'data-value="Panadero Aprendiz"' not in dropdown_html
+        # Mientras que Panadero Junior activo SÍ debe aparecer
+        assert 'data-value="Panadero Junior"' in dropdown_html

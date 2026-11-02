@@ -492,10 +492,10 @@ def crear_empleado():
         execute_sp(
             cursor, 'rrhh.sp_ObtenerPerfilPuestoPorCargo',
             (str(datos['cargo']).strip(),),
-            fallback_sql='SELECT Cargo FROM rrhh.PerfilesPuesto WHERE Cargo=?',
+            fallback_sql='SELECT Cargo FROM rrhh.PerfilesPuesto WHERE Cargo=? AND (Activo=1 OR Activo IS NULL)',
         )
         if not cursor.fetchone():
-            return jsonify(error='Seleccione un perfil de puesto registrado.'), 400
+            return jsonify(error='El perfil de puesto seleccionado no existe o está inactivo.'), 400
         foto_path = None
         descriptor_str = None
         if 'foto' in datos and datos['foto']:

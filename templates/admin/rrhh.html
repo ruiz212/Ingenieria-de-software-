@@ -537,38 +537,68 @@
                         </button>
                         <div class="custom-select-dropdown" id="cargo-select-dropdown" role="menu">
                             <div class="custom-select-option custom-select-placeholder" data-value="" onclick="seleccionarCargoOpcion('', event)" role="menuitem">Selecciona un perfil</div>
+                            {% set perfil_estado_map = {} %}
+                            {% for p in perfiles %}
+                                {% set p_is_act = (p.activo is not defined or (p.activo != false and p.activo != 0)) %}
+                                {% set _ = perfil_estado_map.update({p.cargo: p_is_act}) %}
+                            {% endfor %}
+                            {% set panadero_parent_active = perfil_estado_map.get('Panadero', true) %}
+                            {% set panadero_aprendiz_act = perfil_estado_map.get('Panadero Aprendiz', true) %}
+                            {% set panadero_junior_act = perfil_estado_map.get('Panadero Junior', true) %}
+                            {% set panadero_senior_act = perfil_estado_map.get('Panadero Senior', true) %}
+                            {% set maestro_panadero_act = perfil_estado_map.get('Maestro Panadero', true) %}
+                            {% set any_panadero_sub_active = panadero_aprendiz_act or panadero_junior_act or panadero_senior_act or maestro_panadero_act %}
+                            {% set mostrar_panadero = panadero_parent_active and any_panadero_sub_active %}
                             {% for p in perfiles %}
                                 {% set p_activo = (p.activo is not defined or (p.activo != false and p.activo != 0)) %}
                                 {% if p_activo and p.cargo not in ['Panadero Aprendiz', 'Panadero Junior', 'Panadero Senior', 'Maestro Panadero'] %}
                                     {% if p.cargo == 'Panadero' %}
-                                        <div class="custom-select-option has-cascade" data-value="Panadero" onclick="toggleCascadeSubmenu(event)" role="menuitem" aria-haspopup="true">
-                                            <div class="cascade-label-wrap">
-                                                <span>Panadero</span>
-                                                <svg class="cascade-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                                        {% if mostrar_panadero %}
+                                            <div class="custom-select-option has-cascade" data-value="Panadero" onclick="toggleCascadeSubmenu(event)" role="menuitem" aria-haspopup="true">
+                                                <div class="cascade-label-wrap">
+                                                    <span>Panadero</span>
+                                                    <svg class="cascade-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                                                </div>
+                                                <div class="custom-cascade-menu" role="menu">
+                                                    {% if panadero_aprendiz_act %}
+                                                    <div class="custom-cascade-option" data-value="Panadero Aprendiz" data-salario="10626.34" onclick="seleccionarCargoOpcion('Panadero Aprendiz', event)" role="menuitem">Panadero Aprendiz (Salario: C$ 10,626.34)</div>
+                                                    {% endif %}
+                                                    {% if panadero_junior_act %}
+                                                    <div class="custom-cascade-option" data-value="Panadero Junior" data-salario="16786.48" onclick="seleccionarCargoOpcion('Panadero Junior', event)" role="menuitem">Panadero Junior (Salario: C$ 16,786.48)</div>
+                                                    {% endif %}
+                                                    {% if panadero_senior_act %}
+                                                    <div class="custom-cascade-option" data-value="Panadero Senior" data-salario="20893.24" onclick="seleccionarCargoOpcion('Panadero Senior', event)" role="menuitem">Panadero Senior (Salario: C$ 20,893.24)</div>
+                                                    {% endif %}
+                                                    {% if maestro_panadero_act %}
+                                                    <div class="custom-cascade-option" data-value="Maestro Panadero" data-salario="22946.62" onclick="seleccionarCargoOpcion('Maestro Panadero', event)" role="menuitem">Maestro Panadero (Salario: C$ 22,946.62)</div>
+                                                    {% endif %}
+                                                </div>
                                             </div>
-                                            <div class="custom-cascade-menu" role="menu">
-                                                <div class="custom-cascade-option" data-value="Panadero Aprendiz" data-salario="10626.34" onclick="seleccionarCargoOpcion('Panadero Aprendiz', event)" role="menuitem">Panadero Aprendiz (Salario: C$ 10,626.34)</div>
-                                                <div class="custom-cascade-option" data-value="Panadero Junior" data-salario="16786.48" onclick="seleccionarCargoOpcion('Panadero Junior', event)" role="menuitem">Panadero Junior (Salario: C$ 16,786.48)</div>
-                                                <div class="custom-cascade-option" data-value="Panadero Senior" data-salario="20893.24" onclick="seleccionarCargoOpcion('Panadero Senior', event)" role="menuitem">Panadero Senior (Salario: C$ 20,893.24)</div>
-                                                <div class="custom-cascade-option" data-value="Maestro Panadero" data-salario="22946.62" onclick="seleccionarCargoOpcion('Maestro Panadero', event)" role="menuitem">Maestro Panadero (Salario: C$ 22,946.62)</div>
-                                            </div>
-                                        </div>
+                                        {% endif %}
                                     {% else %}
                                         <div class="custom-select-option" data-value="{{ p.cargo }}" onclick="seleccionarCargoOpcion('{{ p.cargo }}', event)" role="menuitem">{{ p.cargo }}</div>
                                     {% endif %}
                                 {% endif %}
                             {% endfor %}
-                            {% if 'Panadero' not in perfiles|map(attribute='cargo')|list %}
+                            {% if 'Panadero' not in perfiles|map(attribute='cargo')|list and mostrar_panadero %}
                                 <div class="custom-select-option has-cascade" data-value="Panadero" onclick="toggleCascadeSubmenu(event)" role="menuitem" aria-haspopup="true">
                                     <div class="cascade-label-wrap">
                                         <span>Panadero</span>
                                         <svg class="cascade-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                                     </div>
                                     <div class="custom-cascade-menu" role="menu">
+                                        {% if panadero_aprendiz_act %}
                                         <div class="custom-cascade-option" data-value="Panadero Aprendiz" data-salario="10626.34" onclick="seleccionarCargoOpcion('Panadero Aprendiz', event)" role="menuitem">Panadero Aprendiz (Salario: C$ 10,626.34)</div>
+                                        {% endif %}
+                                        {% if panadero_junior_act %}
                                         <div class="custom-cascade-option" data-value="Panadero Junior" data-salario="16786.48" onclick="seleccionarCargoOpcion('Panadero Junior', event)" role="menuitem">Panadero Junior (Salario: C$ 16,786.48)</div>
+                                        {% endif %}
+                                        {% if panadero_senior_act %}
                                         <div class="custom-cascade-option" data-value="Panadero Senior" data-salario="20893.24" onclick="seleccionarCargoOpcion('Panadero Senior', event)" role="menuitem">Panadero Senior (Salario: C$ 20,893.24)</div>
+                                        {% endif %}
+                                        {% if maestro_panadero_act %}
                                         <div class="custom-cascade-option" data-value="Maestro Panadero" data-salario="22946.62" onclick="seleccionarCargoOpcion('Maestro Panadero', event)" role="menuitem">Maestro Panadero (Salario: C$ 22,946.62)</div>
+                                        {% endif %}
                                     </div>
                                 </div>
                             {% endif %}
@@ -924,8 +954,18 @@
         document.getElementById('modal-nuevo-empleado').classList.remove('hidden');
         const hiddenInput = document.getElementById('ne-cargo');
         const label = document.getElementById('cargo-select-label');
-        if (hiddenInput && label) {
-            label.textContent = hiddenInput.value || 'Selecciona un perfil';
+        if (hiddenInput) {
+            if (hiddenInput.value) {
+                const opt = document.querySelector(`#cargo-select-dropdown [data-value="${CSS.escape(hiddenInput.value)}"]`);
+                if (!opt) {
+                    hiddenInput.value = '';
+                    const salarioInput = document.getElementById('ne-salario');
+                    if (salarioInput) salarioInput.value = '';
+                }
+            }
+            if (label) {
+                label.textContent = hiddenInput.value || 'Selecciona un perfil';
+            }
             if (hiddenInput.value && typeof consultarSalarioEscala === 'function') {
                 consultarSalarioEscala(hiddenInput.value);
             }

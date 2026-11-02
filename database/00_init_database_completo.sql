@@ -3580,7 +3580,7 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerPerfilPuestoPorCargo]
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT Cargo FROM [rrhh].[PerfilesPuesto] WHERE Cargo=@Cargo;
+    SELECT Cargo FROM [rrhh].[PerfilesPuesto] WHERE Cargo=@Cargo AND (Activo=1 OR Activo IS NULL);
 END
 GO
 
