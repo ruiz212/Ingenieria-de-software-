@@ -676,6 +676,7 @@ def estado_resultados():
         return render_template('admin/estado_resultados.html',
                                user=current_user,
                                mes=mes, anio=anio,
+                               periodo_creado=False,
                                ingresos=[], costos=[], gastos=[],
                                total_ingresos=0, total_costos=0, total_gastos=0,
                                utilidad_bruta=0, utilidad_neta=0)
@@ -765,6 +766,7 @@ def estado_resultados():
     return render_template('admin/estado_resultados.html',
                            user=current_user,
                            mes=mes, anio=anio,
+                           periodo_creado=True,
                            ingresos=ingresos, total_ingresos=total_ingresos,
                            costos=costos, total_costos=total_costos,
                            gastos=gastos, total_gastos=total_gastos,

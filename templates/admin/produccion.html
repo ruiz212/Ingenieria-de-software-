@@ -28,6 +28,13 @@
             </button>
         </div>
         <div class="panel-body panel-body-flush">
+            <div class="produccion-filtros">
+                <label for="filtro-lotes-producto">Producto</label>
+                <input type="search" id="filtro-lotes-producto" class="form-input" placeholder="Buscar producto">
+                <label for="filtro-lotes-fecha">Fecha</label>
+                <input type="date" id="filtro-lotes-fecha" class="form-input">
+                <button type="button" class="btn btn-outline btn-sm" id="limpiar-filtros-lotes">Limpiar</button>
+            </div>
             <div class="table-responsive">
                 <table class="data-table">
                     <thead>
@@ -39,7 +46,7 @@
                     </thead>
                     <tbody>
                         {% for l in lotes %}
-                        <tr>
+                        <tr class="produccion-lote" data-fecha="{{ l.fecha[6:10] }}-{{ l.fecha[3:5] }}-{{ l.fecha[0:2] }}" data-producto="{{ l.producto|lower }}">
                             <td class="cell-muted">{{ l.fecha }}</td>
                             <td class="cell-bold">{{ l.producto }}</td>
                             <td><span class="badge badge-primary">{{ l.cantidad }} uds.</span></td>
@@ -71,12 +78,14 @@
         </button>
     </div>
 
+    <label for="buscar-receta" class="form-label">Buscar receta</label>
+    <input type="search" id="buscar-receta" class="form-input produccion-buscar-receta" placeholder="Buscar producto">
+
     <div class="produccion-grid">
         {% for producto, ingredientes in recetas_agrupadas.items() %}
-        <div class="card">
-            <div class="card-header">
-                <h3 class="produccion-h3-text">{{ producto }}</h3>
-            </div>
+        <div class="card produccion-receta" data-producto="{{ producto|lower }}">
+            <details class="produccion-receta-detalle">
+            <summary class="card-header"><span class="produccion-h3-text">{{ producto }}</span> <span class="text-muted">{{ ingredientes|length }} ingrediente{{ 's' if ingredientes|length != 1 }}</span></summary>
             <div class="card-body">
                 <ul class="produccion-ul-spacing">
                     {% for i in ingredientes %}
@@ -84,7 +93,7 @@
                         <span class="list-row-label">{{ i.materia }}</span>
                         <div class="d-flex flex-center gap-sm">
                             <span class="list-row-value text-primary">{{ i.cantidad }} {{ i.abreviatura }}</span>
-                            <button onclick="eliminarIngrediente({{ i.id }})" class="btn btn-ghost btn-sm" title="Quitar">
+                            <button onclick="eliminarIngrediente({{ i.id }})" class="btn btn-ghost btn-sm" title="Quitar ingrediente de la receta" aria-label="Quitar ingrediente de la receta">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                             </button>
                         </div>
@@ -92,6 +101,7 @@
                     {% endfor %}
                 </ul>
             </div>
+            </details>
         </div>
         {% else %}
         <div class="produccion-div-spacing">
@@ -189,6 +199,27 @@
 
     function abrirModal(id) { document.getElementById(id).classList.remove('hidden'); }
     function cerrarModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function filtrarLotes() {
+        const producto = document.getElementById('filtro-lotes-producto').value.trim().toLowerCase();
+        const fecha = document.getElementById('filtro-lotes-fecha').value;
+        document.querySelectorAll('.produccion-lote').forEach(row => {
+            row.hidden = !(row.dataset.producto.includes(producto) && (!fecha || row.dataset.fecha.startsWith(fecha)));
+        });
+    }
+    document.getElementById('filtro-lotes-producto').addEventListener('input', filtrarLotes);
+    document.getElementById('filtro-lotes-fecha').addEventListener('change', filtrarLotes);
+    document.getElementById('limpiar-filtros-lotes').addEventListener('click', () => {
+        document.getElementById('filtro-lotes-producto').value = '';
+        document.getElementById('filtro-lotes-fecha').value = '';
+        filtrarLotes();
+    });
+    document.getElementById('buscar-receta').addEventListener('input', event => {
+        const term = event.target.value.trim().toLowerCase();
+        document.querySelectorAll('.produccion-receta').forEach(card => {
+            card.hidden = !card.dataset.producto.includes(term);
+        });
+    });
 
     // Cerrar modal al hacer click en el overlay
     document.querySelectorAll('.modal-overlay').forEach(overlay => {

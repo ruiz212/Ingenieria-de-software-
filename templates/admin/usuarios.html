@@ -75,13 +75,12 @@
             </div>
         </div>
 
-        <div class="table-responsive">
+        <div class="table-responsive" role="region" aria-label="Directorio de colaboradores" tabindex="0">
             <table class="data-table usuarios-table" id="tabla-usuarios">
                 <thead>
                     <tr>
                         <th>Colaborador</th>
                         <th>Perfil de trabajo</th>
-                        <th>Áreas habilitadas</th>
                         <th>Estado</th>
                         <th>Gestión de acceso</th>
                     </tr>
@@ -110,17 +109,10 @@
                         </td>
                         <td class="usuarios-col-role">
                             <span class="usuarios-role-pill {{ u.badge_class }}">{{ u.etiqueta_rol }}</span>
-                            <p class="usuarios-role-caption">{{ u.perfil_rol }}</p>
-                        </td>
-                        <td class="usuarios-col-modules">
-                            <div class="usuarios-modules-list">
-                                {% for mod in u.modulos[:3] %}
-                                <span class="usuarios-module-pill">{{ mod }}</span>
-                                {% endfor %}
-                                {% if u.modulos|length > 3 %}
-                                <span class="usuarios-module-more" title="{{ u.modulos[3:]|join(' • ') }}">+{{ u.modulos|length - 3 }} áreas</span>
-                                {% endif %}
-                            </div>
+                            <details class="usuarios-row-detail"><summary>Ver áreas de {{ u.nombre }}</summary>
+                                <p class="usuarios-role-caption">{{ u.perfil_rol }}</p>
+                                <ul>{% for mod in u.modulos %}<li>{{ mod }}</li>{% else %}<li>Sin áreas habilitadas</li>{% endfor %}</ul>
+                            </details>
                         </td>
                         <td class="usuarios-col-status">
                             {% if u.activo %}
@@ -143,7 +135,7 @@
                                     </option>
                                     {% endfor %}
                                 </select>
-                                <button type="button" class="btn btn-outline btn-sm usuarios-toggle-btn" onclick="toggleUsuario({{ u.id }})">
+                                <button type="button" class="btn btn-outline btn-sm usuarios-toggle-btn" aria-label="{% if u.activo %}Desactivar{% else %}Reactivar{% endif %} a {{ u.nombre }}" onclick="toggleUsuario({{ u.id }})">
                                     {% if u.activo %}Desactivar{% else %}Reactivar{% endif %}
                                 </button>
                             </div>

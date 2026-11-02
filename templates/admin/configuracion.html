@@ -21,21 +21,21 @@
         </div>
         <div class="panel-body">
             <div class="form-group mb-3">
-                <label class="form-label configuracion-form-label">Nombre del Negocio</label>
-                <div class="text-muted mb-1 configuracion-text-muted">Se mostrará en facturas y encabezados.</div>
-                <input type="text" class="form-input" id="cfg-nombre_negocio" value="{{ config.get('nombre_negocio', {}).get('valor', '') }}">
+                <label class="form-label configuracion-form-label" for="cfg-nombre_negocio">Nombre del Negocio</label>
+                <div id="help-nombre_negocio" class="text-muted mb-1 configuracion-text-muted">Se mostrará en facturas y encabezados.</div>
+                <input type="text" class="form-input" id="cfg-nombre_negocio" aria-describedby="help-nombre_negocio" value="{{ config.get('nombre_negocio', {}).get('valor', '') }}">
             </div>
 
             <div class="form-group mb-3">
-                <label class="form-label configuracion-form-label">Teléfono de Contacto</label>
-                <div class="text-muted mb-1 configuracion-text-muted">Número visible para los clientes.</div>
-                <input type="tel" class="form-input" id="cfg-telefono_negocio" value="{{ config.get('telefono_negocio', {}).get('valor', '') }}" placeholder="8888-8888" data-mask="telefono" maxlength="9">
+                <label class="form-label configuracion-form-label" for="cfg-telefono_negocio">Teléfono de Contacto</label>
+                <div id="help-telefono_negocio" class="text-muted mb-1 configuracion-text-muted">Número visible para los clientes.</div>
+                <input type="tel" class="form-input" id="cfg-telefono_negocio" aria-describedby="help-telefono_negocio" value="{{ config.get('telefono_negocio', {}).get('valor', '') }}" placeholder="8888-8888" data-mask="telefono" maxlength="9">
             </div>
 
             <div class="form-group">
-                <label class="form-label configuracion-form-label">Dirección</label>
-                <div class="text-muted mb-1 configuracion-text-muted">Ubicación física de la panadería.</div>
-                <input type="text" class="form-input" id="cfg-direccion_negocio" value="{{ config.get('direccion_negocio', {}).get('valor', '') }}" placeholder="Barrio X, Calle Y">
+                <label class="form-label configuracion-form-label" for="cfg-direccion_negocio">Dirección</label>
+                <div id="help-direccion_negocio" class="text-muted mb-1 configuracion-text-muted">Ubicación física de la panadería.</div>
+                <input type="text" class="form-input" id="cfg-direccion_negocio" aria-describedby="help-direccion_negocio" value="{{ config.get('direccion_negocio', {}).get('valor', '') }}" placeholder="Barrio X, Calle Y">
             </div>
         </div>
     </div>
@@ -50,15 +50,15 @@
         </div>
         <div class="panel-body">
             <div class="form-group mb-3">
-                <label class="form-label configuracion-form-label">IVA (%)</label>
-                <div class="text-muted mb-1 configuracion-text-muted">Porcentaje de impuesto aplicado a las ventas.</div>
-                <input type="number" class="form-input form-number" id="cfg-iva_porcentaje" value="{{ config.get('iva_porcentaje', {}).get('valor', '15') }}" min="0" max="100" step="0.5">
+                <label class="form-label configuracion-form-label" for="cfg-iva_porcentaje">IVA (%)</label>
+                <div id="help-iva_porcentaje" class="text-muted mb-1 configuracion-text-muted">Porcentaje de impuesto aplicado a las ventas.</div>
+                <input type="number" class="form-input form-number" id="cfg-iva_porcentaje" aria-describedby="help-iva_porcentaje" value="{{ config.get('iva_porcentaje', {}).get('valor', '15') }}" min="0" max="100" step="0.5">
             </div>
 
             <div class="form-group mb-3">
-                <label class="form-label configuracion-form-label">Símbolo de Moneda</label>
-                <div class="text-muted mb-1 configuracion-text-muted">Se muestra junto a los precios (ej: C$, $, L).</div>
-                <input type="text" class="form-input configuracion-cfg-moneda-simbolo" id="cfg-moneda_simbolo" value="{{ config.get('moneda_simbolo', {}).get('valor', 'C$') }}">
+                <label class="form-label configuracion-form-label" for="cfg-moneda_simbolo">Símbolo de Moneda</label>
+                <div id="help-moneda_simbolo" class="text-muted mb-1 configuracion-text-muted">Se muestra junto a los precios (ej: C$, $, L).</div>
+                <input type="text" class="form-input configuracion-cfg-moneda-simbolo" id="cfg-moneda_simbolo" aria-describedby="help-moneda_simbolo" value="{{ config.get('moneda_simbolo', {}).get('valor', 'C$') }}">
             </div>
 
             <div class="form-group mb-3 exchange-rate-field">
@@ -69,9 +69,9 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label configuracion-form-label">Máx. líneas por factura</label>
-                <div class="text-muted mb-1 configuracion-text-muted">Límite de productos diferentes en una sola venta.</div>
-                <input type="number" class="form-input form-number" id="cfg-max_items_factura" value="{{ config.get('max_items_factura', {}).get('valor', '50') }}" min="1" max="200">
+                <label class="form-label configuracion-form-label" for="cfg-max_items_factura">Máx. líneas por factura</label>
+                <div id="help-max_items_factura" class="text-muted mb-1 configuracion-text-muted">Límite de productos diferentes en una sola venta.</div>
+                <input type="number" class="form-input form-number" id="cfg-max_items_factura" aria-describedby="help-max_items_factura" value="{{ config.get('max_items_factura', {}).get('valor', '50') }}" min="1" max="200">
             </div>
         </div>
     </div>
@@ -213,9 +213,9 @@
 {% endif %}
 
 <!-- Save bar -->
-<div class="card p-3 mb-4 flex-between configuracion-p-3">
-    <p class="mb-0 text-muted">Los cambios no se guardan automáticamente.</p>
-    <button class="btn btn-primary" onclick="guardarConfiguracion()">💾 Guardar Cambios</button>
+<div class="card p-3 mb-4 flex-between configuracion-p-3" role="region" aria-label="Guardar configuración">
+    <p class="mb-0 text-muted" id="configuracion-save-status" role="status" aria-live="polite">Los cambios no se guardan automáticamente.</p>
+    <button class="btn btn-primary" type="button" onclick="guardarConfiguracion()">Guardar cambios</button>
 </div>
 
 {% endblock %}
@@ -246,6 +246,7 @@
             hideLoading();
             if (data.status === 'success') {
                 showToast('Configuración guardada correctamente');
+                document.getElementById('configuracion-save-status').textContent = 'Cambios guardados.';
             } else {
                 showToast(data.error || 'Desconocido', true);
             }
@@ -254,6 +255,11 @@
             showToast('Error de red', true);
         }
     }
+
+    document.querySelectorAll('[id^="cfg-"]').forEach(el => {
+        el.addEventListener('input', () => { document.getElementById('configuracion-save-status').textContent = 'Hay cambios pendientes de guardar.'; });
+        el.addEventListener('change', () => { document.getElementById('configuracion-save-status').textContent = 'Hay cambios pendientes de guardar.'; });
+    });
 
     async function resetTOTP(userId, nombre) {
         const confirmed = await showConfirm({

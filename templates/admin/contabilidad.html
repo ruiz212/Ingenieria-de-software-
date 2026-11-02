@@ -168,10 +168,12 @@
             Planilla y Salarios Contabilizados (NIIF)
         </h3>
         <div class="payroll-header-controls">
+            <label for="filtro-periodo-contabilidad">Período de planilla</label>
             <select id="filtro-periodo-contabilidad" class="payroll-filter-select" onchange="filtrarPlanillaContable()">
                 <option value="ALL">Todos los períodos</option>
-                <option value="2026-10" selected>Octubre 2026 (Mes actual)</option>
-                <option value="2026-09">Septiembre 2026</option>
+                {% for mes, items in (nominas_contables or [])|groupby('mes_anio') %}
+                <option value="{{ mes }}">{{ mes }}</option>
+                {% endfor %}
             </select>
             <a href="/admin/rrhh" class="btn btn-outline btn-sm">Ir a Planilla RRHH</a>
             <a href="/admin/contabilidad/estado-resultados" class="btn btn-primary btn-sm">Ver en Estado de Resultados</a>

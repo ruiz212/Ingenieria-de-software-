@@ -26,6 +26,20 @@
         button.addEventListener('click', () => window.cambiarEstado(code, state));
     }
 
+    window.isOverdueDelivery = function isOverdueDelivery(value) {
+        if (typeof value !== 'string') return false;
+        let deliveryDay;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) deliveryDay = value;
+        else if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+            const [day, month, year] = value.split('/');
+            deliveryDay = `${year}-${month}-${day}`;
+        } else return false;
+        const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Managua', year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(new Date()).map(part => [part.type, part.value]));
+        return deliveryDay < `${parts.year}-${parts.month}-${parts.day}`;
+    };
+
     window.createCard = function createCard(encargo) {
         const details = encargo.encargo_detalles || {};
         const state = ['Pendiente', 'En Proceso', 'Listo', 'Entregado'].includes(details.estado) ? details.estado : 'Pendiente';
@@ -34,6 +48,7 @@
         card.className = `kds-card card-${state.replace(' ', '_')}`;
         card.id = `card-${code}`;
         card.dataset.code = code;
+        card.dataset.overdue = String(window.isOverdueDelivery(details.fecha_entrega));
         const header = add(card, 'div', 'kds-card-header');
         add(header, 'span', 'kds-invoice', '#' + (encargo.numero_factura || ''));
         add(header, 'span', 'kds-time', encargo.hora || '');
@@ -47,6 +62,10 @@
         }
         const delivery = add(customer, 'div', 'monitor-div-text', 'Para entregar: ');
         add(delivery, 'span', 'monitor-span-text', details.fecha_entrega || 'Sin fecha');
+        if (card.dataset.overdue === 'true') {
+            delivery.classList.add('kds-delivery-overdue');
+            add(delivery, 'strong', 'kds-overdue-label', 'Fuera de plazo');
+        }
 
         const imageURL = referenceURL(details.ruta_imagen_referencia);
         if (imageURL) {
@@ -89,6 +108,10 @@
             }
         }
         if (!products.children.length) add(products, 'div', 'kds-empty-products', 'Sin líneas de producto registradas');
+        card.insertBefore(delivery, customer);
+        card.insertBefore(products, customer);
+        const notes = card.querySelector('.kds-notes');
+        if (notes) card.insertBefore(notes, customer);
         const actions = add(card, 'div', 'kds-actions');
         const status = add(actions, 'div', 'kds-status-line');
         add(status, 'span', '', 'Estado actual');

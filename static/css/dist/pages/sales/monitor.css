@@ -577,3 +577,20 @@
     color: var(--danger);
     font-weight: 700;
 }
+.page-monitor .kds-overdue-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.page-monitor .kds-delivery-overdue {
+    border: 1px solid var(--danger, #ef4444);
+    background: #fff1f2;
+    color: #991b1b;
+    padding: 0.65rem 0.75rem;
+    border-radius: 6px;
+}
+
+.page-monitor .kds-overdue-label { display: block; margin-top: 0.25rem; }

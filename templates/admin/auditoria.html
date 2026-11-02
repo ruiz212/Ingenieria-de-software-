@@ -14,18 +14,23 @@
 </form>
 
 <div class="panel panel-full">
-    <div class="panel-body panel-body-flush table-responsive">
+    <p class="auditoria-time-note">Fechas y horas registradas por el servidor; la zona horaria no está indicada en el registro. En pantallas estrechas, desliza la tabla para ver el detalle.</p>
+    <div class="panel-body panel-body-flush table-responsive" role="region" aria-label="Eventos de auditoría" tabindex="0">
         <table class="data-table">
-            <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Entidad</th><th>ID</th><th>IP</th><th>Antes</th><th>Después</th></tr></thead>
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Usuario</th><th scope="col">Acción</th><th scope="col">Entidad</th><th scope="col">Detalle</th></tr></thead>
             <tbody>
             {% for evento in eventos %}
                 <tr>
                     <td>{{ evento.fecha }}</td><td>{{ evento.usuario }}</td><td>{{ evento.accion }}</td>
-                    <td>{{ evento.entidad }}</td><td>{{ evento.entidad_id or '' }}</td><td>{{ evento.ip }}</td>
-                    <td><pre>{{ evento.antes or '' }}</pre></td><td><pre>{{ evento.despues or '' }}</pre></td>
+                    <td>{{ evento.entidad }}</td>
+                    <td><details class="auditoria-detail"><summary>Ver detalle de {{ evento.entidad }} {{ evento.entidad_id or '' }}</summary>
+                        <dl><dt>ID de entidad</dt><dd>{{ evento.entidad_id or '—' }}</dd><dt>IP</dt><dd>{{ evento.ip or '—' }}</dd></dl>
+                        <h4>Antes</h4><pre>{{ evento.antes or 'Sin datos' }}</pre>
+                        <h4>Después</h4><pre>{{ evento.despues or 'Sin datos' }}</pre>
+                    </details></td>
                 </tr>
             {% else %}
-                <tr><td colspan="8"><div class="empty-state"><p>No hay eventos para los filtros seleccionados.</p></div></td></tr>
+                <tr><td colspan="5"><div class="empty-state"><p>No hay eventos para los filtros seleccionados.</p></div></td></tr>
             {% endfor %}
             </tbody>
         </table>

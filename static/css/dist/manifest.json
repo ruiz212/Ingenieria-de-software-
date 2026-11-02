@@ -1,11 +1,11 @@
 {
   "app": {
     "file": "dist/app.css",
-    "version": "4d6c74e55c37"
+    "version": "bb801d70c3a8"
   },
   "accessibility": {
     "file": "dist/accessibility.css",
-    "version": "de6199de235d"
+    "version": "1bf1c7ef3695"
   },
   "theme": {
     "file": "dist/theme.css",
@@ -13,11 +13,11 @@
   },
   "pages/auth/access": {
     "file": "dist/pages/auth/access.css",
-    "version": "51131b21feaf"
+    "version": "bdc510b6d0e6"
   },
   "pages/auth/registration": {
     "file": "dist/pages/auth/registration.css",
-    "version": "22946ff8ed5e"
+    "version": "ca5d29b5c696"
   },
   "pages/admin/dashboard": {
     "file": "dist/pages/admin/dashboard.css",
@@ -27,13 +27,17 @@
     "file": "dist/pages/admin/dgi.css",
     "version": "8517053bbc70"
   },
+  "pages/admin/fiscal": {
+    "file": "dist/pages/admin/fiscal.css",
+    "version": "d05715f0f208"
+  },
   "pages/sales/monitor": {
     "file": "dist/pages/sales/monitor.css",
-    "version": "9eb679698027"
+    "version": "3dae99e66749"
   },
   "pages/sales/pos": {
     "file": "dist/pages/sales/pos.css",
-    "version": "dd0a9d3b7973"
+    "version": "56f49ae336b7"
   },
   "pages/sales/product-visuals": {
     "file": "dist/pages/sales/product-visuals.css",
@@ -41,7 +45,7 @@
   },
   "pages/customer/store": {
     "file": "dist/pages/customer/store.css",
-    "version": "aae2fffa2a4a"
+    "version": "052b49d69d41"
   },
   "pages/admin/arqueos": {
     "file": "dist/pages/admin/arqueos.css",
@@ -49,19 +53,19 @@
   },
   "pages/admin/asistencia": {
     "file": "dist/pages/admin/asistencia.css",
-    "version": "f443db7270d1"
+    "version": "77f2312c8912"
   },
   "pages/admin/auditoria": {
     "file": "dist/pages/admin/auditoria.css",
-    "version": "68bb0ef391a6"
+    "version": "ef626e4267d5"
   },
   "pages/admin/balance_comprobacion": {
     "file": "dist/pages/admin/balance_comprobacion.css",
-    "version": "e79c59d2d49a"
+    "version": "a2f88eaca643"
   },
   "pages/admin/balance_general": {
     "file": "dist/pages/admin/balance_general.css",
-    "version": "45c829de8976"
+    "version": "99ef5d387c10"
   },
   "print/balance_imprimir": {
     "file": "dist/print/balance_imprimir.css",
@@ -69,7 +73,7 @@
   },
   "pages/admin/catalogo": {
     "file": "dist/pages/admin/catalogo.css",
-    "version": "5ceb5400a146"
+    "version": "26bda7792885"
   },
   "pages/admin/catalogo_cuentas": {
     "file": "dist/pages/admin/catalogo_cuentas.css",
@@ -89,7 +93,7 @@
   },
   "pages/admin/configuracion": {
     "file": "dist/pages/admin/configuracion.css",
-    "version": "e5c2e43b9da7"
+    "version": "0b971421c525"
   },
   "pages/admin/contabilidad": {
     "file": "dist/pages/admin/contabilidad.css",
@@ -97,7 +101,7 @@
   },
   "pages/admin/estadistica": {
     "file": "dist/pages/admin/estadistica.css",
-    "version": "5bd47000b6d7"
+    "version": "7e90e5be1755"
   },
   "pages/admin/mercadotecnia": {
     "file": "dist/pages/admin/mercadotecnia.css",
@@ -105,7 +109,7 @@
   },
   "pages/admin/estado_resultados": {
     "file": "dist/pages/admin/estado_resultados.css",
-    "version": "40f68b35ae69"
+    "version": "a1599116318f"
   },
   "print/estado_resultados_imprimir": {
     "file": "dist/print/estado_resultados_imprimir.css",
@@ -117,11 +121,11 @@
   },
   "pages/admin/fidelizacion": {
     "file": "dist/pages/admin/fidelizacion.css",
-    "version": "ea8f9476871b"
+    "version": "1f8406a9cbc1"
   },
   "pages/admin/inventario": {
     "file": "dist/pages/admin/inventario.css",
-    "version": "cf4fd4a3d973"
+    "version": "1b9f224288da"
   },
   "pages/admin/kiosco": {
     "file": "dist/pages/admin/kiosco.css",
@@ -129,11 +133,11 @@
   },
   "pages/admin/libro_mayor": {
     "file": "dist/pages/admin/libro_mayor.css",
-    "version": "db00666ea4b3"
+    "version": "ba70e7c8aa69"
   },
   "pages/admin/produccion": {
     "file": "dist/pages/admin/produccion.css",
-    "version": "63ad934e867c"
+    "version": "ce7e0b61b984"
   },
   "print/reporte_aguinaldo": {
     "file": "dist/print/reporte_aguinaldo.css",
@@ -153,7 +157,7 @@
   },
   "pages/admin/usuarios": {
     "file": "dist/pages/admin/usuarios.css",
-    "version": "7394ff22569f"
+    "version": "c99fe0592474"
   },
   "pages/auth/success": {
     "file": "dist/pages/auth/success.css",
@@ -161,11 +165,11 @@
   },
   "pages/kiosk/attendance": {
     "file": "dist/pages/kiosk/attendance.css",
-    "version": "2df962e3974b"
+    "version": "26b875d6359c"
   },
   "pages/customer/tracking": {
     "file": "dist/pages/customer/tracking.css",
-    "version": "0a013b2f5e80"
+    "version": "f54ab03d1deb"
   },
   "pages/auth/totp": {
     "file": "dist/pages/auth/totp.css",

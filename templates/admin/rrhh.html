@@ -85,48 +85,6 @@
     </div>
 </div>
 
-<section class="panel panel-full rrhh-profiles" aria-labelledby="rrhh-profiles-title">
-    <div class="panel-header"><h3 id="rrhh-profiles-title">Perfiles de puesto</h3></div>
-    <div class="panel-body">
-        <p>Describe el rol, sus obligaciones y las competencias del contrato. Los cargos históricos pueden completarse aquí.</p>
-        <div class="rrhh-profile-list">
-            {% for p in perfiles %}
-            {% set is_active = (p.activo is not defined or (p.activo != false and p.activo != 0)) %}
-            <article class="rrhh-profile-card {% if not is_active %}profile-card-inactive{% endif %}">
-                <div class="rrhh-profile-card-header">
-                    <h4>{{ p.cargo }}</h4>
-                    <span class="rrhh-profile-status-badge {% if is_active %}status-activo{% else %}status-inactivo{% endif %}">
-                        {{ 'Activo' if is_active else 'Inactivo' }}
-                    </span>
-                </div>
-                <div class="rrhh-profile-card-body">
-                    {% if p.perfil or p.obligaciones or p.competencias %}
-                    <p>{{ p.perfil or 'Descripción pendiente' }}</p>
-                    <details><summary>Obligaciones y competencias</summary><p><strong>Obligaciones</strong><br>{{ p.obligaciones or 'Pendiente' }}</p><p><strong>Competencias</strong><br>{{ p.competencias or 'Pendiente' }}</p></details>
-                    {% else %}<p>Perfil contractual pendiente de completar.</p>{% endif %}
-                </div>
-                <div class="rrhh-profile-card-footer">
-                    <button type="button" class="btn btn-outline btn-sm btn-edit-profile" data-edit-profile="{{ loop.index0 }}">Editar perfil</button>
-                    <button type="button" class="btn-toggle-status {% if is_active %}btn-deactivate{% else %}btn-activate{% endif %}" onclick="cambiarEstadoPerfil('{{ p.cargo }}', {{ 'false' if is_active else 'true' }})">
-                        {{ 'Desactivar' if is_active else 'Activar' }}
-                    </button>
-                </div>
-            </article>
-            {% else %}<p>No hay perfiles registrados. Agrega el primero antes de crear un empleado.</p>{% endfor %}
-        </div>
-        <details class="rrhh-profile-editor" id="rrhh-profile-editor"><summary>Registrar o actualizar un perfil</summary>
-            <form id="form-perfil-puesto" data-draft-key="perfil-puesto">
-                <label>Cargo<input id="perfil-cargo" maxlength="100" required></label>
-                <label>Perfil general<textarea id="perfil-descripcion" maxlength="1000" rows="2" required></textarea></label>
-                <label>Obligaciones contractuales<textarea id="perfil-obligaciones" maxlength="2000" rows="3" required></textarea></label>
-                <label>Requisitos y competencias<textarea id="perfil-competencias" maxlength="1000" rows="2" required></textarea></label>
-                <button type="submit" class="btn btn-primary">Guardar perfil</button>
-            </form>
-        </details>
-        <script id="rrhh-profiles-data" type="application/json">{{ perfiles|tojson }}</script>
-    </div>
-</section>
-
 <!-- Empleados Grid -->
 <div class="panel panel-full panel-accent-primary mb-3">
     <div class="panel-header">
@@ -139,18 +97,18 @@
     <div class="rrhh-dossier-toolbar">
         <div class="rrhh-search-wrapper">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="rrhh-search-icon" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="search" id="filtro-empleados-busqueda" placeholder="Buscar por nombre, cédula o cargo..." class="form-input rrhh-search-input" autocomplete="off" oninput="filtrarEmpleadosDossier()">
+            <input type="search" id="filtro-empleados-busqueda" aria-label="Buscar expedientes por nombre, cédula o cargo" placeholder="Buscar por nombre, cédula o cargo..." class="form-input rrhh-search-input" autocomplete="off" oninput="filtrarEmpleadosDossier()">
         </div>
         <div class="rrhh-toolbar-filters">
-            <div class="rrhh-filter-chips" role="radiogroup" aria-label="Filtrar por estado">
-                <button type="button" class="rrhh-chip active" data-estado="ALL" onclick="cambiarEstadoFiltroDossier('ALL', this)">
+            <div class="rrhh-filter-chips" role="group" aria-label="Filtrar por estado">
+                <button type="button" class="rrhh-chip active" data-estado="ALL" aria-pressed="true" onclick="cambiarEstadoFiltroDossier('ALL', this)">
                     Todos <span class="rrhh-chip-count" id="count-total-empleados">{{ empleados|length }}</span>
                 </button>
-                <button type="button" class="rrhh-chip" data-estado="Activo" onclick="cambiarEstadoFiltroDossier('Activo', this)">
-                    Activos <span class="rrhh-chip-count" id="count-activos-empleados">0</span>
+                <button type="button" class="rrhh-chip" data-estado="Activo" aria-pressed="false" onclick="cambiarEstadoFiltroDossier('Activo', this)">
+                    Activos <span class="rrhh-chip-count" id="count-activos-empleados">{{ empleados | selectattr('estado', 'equalto', 'Activo') | list | length }}</span>
                 </button>
-                <button type="button" class="rrhh-chip" data-estado="Liquidado" onclick="cambiarEstadoFiltroDossier('Liquidado', this)">
-                    Inactivos <span class="rrhh-chip-count" id="count-liquidados-empleados">0</span>
+                <button type="button" class="rrhh-chip" data-estado="INACTIVE" aria-pressed="false" onclick="cambiarEstadoFiltroDossier('INACTIVE', this)">
+                    Inactivos <span class="rrhh-chip-count" id="count-liquidados-empleados">{{ empleados | rejectattr('estado', 'equalto', 'Activo') | list | length }}</span>
                 </button>
             </div>
             <select id="filtro-cargo-dossier" class="form-select rrhh-cargo-select" onchange="filtrarEmpleadosDossier()" aria-label="Filtrar por cargo">
@@ -275,6 +233,48 @@
         {% endif %}
     </div>
 </div>
+
+<section class="panel panel-full rrhh-profiles" aria-labelledby="rrhh-profiles-title">
+    <div class="panel-header"><h3 id="rrhh-profiles-title">Perfiles de puesto</h3></div>
+    <div class="panel-body">
+        <p>Describe el rol, sus obligaciones y las competencias del contrato. Los cargos históricos pueden completarse aquí.</p>
+        <div class="rrhh-profile-list">
+            {% for p in perfiles %}
+            {% set is_active = (p.activo is not defined or (p.activo != false and p.activo != 0)) %}
+            <article class="rrhh-profile-card {% if not is_active %}profile-card-inactive{% endif %}">
+                <div class="rrhh-profile-card-header">
+                    <h4>{{ p.cargo }}</h4>
+                    <span class="rrhh-profile-status-badge {% if is_active %}status-activo{% else %}status-inactivo{% endif %}">
+                        {{ 'Activo' if is_active else 'Inactivo' }}
+                    </span>
+                </div>
+                <div class="rrhh-profile-card-body">
+                    {% if p.perfil or p.obligaciones or p.competencias %}
+                    <p>{{ p.perfil or 'Descripción pendiente' }}</p>
+                    <details><summary>Obligaciones y competencias</summary><p><strong>Obligaciones</strong><br>{{ p.obligaciones or 'Pendiente' }}</p><p><strong>Competencias</strong><br>{{ p.competencias or 'Pendiente' }}</p></details>
+                    {% else %}<p>Perfil contractual pendiente de completar.</p>{% endif %}
+                </div>
+                <div class="rrhh-profile-card-footer">
+                    <button type="button" class="btn btn-outline btn-sm btn-edit-profile" data-edit-profile="{{ loop.index0 }}">Editar perfil</button>
+                    <button type="button" class="btn-toggle-status {% if is_active %}btn-deactivate{% else %}btn-activate{% endif %}" onclick="cambiarEstadoPerfil('{{ p.cargo }}', {{ 'false' if is_active else 'true' }})">
+                        {{ 'Desactivar' if is_active else 'Activar' }}
+                    </button>
+                </div>
+            </article>
+            {% else %}<p>No hay perfiles registrados. Agrega el primero antes de crear un empleado.</p>{% endfor %}
+        </div>
+        <details class="rrhh-profile-editor" id="rrhh-profile-editor"><summary>Registrar o actualizar un perfil</summary>
+            <form id="form-perfil-puesto" data-draft-key="perfil-puesto">
+                <label>Cargo<input id="perfil-cargo" maxlength="100" required></label>
+                <label>Perfil general<textarea id="perfil-descripcion" maxlength="1000" rows="2" required></textarea></label>
+                <label>Obligaciones contractuales<textarea id="perfil-obligaciones" maxlength="2000" rows="3" required></textarea></label>
+                <label>Requisitos y competencias<textarea id="perfil-competencias" maxlength="1000" rows="2" required></textarea></label>
+                <button type="submit" class="btn btn-primary">Guardar perfil</button>
+            </form>
+        </details>
+        <script id="rrhh-profiles-data" type="application/json">{{ perfiles|tojson }}</script>
+    </div>
+</section>
 
 <!-- Monitor de Asistencia -->
 <div class="panel panel-full panel-accent-warning mb-3">
@@ -514,16 +514,16 @@
         <p class="subtitle">Registrar un nuevo colaborador en el sistema.</p>
         <form id="form-nuevo-empleado" data-draft-key="nuevo-empleado">
             <div class="form-group">
-                <label class="form-label">Nombre Completo</label>
+                <label class="form-label" for="ne-nombre">Nombre Completo</label>
                 <input type="text" id="ne-nombre" class="form-input" required>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Cédula</label>
+                    <label class="form-label" for="ne-cedula">Cédula</label>
                     <input type="text" id="ne-cedula" class="form-input" placeholder="001-000000-0000A" data-mask="cedula" maxlength="16" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Teléfono</label>
+                    <label class="form-label" for="ne-telefono">Teléfono</label>
                     <input type="tel" id="ne-telefono" class="form-input" placeholder="8888-8888" data-mask="telefono" maxlength="9">
                 </div>
             </div>
@@ -1893,7 +1893,10 @@ function abrirModalNomina() {
 
     function cambiarEstadoFiltroDossier(estado, btn) {
         estadoFiltroDossierActual = estado;
-        document.querySelectorAll('.rrhh-filter-chips .rrhh-chip').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.rrhh-filter-chips .rrhh-chip').forEach(c => {
+            c.classList.remove('active');
+            c.setAttribute('aria-pressed', String(c === btn));
+        });
         if (btn) btn.classList.add('active');
         filtrarEmpleadosDossier();
     }
@@ -1918,7 +1921,8 @@ function abrirModalNomina() {
             const cleanQ = query.replace(/[\s.-]/g, '');
             const cleanC = cedula.replace(/[\s.-]/g, '');
             const coincideQuery = !query || nombre.includes(query) || cedula.includes(query) || (cleanQ && cleanC.includes(cleanQ)) || cargo.includes(query);
-            const coincideEstado = (estadoFiltroDossierActual === 'ALL' || estado === estadoFiltroDossierActual);
+            const coincideEstado = estadoFiltroDossierActual === 'ALL' ||
+                (estadoFiltroDossierActual === 'INACTIVE' ? estado !== 'Activo' : estado === estadoFiltroDossierActual);
             const coincideCargo = (cargoFiltro === 'all' || cargo === cargoFiltro);
 
             const mostrar = coincideQuery && coincideEstado && coincideCargo;

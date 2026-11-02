@@ -63,7 +63,7 @@
                 <div class="customer-actions">
                     <a href="{{ url_for('auth.cliente_invitado') }}" class="btn btn-primary">Ver el menú como invitado <span aria-hidden="true">→</span></a>
                     <p>Explora los productos sin crear una cuenta.</p>
-                    <a href="{{ url_for('auth.login') }}" class="btn btn-outline">Iniciar sesión</a>
+                    <a href="{{ url_for('auth.login', source='cliente') }}" class="btn btn-outline">Iniciar sesión como cliente</a>
                     <a href="{{ url_for('auth.cliente_registro') }}" class="customer-register">Crear una cuenta</a>
                 </div>
             </div>

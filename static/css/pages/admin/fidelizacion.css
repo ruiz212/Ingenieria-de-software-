@@ -26,3 +26,26 @@
 .page-fidelizacion .fidelizacion-form-search {
     width: 300px;
 }
+
+.page-fidelizacion .fidelizacion-scroll-hint {
+    margin: 0.75rem 1rem 0;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.page-fidelizacion .fidelizacion-action-column {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    background: var(--surface, #fff);
+    box-shadow: -1px 0 var(--border-light);
+}
+
+.page-fidelizacion th.fidelizacion-action-column {
+    z-index: 2;
+    background: var(--surface-sunken);
+}
+.page-fidelizacion .fidelizacion-level-filter { display: inline-flex; align-items: center; gap: .5rem; font-weight: 600; }
+.page-fidelizacion .fidelizacion-level-filter select { min-width: 7rem; }
+.page-fidelizacion .fidelizacion-level-help,
+.page-fidelizacion #fidelizacion-results { margin: .75rem 1rem; color: var(--text-muted); font-size: .875rem; }

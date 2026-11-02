@@ -43,6 +43,9 @@
   "pages/admin/dgi": [
     "pages/admin/dgi.css"
   ],
+  "pages/admin/fiscal": [
+    "pages/admin/fiscal.css"
+  ],
   "pages/sales/monitor": [
     "pages/sales/monitor.css"
   ],

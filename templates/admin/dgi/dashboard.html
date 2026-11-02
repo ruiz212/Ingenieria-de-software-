@@ -8,20 +8,20 @@
 </section>
 <div class="dgi-columns">
   <section class="dgi-card">
-    <h3>1. Seleccionar período</h3>
+    <h3>Elegir un mes para analizar</h3>
     <form class="dgi-form" method="post" action="{{ url_for('admin.dgi_create_period') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Mes a analizar<input type="month" name="mes" value="{{ month }}" min="2000-01" max="2100-12" required></label>
-      <button class="btn btn-primary" type="submit">Abrir o seleccionar mes</button>
+      <button class="btn btn-primary" type="submit">Abrir mes para análisis</button>
     </form>
     {% if periods %}
     <form class="dgi-form" method="get">
       <label>Períodos guardados<select name="periodo">{% for p in periods %}<option value="{{ p.ID }}" {% if selected and selected.ID==p.ID %}selected{% endif %}>{{ p.Desde.strftime('%m/%Y') }} · {{ p.Estado }}</option>{% endfor %}</select></label>
-      <button class="btn btn-outline" type="submit">Consultar período</button>
+      <button class="btn btn-outline" type="submit">Consultar período guardado</button>
     </form>
     {% endif %}
     {% if selected %}
-    <p><span class="dgi-badge">{{ selected.Estado }}</span> {{ selected.Desde.strftime('%d/%m/%Y') }} al {{ selected.Hasta.strftime('%d/%m/%Y') }}</p>
+    <p><strong>Período consultado:</strong> <span class="dgi-badge">{{ selected.Estado }}</span> {{ selected.Desde.strftime('%d/%m/%Y') }} al {{ selected.Hasta.strftime('%d/%m/%Y') }}. El mes del campo anterior solo cambia al abrirlo; estos resultados corresponden al período consultado.</p>
     <form class="dgi-form" method="post" action="{{ url_for('admin.dgi_create_review') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="periodo_id" value="{{ selected.ID }}">
       <label>Propósito<select name="obligacion" required><option>Diagnóstico interno</option>{% for obligation in profile.dgi_obligaciones.splitlines() if obligation!='Diagnóstico interno' %}<option>{{ obligation }}</option>{% endfor %}</select></label>
@@ -73,17 +73,17 @@
 <script src="{{ url_for('static', filename='js/dgi_invoices.js', v=1) }}" defer></script>
 {% endif %}
 <section class="dgi-card">
-  <div class="dgi-heading"><h3>Revisiones{% if selected %} · {{ selected.Desde.strftime('%m/%Y') }}{% endif %}</h3>
+  <div class="dgi-heading"><h3>Revisiones{% if selected %} · período consultado {{ selected.Desde.strftime('%d/%m/%Y') }} al {{ selected.Hasta.strftime('%d/%m/%Y') }}{% endif %}</h3>
     {% if selected %}<a href="{{ url_for('admin.dgi_dashboard',periodo=selected.ID,historial='0' if show_history else '1') }}">{{ 'Ver solo las últimas revisiones' if show_history else 'Mostrar también versiones anteriores' }}</a>{% endif %}
   </div>
   {% if reviews %}
   <div class="dgi-revision-toolbar">
-    <input type="search" id="dgi-revisions-filter-query" class="dgi-revision-search" placeholder="Filtrar por propósito o versión..." autocomplete="off" oninput="filtrarRevisionesDGI()">
-    <select id="dgi-revisions-filter-state" class="dgi-revision-filter-select" onchange="filtrarRevisionesDGI()">
+    <label for="dgi-revisions-filter-query">Buscar revisión<input type="search" id="dgi-revisions-filter-query" class="dgi-revision-search" placeholder="Propósito o versión" autocomplete="off" oninput="filtrarRevisionesDGI()"></label>
+    <label for="dgi-revisions-filter-state">Estado de revisión<select id="dgi-revisions-filter-state" class="dgi-revision-filter-select" onchange="filtrarRevisionesDGI()">
       <option value="ALL">Todos los estados</option>
       <option value="Validada">Validadas</option>
       <option value="Borrador">Borradores</option>
-    </select>
+    </select></label>
     <span id="dgi-revisions-counter" class="dgi-muted">{{ reviews|length }} revisión(es)</span>
   </div>
   {% endif %}

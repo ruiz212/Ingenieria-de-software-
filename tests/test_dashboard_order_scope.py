@@ -116,7 +116,8 @@ def test_historical_pending_and_ready_orders_remain_visible_without_sales_today(
     assert metrics['encargos_listos'] == 1
     assert metrics['encargos_atrasados'] == 2
     assert 'Encargos por entregar' in html
-    assert '1 listo · 2 atrasados' in html
+    assert 'Preparación: 1 listo' in html
+    assert 'Fuera de plazo: 2 atrasados' in html
     assert 'Todos los días' in html
     assert '100%' not in html
 

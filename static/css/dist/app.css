@@ -121,7 +121,8 @@
     --text-3xl:  2.25rem;   /* 36px  */
 
     /* ── Focus Ring ── */
-    --focus-ring: 0 0 0 3px rgba(212, 149, 43, 0.35);
+    --focus-color: #855715;
+    --focus-shadow: 0 0 0 3px rgba(212, 149, 43, 0.35);
     --focus-ring-danger: 0 0 0 3px rgba(196, 69, 54, 0.30);
 
     /* ── Texture (artisanal grain) ── */
@@ -305,7 +306,7 @@ a single drawer below 900px. */
     background:var(--background);
 }
 .glass-dock{
-    --focus-ring:var(--brand-dorado);
+    --focus-color:#f0bb69;
     position:fixed;
     inset:16px auto 16px 16px;
     width:232px;
@@ -1421,7 +1422,7 @@ a single drawer below 900px. */
 
 /* ── Focus Ring (accessibility) ── */
 .btn:focus-visible {
-    box-shadow: var(--focus-ring);
+    box-shadow: var(--focus-shadow);
 }
 
 /* ── Press state ── */
@@ -1915,7 +1916,7 @@ a single drawer below 900px. */
 /* ── Brand premium badge ── */
 .badge-brand {
     background: var(--gradient-primary);
-    color: #fff;
+    color: var(--on-primary);
     border: none;
     box-shadow: 0 2px 8px rgba(212, 149, 43, 0.30);
     letter-spacing: 0.06em;
@@ -2810,7 +2811,7 @@ a single drawer below 900px. */
 .stepper-step.active .stepper-circle {
     background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
     border-color: var(--brand-dorado);
-    color: white;
+    color: var(--on-primary);
     box-shadow: 0 4px 16px rgba(212, 149, 43, 0.30);
     transform: scale(1.1);
 }

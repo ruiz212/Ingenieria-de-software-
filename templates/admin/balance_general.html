@@ -1,10 +1,12 @@
 {% extends 'admin_base.html' %}
 {% block body_class %}page-balance-general{% endblock %}
+{% block title %}Balance General | Brajher's Cake{% endblock %}
+{% block page_title %}Balance General{% endblock %}
 
 {% block content %}
 <section class="c-report" aria-label="Balance general">
     <header class="c-report__header">
-        <h1 class="c-report__title">Balance General</h1>
+        <h2 class="c-report__title">Balance General</h2>
         <p class="c-report__subtitle">Al {{ fecha_corte }} | Expresado en Córdobas (C$)</p>
     </header>
 
@@ -110,7 +112,7 @@
     </div>
 
     <footer class="c-report__actions balance-general-c-report-actions">
-        <a href="?print=1" target="_blank" class="btn btn-outline balance-general-btn-outline">
+        <a href="{{ url_for('admin.balance_general', fecha_corte=fecha_corte, print=1) }}" target="_blank" class="btn btn-outline balance-general-btn-outline">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
             Imprimir Reporte
         </a>

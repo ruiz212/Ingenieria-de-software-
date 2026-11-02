@@ -3,7 +3,7 @@
 /* Source: base/_accessibility.css */
 /* Mejoras compartidas de legibilidad, teclado, impresión y pantallas pequeñas. */
 :root {
-    --focus-ring: var(--focus-color, #855715);
+    --focus-color: #855715;
     --border-color: var(--border-light, #ddd2c7);
     --text-dark: var(--text-main, #32251f);
 }
@@ -11,7 +11,7 @@
     box-sizing: border-box;
 }
 :focus-visible {
-    outline: 3px solid var(--focus-ring) !important;
+    outline: 3px solid var(--focus-color) !important;
     outline-offset: 3px;
 }
 button, input, select, textarea {

@@ -20,7 +20,7 @@
     </div>
     <p class="dock-no-results" role="status" hidden>No encontramos esa sección.</p>
     <div class="dock-menu" id="dock-sections">
-        <div class="menu-label">PRINCIPAL</div>
+        <div class="menu-label">OPERACIÓN</div>
         {% if current_user.rol_nombre in ['SuperAdmin', 'Admin'] %}
         <a href="/admin/dashboard" class="dock-item {% if request.path == '/admin/dashboard' %}active{% endif %}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -29,7 +29,7 @@
         {% endif %}
 
         {% if current_user.rol_nombre in ['SuperAdmin', 'Admin', 'Estandar'] %}
-        <a href="/pos" class="dock-item">
+        <a href="/pos" class="dock-item {% if request.path == '/pos' %}active{% endif %}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>
             <span class="dock-item-text">Punto de venta</span>
         </a>
@@ -42,10 +42,10 @@
         </a>
         {% endif %}
 
-        <div class="menu-label">GESTIÓN</div>
+        <div class="menu-label">ADMINISTRACIÓN</div>
         {% if current_user.rol_nombre in ['SuperAdmin','Admin'] %}
-        <a href="{{ url_for('admin.dgi_dashboard') }}" class="dock-item {% if request.path.startswith('/admin/dgi') %}active{% endif %}"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7"/></svg><span class="dock-item-text">DGI / Gestión tributaria</span></a>
-        <a href="/admin/fiscal" class="dock-item {% if request.path.startswith('/admin/fiscal') %}active{% endif %}"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4zM4 9h16M9 9v11"/></svg><span class="dock-item-text">Control fiscal DGI</span></a>
+        <a href="{{ url_for('admin.dgi_dashboard') }}" class="dock-item {% if request.path.startswith('/admin/dgi') %}active{% endif %}"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7"/></svg><span class="dock-item-text">DGI · Períodos y revisiones</span></a>
+        <a href="/admin/fiscal" class="dock-item {% if request.path.startswith('/admin/fiscal') %}active{% endif %}"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4zM4 9h16M9 9v11"/></svg><span class="dock-item-text">DGI · Emisor y documentos</span></a>
         {% endif %}
 
         {% if current_user.rol_nombre in ['SuperAdmin', 'Admin'] %}
@@ -111,7 +111,7 @@
         {% if current_user.rol_nombre == 'SuperAdmin' %}
         <a href="/admin/auditoria" class="dock-item {% if request.path == '/admin/auditoria' %}active{% endif %}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span class="dock-item-text">Auditoría y SMTP</span>
+            <span class="dock-item-text">Auditoría</span>
         </a>
         {% endif %}
     </div>

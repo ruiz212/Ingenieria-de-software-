@@ -28,16 +28,15 @@
     <div class="login-wrapper">
         <div class="login-card">
             <div class="logo-area">
-                <h1>Panadería Amada</h1>
+                <h1>Brajher's Cake <span class="registration-brand-subtitle">· Panadería Amada</span></h1>
                 <p id="step-title">Crea tu cuenta de cliente</p>
             </div>
 
-            <div class="progress-container">
-                <div class="progress-line" id="progress-line"></div>
-                <div class="step-indicator active" id="indicator-1">1</div>
-                <div class="step-indicator" id="indicator-2">2</div>
-                <div class="step-indicator" id="indicator-3">3</div>
-            </div>
+            <ol class="progress-container" aria-label="Pasos del registro">
+                <li class="step-indicator active" id="indicator-1" aria-current="step"><span class="step-number">1</span><span class="step-name">Información básica</span></li>
+                <li class="step-indicator" id="indicator-2"><span class="step-number">2</span><span class="step-name">Datos personales</span></li>
+                <li class="step-indicator" id="indicator-3"><span class="step-number">3</span><span class="step-name">Seguridad</span></li>
+            </ol>
 
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -226,21 +225,12 @@
         });
 
         function updateProgress() {
-            const lineWidth = (currentStep - 1) * 50;
-            document.getElementById('progress-line').style.width = lineWidth + '%';
-
             for (let i = 1; i <= 3; i++) {
                 const ind = document.getElementById('indicator-' + i);
-                if (i < currentStep) {
-                    ind.className = 'step-indicator completed';
-                    ind.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
-                } else if (i === currentStep) {
-                    ind.className = 'step-indicator active';
-                    ind.innerHTML = i;
-                } else {
-                    ind.className = 'step-indicator';
-                    ind.innerHTML = i;
-                }
+                ind.classList.toggle('completed', i < currentStep);
+                ind.classList.toggle('active', i === currentStep);
+                if (i === currentStep) ind.setAttribute('aria-current', 'step');
+                else ind.removeAttribute('aria-current');
             }
 
             const titles = {
@@ -257,13 +247,14 @@
             const requiredInputs = stepEl.querySelectorAll('input[required], select[required]');
 
             requiredInputs.forEach(input => {
-                if (!input.value.trim()) {
+                if (!input.checkValidity()) {
                     isValid = false;
-                    input.style.borderColor = 'var(--danger)';
+                    input.setAttribute('aria-invalid', 'true');
                 } else {
-                    input.style.borderColor = 'var(--border)';
+                    input.removeAttribute('aria-invalid');
                 }
             });
+            if (!isValid) stepEl.querySelector('[aria-invalid="true"]')?.focus();
             return isValid;
         }
 
@@ -275,6 +266,7 @@
                 document.getElementById('step-' + currentStep).classList.add('active');
                 document.getElementById('step-' + currentStep).hidden = false;
                 updateProgress();
+                document.querySelector('#step-' + currentStep + ' input, #step-' + currentStep + ' select')?.focus();
             }
         }
 
@@ -285,6 +277,7 @@
             document.getElementById('step-' + currentStep).classList.add('active');
             document.getElementById('step-' + currentStep).hidden = false;
             updateProgress();
+            document.querySelector('#step-' + currentStep + ' input, #step-' + currentStep + ' select')?.focus();
         }
 
     </script>

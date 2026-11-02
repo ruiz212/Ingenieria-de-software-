@@ -31,7 +31,7 @@
 
 .page-libro-mayor .libro-mayor-grid {
     display: grid;
-    grid-template-columns: minmax(300px, 2fr) 1fr 1fr auto;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
     gap: 1.5rem;
     align-items: end;
 }
@@ -198,5 +198,15 @@
 }
 .page-libro-mayor .ledger-amount-zero {
     color:#ddd;
+}
+
+.page-libro-mayor .libro-mayor-grid > * { min-width: 0; }
+.page-libro-mayor .libro-mayor-empty-prompt { color: var(--text-muted); }
+@media (max-width: 1100px) {
+    .page-libro-mayor .libro-mayor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+    .page-libro-mayor .libro-mayor-grid { grid-template-columns: minmax(0, 1fr); }
+    .page-libro-mayor .libro-mayor-btn-primary { width: 100%; }
 }
 

@@ -31,7 +31,8 @@
         <div class="dashboard-metric">
             <dt>Encargos por entregar</dt>
             <dd class="dashboard-metric-value{{ ' dashboard-positive' if metricas.encargos_pendientes == 0 }}">{{ metricas.encargos_pendientes }}</dd>
-            <dd class="dashboard-metric-detail">{{ metricas.encargos_listos }} listo{{ 's' if metricas.encargos_listos != 1 }} · {{ metricas.encargos_atrasados }} atrasado{{ 's' if metricas.encargos_atrasados != 1 }}</dd>
+            <dd class="dashboard-metric-detail">Preparación: {{ metricas.encargos_listos }} listo{{ 's' if metricas.encargos_listos != 1 }}</dd>
+            <dd class="dashboard-metric-detail">Fuera de plazo: {{ metricas.encargos_atrasados }} atrasado{{ 's' if metricas.encargos_atrasados != 1 }}</dd>
             <dd class="dashboard-metric-detail">Todos los días · <a href="{{ url_for('monitor.monitor_pedidos') }}">Ver monitor</a></dd>
         </div>
         <div class="dashboard-metric">

@@ -1,12 +1,18 @@
 {% extends 'admin_base.html' %}
 {% block body_class %}page-estado-resultados{% endblock %}
+{% block title %}Estado de Resultados | Brajher's Cake{% endblock %}
+{% block page_title %}Estado de Resultados{% endblock %}
 
 {% block content %}
 <section class="c-report" aria-label="Estado de resultados">
     <header class="c-report__header">
-        <h1 class="c-report__title">Estado de Resultados</h1>
+        <h2 class="c-report__title">Estado de Resultados</h2>
         <p class="c-report__subtitle">Periodo: {{ mes }}/{{ anio }} | Expresado en Córdobas (C$)</p>
     </header>
+
+    {% if periodo_creado is defined and not periodo_creado %}
+    <p class="c-report__empty" role="status">No hay un período contable creado para {{ mes }}/{{ anio }}. Seleccione otro período o cree el período desde Control fiscal.</p>
+    {% else %}
 
     <div class="c-report__grid estado-resultados-c-report-grid">
         <!-- Bloque de Ingresos Operativos -->
@@ -112,12 +118,13 @@
     </div>
 
     <footer class="c-report__actions estado-resultados-c-report-actions">
-        <a href="?print=1" target="_blank" class="btn btn-outline estado-resultados-btn-outline">
+        <a href="{{ url_for('admin.estado_resultados', mes=mes, anio=anio, print=1) }}" target="_blank" class="btn btn-outline estado-resultados-btn-outline">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
             Imprimir Reporte
         </a>
         <a href="{{ url_for('admin.balance_general') }}" class="btn btn-primary c-btn-glow">Ver Balance General</a>
     </footer>
+    {% endif %}
 </section>
 {% endblock %}
 

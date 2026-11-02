@@ -5,7 +5,7 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.75rem;
-    width: min(90vw, 640px);
+    width: min(100%, 640px);
     margin: 1rem 0;
 }
 
@@ -49,8 +49,10 @@ body {
     font-family: 'Inter', sans-serif;
     background-color: var(--bg-color);
     color: var(--text-light);
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 1rem;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -67,6 +69,7 @@ body {
 .kiosco-header {
     text-align: center;
     margin-bottom: 24px;
+    max-width: 100%;
     z-index: 10;
 }
 .kiosco-header .brand {
@@ -95,9 +98,9 @@ body {
 }
 .kiosco-header .date {
     font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.45);
+    color: rgba(255, 255, 255, 0.72);
     font-weight: 500;
-    letter-spacing: 2px;
+    letter-spacing: clamp(0.05rem, 0.4vw, 2px);
     margin-top: 8px;
     text-transform: uppercase;
 }
@@ -105,6 +108,7 @@ body {
 /* ═══ CAMERA ═══ */
 .camera-wrapper {
     position: relative;
+    width: min(100%, 580px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -113,6 +117,7 @@ body {
 .camera-container {
     position: relative;
     width: 580px;
+    max-width: 100%;
     height: 440px;
     border-radius: 24px;
     overflow: hidden;
@@ -242,7 +247,8 @@ body {
 /* ═══ STATUS BAR ═══ */
 .status-bar {
     margin-top: 24px;
-    padding: 12px 28px;
+    max-width: 100%;
+    padding: 12px clamp(12px, 4vw, 28px);
     border-radius: 100px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.07);
@@ -361,7 +367,7 @@ body {
 }
 .instructions p {
     font-size: 1.1rem;
-    color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.72);
     font-weight: 500;
 }
 
@@ -372,7 +378,7 @@ body {
         height: 70vw;
     }
     .kiosco-header .clock {
-        font-size: 3rem;
+        font-size: clamp(1.8rem, 9vw, 3rem);
     }
     #toast {
         min-width: 90vw;

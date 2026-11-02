@@ -30,7 +30,7 @@
 
 /* ── Focus Ring (accessibility) ── */
 .btn:focus-visible {
-    box-shadow: var(--focus-ring);
+    box-shadow: var(--focus-shadow);
 }
 
 /* ── Press state ── */

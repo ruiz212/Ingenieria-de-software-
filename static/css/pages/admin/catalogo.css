@@ -114,3 +114,28 @@
     justify-content:center;
     font-size:1.3rem;
 }
+
+.page-catalogo .catalogo-scroll-hint {
+    margin: 0.75rem 1rem 0;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.page-catalogo .catalogo-action-column {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    background: var(--surface, #fff);
+    box-shadow: -1px 0 var(--border-light);
+}
+
+.page-catalogo th.catalogo-action-column {
+    z-index: 2;
+    background: var(--surface-sunken);
+}
+
+.page-catalogo .catalogo-action-column .btn-group {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+}

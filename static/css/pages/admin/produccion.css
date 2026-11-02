@@ -31,3 +31,14 @@
     margin-top:0.4rem;
     font-size:0.8rem;
 }
+.page-produccion .produccion-filtros {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+}
+
+.page-produccion .produccion-filtros .form-input { width: auto; max-width: 14rem; }
+.page-produccion .produccion-buscar-receta { max-width: 22rem; margin-bottom: 1rem; }
+.page-produccion .produccion-receta-detalle > summary { cursor: pointer; list-style-position: inside; }

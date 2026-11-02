@@ -11,7 +11,7 @@ body {
 
 .tracking-header {
     background: var(--primary-color);
-    color: white;
+    color: var(--on-primary);
     padding: 3rem 1.5rem 5rem;
     text-align: center;
     position: relative;
@@ -26,7 +26,7 @@ body {
 }
 
 .tracking-header h1 {
-    color: white;
+    color: var(--on-primary);
     font-size: 2rem;
     margin-bottom: 0.5rem;
     position: relative;
@@ -34,7 +34,7 @@ body {
 }
 
 .tracking-header p {
-    opacity: 0.9;
+    opacity: 1;
     font-size: 1rem;
     font-weight: 500;
     position: relative;
@@ -158,14 +158,14 @@ body {
 .status-dot.active {
     background: var(--primary-color);
     border-color: var(--primary-color);
-    color: white;
+    color: var(--on-primary);
     box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.15);
 }
 
 .status-dot.current {
     background: white;
     border-color: var(--primary-color);
-    color: var(--primary-color);
+    color: var(--action-ink);
     box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.2);
     animation: pulse 2s infinite;
 }
@@ -187,7 +187,7 @@ body {
     line-height: 1.2;
 }
 .status-label.active-label {
-    color: var(--primary-color);
+    color: var(--action-ink);
     font-weight: 700;
 }
 .status-label.current-label {

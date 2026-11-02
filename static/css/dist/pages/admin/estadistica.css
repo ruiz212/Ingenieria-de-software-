@@ -45,3 +45,20 @@
 .page-estadistica .statistics-stock-healthy {
     color:var(--success);
 }
+
+.page-estadistica .estadistica-data-details {
+    margin: 0.75rem 1rem 1rem;
+    font-size: 0.86rem;
+}
+
+.page-estadistica .estadistica-data-details summary {
+    color: var(--text-main);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.page-estadistica .estadistica-data-details .table-responsive {
+    margin-top: 0.7rem;
+    max-height: 18rem;
+    overflow: auto;
+}

@@ -68,7 +68,7 @@
 .stepper-step.active .stepper-circle {
     background: linear-gradient(135deg, var(--brand-dorado), var(--brand-dorado-dark));
     border-color: var(--brand-dorado);
-    color: white;
+    color: var(--on-primary);
     box-shadow: 0 4px 16px rgba(212, 149, 43, 0.30);
     transform: scale(1.1);
 }
