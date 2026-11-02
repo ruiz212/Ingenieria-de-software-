@@ -5,19 +5,21 @@ from app.models import EscalaSalarial, User
 
 
 TABLA_EXCEL = {
-    'limpieza': SimpleNamespace(id=1, nivel='I', cargo='Limpieza', limite_inferior=None, limite_superior=100, salario_base=6519.58),
-    'panadero aprendiz': SimpleNamespace(id=2, nivel='II', cargo='Panadero Aprendiz', limite_inferior=101, limite_superior=126, salario_base=8572.96),
-    'cajero/depedienta': SimpleNamespace(id=3, nivel='III', cargo='Cajero/Depedienta', limite_inferior=127, limite_superior=159, salario_base=10626.34),
-    'cajero': SimpleNamespace(id=4, nivel='III', cargo='Cajero', limite_inferior=127, limite_superior=159, salario_base=10626.34),
-    'cocinero': SimpleNamespace(id=5, nivel='IV', cargo='Cocinero', limite_inferior=160, limite_superior=200, salario_base=12679.72),
-    'cocina': SimpleNamespace(id=6, nivel='IV', cargo='Cocina', limite_inferior=160, limite_superior=200, salario_base=12679.72),
-    'panadero junior': SimpleNamespace(id=7, nivel='V', cargo='Panadero Junior', limite_inferior=201, limite_superior=252, salario_base=14733.10),
-    'jefe de inventario': SimpleNamespace(id=8, nivel='VI', cargo='Jefe de Inventario', limite_inferior=253, limite_superior=317, salario_base=16786.48),
-    'panadero senior': SimpleNamespace(id=9, nivel='VII', cargo='Panadero Senior', limite_inferior=318, limite_superior=400, salario_base=18839.86),
-    'contador': SimpleNamespace(id=10, nivel='VIII', cargo='Contador', limite_inferior=401, limite_superior=504, salario_base=20893.24),
-    'maestro panadero': SimpleNamespace(id=11, nivel='IX', cargo='Maestro Panadero', limite_inferior=505, limite_superior=635, salario_base=22946.62),
-    'gerente general': SimpleNamespace(id=12, nivel='X', cargo='Gerente General', limite_inferior=636, limite_superior=800, salario_base=25000.00),
-    'gerente': SimpleNamespace(id=13, nivel='X', cargo='Gerente', limite_inferior=636, limite_superior=800, salario_base=25000.00),
+    'sin puesto': SimpleNamespace(id=1, nivel='I', cargo='Sin Puesto', limite_inferior=100, limite_superior=140, salario_base=6519.58),
+    'limpieza': SimpleNamespace(id=2, nivel='II', cargo='Limpieza', limite_inferior=141, limite_superior=180, salario_base=8572.96),
+    'panadero aprendiz': SimpleNamespace(id=3, nivel='III', cargo='Panadero Aprendiz', limite_inferior=181, limite_superior=220, salario_base=10626.34),
+    'cajero/dependienta': SimpleNamespace(id=4, nivel='IV', cargo='Cajero/Dependienta', limite_inferior=221, limite_superior=260, salario_base=12679.72),
+    'cajero': SimpleNamespace(id=4, nivel='IV', cargo='Cajero', limite_inferior=221, limite_superior=260, salario_base=12679.72),
+    'cocinero': SimpleNamespace(id=5, nivel='V', cargo='Cocinero', limite_inferior=261, limite_superior=300, salario_base=14733.10),
+    'cocina': SimpleNamespace(id=5, nivel='V', cargo='Cocina', limite_inferior=261, limite_superior=300, salario_base=14733.10),
+    'jefe de inventario/panadero junior': SimpleNamespace(id=6, nivel='VI', cargo='Jefe De Inventario/Panadero Junior', limite_inferior=301, limite_superior=340, salario_base=16786.48),
+    'panadero junior': SimpleNamespace(id=6, nivel='VI', cargo='Panadero Junior', limite_inferior=301, limite_superior=340, salario_base=16786.48),
+    'jefe de inventario': SimpleNamespace(id=6, nivel='VI', cargo='Jefe de Inventario', limite_inferior=301, limite_superior=340, salario_base=16786.48),
+    'contador': SimpleNamespace(id=7, nivel='VII', cargo='Contador', limite_inferior=341, limite_superior=380, salario_base=18839.86),
+    'panadero senior': SimpleNamespace(id=8, nivel='VIII', cargo='Panadero Senior', limite_inferior=381, limite_superior=420, salario_base=20893.24),
+    'maestro panadero': SimpleNamespace(id=9, nivel='IX', cargo='Maestro Panadero', limite_inferior=421, limite_superior=460, salario_base=22946.62),
+    'gerente general': SimpleNamespace(id=10, nivel='X', cargo='Gerente General', limite_inferior=461, limite_superior=500, salario_base=25000.00),
+    'gerente': SimpleNamespace(id=10, nivel='X', cargo='Gerente', limite_inferior=461, limite_superior=500, salario_base=25000.00),
 }
 
 
@@ -99,15 +101,17 @@ def mock_db(monkeypatch):
 
 
 def test_requisito_1_modelo_escala_salarial(app):
-    """Valida el modelo EscalaSalarial y los campos exactos requeridos."""
+    """Valida el modelo EscalaSalarial y los campos exactos requeridos con los nuevos valores."""
     cargos_a_probar = {
-        'Limpieza': ('I', 6519.58),
-        'Panadero Aprendiz': ('II', 8572.96),
-        'Cajero': ('III', 10626.34),
-        'Panadero Junior': ('V', 14733.10),
-        'Panadero Senior': ('VII', 18839.86),
+        'Sin Puesto': ('I', 6519.58),
+        'Limpieza': ('II', 8572.96),
+        'Panadero Aprendiz': ('III', 10626.34),
+        'Cajero': ('IV', 12679.72),
+        'Cocinero': ('V', 14733.10),
+        'Panadero Junior': ('VI', 16786.48),
+        'Contador': ('VII', 18839.86),
+        'Panadero Senior': ('VIII', 20893.24),
         'Maestro Panadero': ('IX', 22946.62),
-        'Contador': ('VIII', 20893.24),
         'Gerente General': ('X', 25000.00),
     }
 
@@ -135,14 +139,14 @@ def test_requisito_2_api_escala_salarial_autocompletado(app, client):
         assert res.status_code == 200
         data = res.get_json()
         assert data['status'] == 'success'
-        assert float(data['salario_base']) == 10626.34
-        assert data['nivel'] == 'III'
+        assert float(data['salario_base']) == 12679.72
+        assert data['nivel'] == 'IV'
 
         # 2. Las 4 subcategorías de Panadero
         subcategorias = {
-            'Panadero Aprendiz': 8572.96,
-            'Panadero Junior': 14733.10,
-            'Panadero Senior': 18839.86,
+            'Panadero Aprendiz': 10626.34,
+            'Panadero Junior': 16786.48,
+            'Panadero Senior': 20893.24,
             'Maestro Panadero': 22946.62
         }
         for sub, sal in subcategorias.items():
@@ -188,14 +192,14 @@ def test_requisito_2_y_3_frontend_template(app):
         assert 'id="ne-salario"' in html
         assert 'readonly' in html
 
-        # Requisito 3: Custom Dropdown con cascada exclusivamente para Panadero
+        # Requisito 3: Custom Dropdown con cascada exclusivamente para Panadero con nuevos salarios
         assert 'id="cargo-dropdown-wrapper"' in html
         assert 'id="ne-cargo"' in html
         assert 'has-cascade' in html
-        assert 'Panadero Aprendiz' in html
-        assert 'Panadero Junior' in html
-        assert 'Panadero Senior' in html
-        assert 'Maestro Panadero' in html
+        assert 'Panadero Aprendiz (Salario: C$ 10,626.34)' in html
+        assert 'Panadero Junior (Salario: C$ 16,786.48)' in html
+        assert 'Panadero Senior (Salario: C$ 20,893.24)' in html
+        assert 'Maestro Panadero (Salario: C$ 22,946.62)' in html
 
 
 def test_soft_delete_perfil_endpoint(client, app):
@@ -247,8 +251,6 @@ def test_perfiles_render_con_estado_y_filtro_inactivos(app):
         assert 'rrhh-profile-card-footer' in html
 
         # 3. Puesto inactivo NO debe ser seleccionable en el dropdown de Nuevo Empleado
-        # Buscamos las opciones dentro del dropdown de cargo
         dropdown_html = html[html.find('id="cargo-select-dropdown"'):html.find('id="ne-ingreso"')]
         assert 'data-value="Cajero"' in dropdown_html
         assert 'data-value="Ingeniero electronico"' not in dropdown_html
-

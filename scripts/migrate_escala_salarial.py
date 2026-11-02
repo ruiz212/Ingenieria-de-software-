@@ -48,39 +48,33 @@ def run_migration():
             GRANT SELECT ON [rrhh].[escala_salarial] TO [db_rol_superadmin];
         """)
 
-        # 4. Insertar datos de la tabla salarial de Excel
+        # 4. Insertar datos de la tabla salarial corregida
         datos_escala = [
-            ('I', 'Limpieza', None, 100, 6519.58),
-            ('II', 'Panadero Aprendiz', 101, 126, 8572.96),
-            ('III', 'Cajero/Depedienta', 127, 159, 10626.34),
-            ('III', 'Cajero', 127, 159, 10626.34),
-            ('IV', 'Cocinero', 160, 200, 12679.72),
-            ('IV', 'Cocina', 160, 200, 12679.72),
-            ('V', 'Panadero Junior', 201, 252, 14733.10),
-            ('VI', 'Jefe de Inventario', 253, 317, 16786.48),
-            ('VII', 'Panadero Senior', 318, 400, 18839.86),
-            ('VIII', 'Contador', 401, 504, 20893.24),
-            ('IX', 'Maestro Panadero', 505, 635, 22946.62),
-            ('X', 'Gerente General', 636, 800, 25000.00),
-            ('X', 'Gerente', 636, 800, 25000.00),
-            ('VIII', 'Ingeniero electronico', 401, 504, 20893.24),
-            ('II', 'Panadero', 101, 126, 8572.96)
+            (1, 'I', 'Sin Puesto', 100, 140, 6519.58),
+            (2, 'II', 'Limpieza', 141, 180, 8572.96),
+            (3, 'III', 'Panadero Aprendiz', 181, 220, 10626.34),
+            (4, 'IV', 'Cajero/Dependienta', 221, 260, 12679.72),
+            (5, 'V', 'Cocinero', 261, 300, 14733.10),
+            (6, 'VI', 'Jefe De Inventario/Panadero Junior', 301, 340, 16786.48),
+            (7, 'VII', 'Contador', 341, 380, 18839.86),
+            (8, 'VIII', 'Panadero Senior', 381, 420, 20893.24),
+            (9, 'IX', 'Maestro Panadero', 421, 460, 22946.62),
+            (10, 'X', 'Gerente General', 461, 500, 25000.00),
         ]
 
-        for nivel, cargo, li, ls, sal in datos_escala:
+        cursor.execute("DELETE FROM [rrhh].[escala_salarial];")
+        try:
+            cursor.execute("DBCC CHECKIDENT ('[rrhh].[escala_salarial]', RESEED, 0);")
+        except Exception:
+            pass
+
+        cursor.execute("SET IDENTITY_INSERT [rrhh].[escala_salarial] ON;")
+        for id_val, nivel, cargo, li, ls, sal in datos_escala:
             cursor.execute("""
-            IF NOT EXISTS (SELECT 1 FROM [rrhh].[escala_salarial] WHERE LOWER(cargo) = LOWER(?))
-            BEGIN
-                INSERT INTO [rrhh].[escala_salarial] (nivel, cargo, limite_inferior, limite_superior, salario_base)
-                VALUES (?, ?, ?, ?, ?);
-            END
-            ELSE
-            BEGIN
-                UPDATE [rrhh].[escala_salarial]
-                SET nivel = ?, limite_inferior = ?, limite_superior = ?, salario_base = ?
-                WHERE LOWER(cargo) = LOWER(?);
-            END
-            """, cargo, nivel, cargo, li, ls, sal, nivel, li, ls, sal, cargo)
+                INSERT INTO [rrhh].[escala_salarial] (id, nivel, cargo, limite_inferior, limite_superior, salario_base)
+                VALUES (?, ?, ?, ?, ?, ?);
+            """, id_val, nivel, cargo, li, ls, sal)
+        cursor.execute("SET IDENTITY_INSERT [rrhh].[escala_salarial] OFF;")
 
         print("Datos de escala_salarial insertados/actualizados.")
 
@@ -107,7 +101,8 @@ def run_migration():
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta');
+                WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta', 'cajero/dependienta')
+                   OR LOWER(cargo) LIKE '%cajero%';
                 RETURN;
             END
 
@@ -115,7 +110,8 @@ def run_migration():
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('cocina', 'cocinero');
+                WHERE LOWER(cargo) IN ('cocina', 'cocinero')
+                   OR LOWER(cargo) LIKE '%coci%';
                 RETURN;
             END
 
@@ -123,7 +119,24 @@ def run_migration():
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('gerente', 'gerente general');
+                WHERE LOWER(cargo) IN ('gerente', 'gerente general')
+                   OR LOWER(cargo) LIKE '%gerente%';
+                RETURN;
+            END
+
+            IF LOWER(@CargoClean) = 'panadero junior' OR LOWER(@CargoClean) LIKE '%panadero junior%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) LIKE '%panadero junior%';
+                RETURN;
+            END
+
+            IF LOWER(@CargoClean) = 'jefe de inventario' OR LOWER(@CargoClean) LIKE '%inventario%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) LIKE '%inventario%';
                 RETURN;
             END
 
