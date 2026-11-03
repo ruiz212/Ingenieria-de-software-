@@ -1,0 +1,95 @@
+{% extends 'admin_base.html' %}
+{% block body_class %}page-mercadotecnia{% endblock %}
+{% block title %}Mercadotecnia | Brajher's Cake{% endblock %}
+{% block page_title %}Mercadotecnia{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{{ css_url('pages/admin/mercadotecnia') }}">{% endblock %}
+
+{% block content %}
+<div class="marketing-workspace">
+    <header class="marketing-intro">
+        <div>
+            <h2>Lo que cuentan las ventas</h2>
+            <p>Señales para decidir qué destacar, producir o probar. Cada propuesta muestra los datos que la respaldan.</p>
+            {% if modelo %}<p class="marketing-updated">Actualizado: {{ modelo.trained_at.replace('T', ' ')[:16] }} · {{ modelo.invoice_count }} facturas analizadas{% if modelo.sample_truncated %} · muestra limitada a 30 000 renglones{% endif %}</p>{% endif %}
+        </div>
+        <form method="post" action="{{ url_for('admin.entrenar_mercadotecnia') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-primary">Actualizar análisis</button>
+        </form>
+    </header>
+
+    {% if error_modelo %}<div class="marketing-error" role="alert">{{ error_modelo }}</div>{% endif %}
+    {% if modelo %}
+    <dl class="marketing-summary" aria-label="Ventas observadas de los últimos 30 días">
+        <div><dt>{{ 'Ventas en muestra' if modelo.sample_truncated else 'Ventas emitidas' }}</dt><dd>C${{ '%.2f'|format(modelo.revenue_30) }}</dd><small>Últimos 30 días{% if modelo.sample_truncated %} · muestra parcial{% endif %}</small></div>
+        <div><dt>Facturas</dt><dd>{{ modelo.recent_invoices }}</dd><small>Últimos 30 días</small></div>
+        <div><dt>Período anterior</dt><dd>C${{ '%.2f'|format(modelo.revenue_prior_30) }}</dd><small>30 días previos{% if modelo.sample_truncated %} · muestra parcial{% endif %}</small></div>
+        <div><dt>Productos observados</dt><dd>{{ modelo.products|length }}</dd><small>Ventana de 180 días</small></div>
+    </dl>
+
+    <div class="marketing-layout">
+        <section class="marketing-panel marketing-actions" aria-labelledby="marketing-actions-title">
+            <div class="marketing-panel-heading">
+                <h3 id="marketing-actions-title">Decisiones que vale la pena probar</h3>
+                <p>Son hipótesis comerciales; comprueba el resultado después de actuar.</p>
+            </div>
+            <div class="marketing-actions-list">
+                {% for observacion in observaciones %}
+                <article class="marketing-action marketing-action-{{ observacion.tipo }}">
+                    <h4>{{ observacion.titulo }}</h4>
+                    <p class="marketing-evidence">{{ observacion.evidencia }}</p>
+                    <p class="marketing-next"><strong>Siguiente paso:</strong> {{ observacion.accion }}</p>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="marketing-panel" aria-labelledby="marketing-top-title">
+            <div class="marketing-panel-heading">
+                <h3 id="marketing-top-title">Productos con más movimiento</h3>
+                <p>Unidades y ventas observadas de los últimos 30 días{% if modelo.sample_truncated %} en la muestra{% endif %}.</p>
+            </div>
+            {% if productos_destacados %}
+            <div class="marketing-table-wrap">
+                <table class="marketing-table">
+                    <thead><tr><th scope="col">Producto</th><th scope="col">Unidades</th><th scope="col">Ventas</th></tr></thead>
+                    <tbody>
+                    {% for producto in productos_destacados %}
+                    <tr><th scope="row">{{ producto.nombre }}<small>{{ producto.categoria }}</small></th><td>{{ producto.units_30 }}</td><td>C${{ '%.2f'|format(producto.revenue_30) }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}<p class="marketing-empty">Todavía no hay productos vendidos en este período.</p>{% endif %}
+        </section>
+    </div>
+
+    <section class="marketing-panel marketing-daily" aria-labelledby="marketing-daily-title">
+        <div class="marketing-panel-heading">
+            <h3 id="marketing-daily-title">Movimiento diario</h3>
+            <p>Ventas observadas de los últimos 14 días{% if modelo.sample_truncated %} en la muestra parcial{% endif %}. Los días sin ventas observadas se muestran en cero.</p>
+        </div>
+        <ol class="marketing-daily-list">
+            {% for dia in ventas_diarias %}
+            <li>
+                <time datetime="{{ dia.day }}">{{ dia.day[5:] }}</time>
+                <progress class="marketing-daily-track" value="{{ dia.revenue }}" max="{{ max_ventas_diarias }}" aria-label="Ventas del {{ dia.day }}"></progress>
+                <strong>C${{ '%.2f'|format(dia.revenue) }}</strong>
+            </li>
+            {% endfor %}
+        </ol>
+    </section>
+
+    <section class="marketing-panel marketing-promotions" aria-labelledby="marketing-promotions-title">
+        <div class="marketing-panel-heading">
+            <h3 id="marketing-promotions-title">Promociones en la vitrina</h3>
+            <p>Los descuentos publicados se gestionan en Catálogo. El modelo no cambia los precios.</p>
+        </div>
+        {% if promociones %}
+        <ul>{% for producto in promociones %}<li><span>{{ producto.nombre }}</span><strong>{{ '%.0f'|format(producto.descuento) }}% de descuento</strong></li>{% endfor %}</ul>
+        {% else %}<p class="marketing-empty">No hay descuentos activos.</p>{% endif %}
+        <a href="/admin/catalogo" class="btn btn-outline">Gestionar promociones en Catálogo</a>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

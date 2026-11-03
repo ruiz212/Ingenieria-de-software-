@@ -29,7 +29,7 @@
         <div class="metric-body">
             <div class="metric-title">Porcentaje VIP</div>
             <div class="metric-value text-primary">{{ metricas.porcentaje_vip }}%</div>
-            <div class="metric-sub">De tu base de clientes</div>
+        <div class="metric-sub">De tu base de clientes · nivel asignado en la ficha</div>
         </div>
     </div>
 
@@ -52,14 +52,21 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             Directorio de Clientes
         </h3>
+        <label class="fidelizacion-level-filter" for="filtro-nivel-clientes">Nivel
+            <select id="filtro-nivel-clientes" class="form-select"><option value="">Todos</option><option>Nuevo</option><option>Frecuente</option><option>VIP</option></select>
+        </label>
         <div class="form-search fidelizacion-form-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <label class="sr-only" for="buscador-clientes">Buscar clientes por nombre o teléfono</label>
             <input type="text" id="buscador-clientes" class="form-input" placeholder="Buscar por nombre o teléfono...">
         </div>
     </div>
 
     <div class="panel-body panel-body-flush">
-        <div class="table-responsive">
+        <p class="fidelizacion-level-help">Nuevo, Frecuente y VIP son niveles asignados en la ficha de cada cliente. Revisa el historial de compras antes de cambiarlos.</p>
+        <p id="fidelizacion-results" role="status" aria-live="polite"></p>
+        <p class="fidelizacion-scroll-hint">Desliza la tabla para ver todas las columnas.</p>
+        <div class="table-responsive" role="region" aria-label="Directorio de clientes; desplaza horizontalmente para ver más columnas" tabindex="0">
             <table class="data-table" id="tabla-clientes">
                 <thead>
                     <tr>
@@ -69,12 +76,12 @@
                         <th>Compras Realizadas</th>
                         <th>Última Compra</th>
                         <th>Total Gastado (Histórico)</th>
-                        <th>Acciones</th>
+                        <th class="fidelizacion-action-column">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for c in clientes %}
-                    <tr>
+                    <tr data-nivel="{{ c.nivel }}">
                         <td class="cell-bold">{{ c.nombre }}</td>
                         <td class="cell-muted">{{ c.telefono }}</td>
                         <td>
@@ -89,7 +96,7 @@
                         <td class="fw-700">{{ c.total_compras }}</td>
                         <td class="cell-muted">{{ c.ultima_compra }}</td>
                         <td class="cell-money">C${{ "%.2f"|format(c.total_gastado) }}</td>
-                        <td><button type="button" class="btn btn-outline btn-sm btn-cliente-detalle" data-id="{{ c.id }}">Ver / editar</button></td>
+                        <td class="fidelizacion-action-column"><button type="button" class="btn btn-primary btn-sm btn-cliente-detalle" data-id="{{ c.id }}" aria-label="Ver y editar a {{ c.nombre }}">Ver / editar</button></td>
                     </tr>
                     {% else %}
                     <tr>
@@ -115,7 +122,7 @@
             <input type="hidden" id="cliente-id">
             <div class="form-group"><label class="form-label" for="cliente-nombre">Nombre</label><input id="cliente-nombre" class="form-input" required maxlength="100"></div>
             <div class="form-group"><label class="form-label" for="cliente-apellidos">Apellidos</label><input id="cliente-apellidos" class="form-input" maxlength="100"></div>
-            <div class="form-group"><label class="form-label" for="cliente-telefono">Teléfono</label><input id="cliente-telefono" class="form-input" required maxlength="30"></div>
+            <div class="form-group"><label class="form-label" for="cliente-telefono">Teléfono</label><input id="cliente-telefono" type="tel" class="form-input" placeholder="8888-8888" data-mask="telefono" required maxlength="9"></div>
             <div class="form-group"><label class="form-label" for="cliente-nivel">Nivel</label><select id="cliente-nivel" class="form-select"><option value="1">Nuevo</option><option value="2">Frecuente</option><option value="3">VIP</option></select></div>
             <div id="cliente-historial" class="cliente-history"></div>
             <div class="modal-actions"><button type="button" class="btn btn-outline" id="cliente-cerrar">Cancelar</button><button type="submit" class="btn btn-primary">Guardar cambios</button></div>
@@ -126,22 +133,24 @@
 
 {% block extra_scripts %}
 <script>
-    // Buscador sencillo
-    document.getElementById('buscador-clientes').addEventListener('keyup', function() {
-        const filtro = this.value.toLowerCase();
+    function filtrarClientes() {
+        const filtro = document.getElementById('buscador-clientes').value.toLocaleLowerCase('es');
+        const nivel = document.getElementById('filtro-nivel-clientes').value;
         const filas = document.querySelectorAll('#tabla-clientes tbody tr');
-
+        let visibles = 0;
         filas.forEach(fila => {
-            if(fila.cells.length > 1) { // Ignorar fila de "empty-state"
-                const texto = fila.textContent.toLowerCase();
-                if(texto.includes(filtro)) {
-                    fila.style.display = '';
-                } else {
-                    fila.style.display = 'none';
-                }
+            if (fila.cells.length > 1) {
+                const coincide = fila.textContent.toLocaleLowerCase('es').includes(filtro) && (!nivel || fila.dataset.nivel === nivel);
+                fila.style.display = coincide ? '' : 'none';
+                if (coincide) visibles++;
             }
         });
-    });
+        const total = Array.from(filas).filter(fila => fila.cells.length > 1).length;
+        document.getElementById('fidelizacion-results').textContent = `${visibles} de ${total} clientes visibles`;
+    }
+    document.getElementById('buscador-clientes').addEventListener('input', filtrarClientes);
+    document.getElementById('filtro-nivel-clientes').addEventListener('change', filtrarClientes);
+    filtrarClientes();
 
     const modal = document.getElementById('cliente-modal');
     const historyBox = document.getElementById('cliente-historial');

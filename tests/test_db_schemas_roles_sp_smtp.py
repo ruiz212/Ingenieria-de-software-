@@ -32,7 +32,8 @@ DEFAULT_QA_CONN = (
 
 @pytest.fixture(scope="module")
 def app_instance():
-    conn_str = os.environ.get("TEST_DB_CONNECTION_STRING") or DEFAULT_QA_CONN
+    previous_qa_conn = os.environ.get("TEST_DB_CONNECTION_STRING")
+    conn_str = previous_qa_conn or DEFAULT_QA_CONN
     os.environ["TEST_DB_CONNECTION_STRING"] = conn_str
     app = create_app()
     app.config["TESTING"] = True
@@ -48,7 +49,13 @@ def app_instance():
     app.config["SMTP_FROM_EMAIL"] = "alertas@brajhers.local"
     app.config["SMTP_ALERT_RECIPIENTS"] = "seguridad@brajhers.local"
     app.config["SMTP_RATE_LIMIT_SECONDS"] = 300
-    return app
+    try:
+        yield app
+    finally:
+        if previous_qa_conn is None:
+            os.environ.pop("TEST_DB_CONNECTION_STRING", None)
+        else:
+            os.environ["TEST_DB_CONNECTION_STRING"] = previous_qa_conn
 
 
 @pytest.fixture()

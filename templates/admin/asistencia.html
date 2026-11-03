@@ -10,8 +10,8 @@
         <p>Monitoreo detallado de llegadas y asistencia del personal.</p>
     </div>
     <div class="asistencia-row">
-        <label for="fecha" class="fw-600 asistencia-fw-600">Filtrar Fecha:</label>
         <form id="filtro-fecha" method="GET" action="{{ url_for('admin.rrhh_asistencia') }}">
+            <label for="fecha" class="fw-600 asistencia-fw-600">Fecha de asistencia:</label>
             <input type="date" name="fecha" id="fecha" value="{{ fecha }}" class="form-input asistencia-fecha" onchange="document.getElementById('filtro-fecha').submit();">
         </form>
         <a href="{{ url_for('kiosco.kiosco_vista') }}" target="_blank" class="btn btn-outline asistencia-btn-outline">

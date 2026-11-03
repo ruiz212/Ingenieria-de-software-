@@ -80,6 +80,7 @@
     </script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/nicaragua_masks.js', v='1') }}" defer></script>
     <link rel="stylesheet" href="{{ css_url('accessibility') }}">
 <script>window.tasasProductos = Object.fromEntries({{ productos|tojson }}.map(p=>[p.id,p.tasa_iva]));</script>
     <link rel="stylesheet" href="{{ css_url('theme') }}">
@@ -98,7 +99,7 @@
                 <h1 class="pos-h1-text">Brajher's Cake | POS</h1>
             </a>
             <div class="header-info">
-                Caja: Activa | Vendedor: {{ user.nombre_completo }} | Nivel: {{ user.rol_nombre }}
+                Turno propio: {{ 'Abierto' if turno_activo else 'Cerrado' }} | Vendedor: {{ user.nombre_completo }} | Nivel: {{ user.rol_nombre }}
             </div>
         </div>
         <div class="header-actions">
@@ -107,7 +108,7 @@
                 🔔 Solicitudes Web
                 <span id="badge-pedidos" class="pos-badge-pedidos">0</span>
             </button>
-            <button id="btn-cerrar-turno" class="btn-header btn-arqueo">🔒 Arqueo</button>
+            {% if turno_activo %}<button id="btn-cerrar-turno" class="btn-header btn-arqueo">🔒 Arqueo</button>{% endif %}
             <a href="/logout" class="pos-a-text">Salir</a>
         </div>
     </header>
@@ -119,6 +120,7 @@
                 <h2>Turno cerrado</h2>
                 <p>Abra un turno para habilitar las ventas y el arqueo de caja.</p>
                 <button type="button" class="btn btn-primary" id="btn-abrir-turno">Abrir turno</button>
+                {% if user.rol_nombre in ['SuperAdmin', 'Admin'] %}<a class="btn btn-outline" href="{{ url_for('admin.dashboard') }}">Volver al resumen</a>{% endif %}
             </div>
         </section>
         {% else %}
@@ -232,7 +234,7 @@
             </div>
             <div class="form-group pos-form-group">
                 <label>Teléfono del Cliente:</label>
-                <input type="tel" id="modal-telefono-cliente" class="form-control" placeholder="Ej. 8888-1234" required>
+                <input type="tel" id="modal-telefono-cliente" class="form-control" placeholder="8888-8888" data-mask="telefono" maxlength="9" required>
             </div>
 
             <div class="pos-row-2">

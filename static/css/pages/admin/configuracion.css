@@ -36,4 +36,13 @@
 .page-configuracion .configuracion-p-3 {
     background: var(--surface-hover);
     border-color: var(--primary-color);
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    box-shadow: 0 -4px 18px rgba(0, 0, 0, .12);
+}
+
+@media (max-width: 600px) {
+    .page-configuracion .configuracion-grid { grid-template-columns: minmax(0, 1fr); }
+    .page-configuracion .configuracion-p-3 { gap: .75rem; flex-wrap: wrap; padding-bottom: max(.75rem, env(safe-area-inset-bottom)); }
 }

@@ -5,6 +5,7 @@ from flask import render_template, request, redirect, url_for, flash, current_ap
 from flask_login import login_user, login_required, logout_user, current_user  # type: ignore
 from werkzeug.security import check_password_hash, generate_password_hash  # type: ignore
 import os
+import re
 import threading
 import time
 import pyotp
@@ -24,8 +25,28 @@ _FALLBACK_LOCK_MUTEX = threading.Lock()
 _FALLBACK_LOGIN_LOCKS: dict[tuple[str, str], dict] = {}
 
 
+def _normalize_login_identity(identificador: str) -> str:
+    """Normaliza teléfonos (+505 8888-8888, 8888-8888, 50588888888, 88888888) y usernames."""
+    raw = (identificador or '').strip()
+    if not raw:
+        return ''
+    try:
+        return auth_challenges.normalize_phone(raw).lower()
+    except ValueError:
+        pass
+    cleaned_digits = re.sub(r'[\s().+-]', '', raw)
+    if re.fullmatch(r'\d{8}', cleaned_digits):
+        return '+505' + cleaned_digits
+    if re.fullmatch(r'505\d{8}', cleaned_digits):
+        return '+' + cleaned_digits
+    if re.fullmatch(r'00505\d{8}', cleaned_digits):
+        return '+' + cleaned_digits[2:]
+    return ' '.join(raw.split()).lower()
+
+
 def _check_fallback_lock(identificador: str, ip: str) -> bool:
-    key = ((identificador or '').strip().lower(), (ip or '0.0.0.0').strip())
+    norm_id = _normalize_login_identity(identificador)
+    key = (norm_id, (ip or '0.0.0.0').strip())
     now = time.monotonic()
     with _FALLBACK_LOCK_MUTEX:
         entry = _FALLBACK_LOGIN_LOCKS.get(key)
@@ -39,7 +60,8 @@ def _check_fallback_lock(identificador: str, ip: str) -> bool:
 
 
 def _record_fallback_attempt(identificador: str, ip: str, exitoso: bool, max_attempts: int = 5, lock_seconds: int = 900) -> dict:
-    key = ((identificador or '').strip().lower(), (ip or '0.0.0.0').strip())
+    norm_id = _normalize_login_identity(identificador)
+    key = (norm_id, (ip or '0.0.0.0').strip())
     now = time.monotonic()
     with _FALLBACK_LOCK_MUTEX:
         if exitoso:
@@ -99,7 +121,8 @@ def totp_is_required():
 
 
 def _is_account_locked(identificador: str, ip: str) -> bool:
-    if _check_fallback_lock(identificador, ip):
+    norm_id = _normalize_login_identity(identificador)
+    if _check_fallback_lock(norm_id, ip):
         return True
     if not current_app.config.get('SQL_SERVER_CONNECTION_STRING'):
         return False
@@ -113,12 +136,12 @@ def _is_account_locked(identificador: str, ip: str) -> bool:
         execute_sp(
             cursor,
             'seguridad.sp_VerificarBloqueoCuenta',
-            (identificador, ip or '0.0.0.0'),
+            (norm_id, ip or '0.0.0.0'),
         )
         row = cursor.fetchone()
         return bool(row and getattr(row, 'EstaBloqueado', row[5]))
     except Exception:
-        return _check_fallback_lock(identificador, ip)
+        return _check_fallback_lock(norm_id, ip)
     finally:
         if conn is not None:
             try:
@@ -128,7 +151,8 @@ def _is_account_locked(identificador: str, ip: str) -> bool:
 
 
 def _record_login_attempt(identificador: str, ip: str, exitoso: bool) -> dict:
-    fb_state = _record_fallback_attempt(identificador, ip, exitoso)
+    norm_id = _normalize_login_identity(identificador)
+    fb_state = _record_fallback_attempt(norm_id, ip, exitoso)
     if not current_app.config.get('SQL_SERVER_CONNECTION_STRING'):
         return fb_state
     conn = None
@@ -141,7 +165,7 @@ def _record_login_attempt(identificador: str, ip: str, exitoso: bool) -> dict:
         execute_sp(
             cursor,
             'seguridad.sp_RegistrarIntentoLogin',
-            (identificador, ip or '0.0.0.0', 1 if exitoso else 0, 5, 15),
+            (norm_id, ip or '0.0.0.0', 1 if exitoso else 0, 5, 15),
         )
         row = cursor.fetchone()
         conn.commit()
@@ -151,13 +175,13 @@ def _record_login_attempt(identificador: str, ip: str, exitoso: bool) -> dict:
         if recien_bloqueado:
             from app.services.smtp_alerts import notify_error
             notify_error(
-                f"Cuenta bloqueada temporalmente por fuerza bruta: '{identificador}' desde IP {ip} ({intentos} intentos fallidos).",
+                f"Cuenta bloqueada temporalmente por fuerza bruta: '{norm_id}' desde IP {ip} ({intentos} intentos fallidos).",
                 origen='SEGURIDAD_AUTH',
                 severidad='CRITICAL',
                 numero_error=50401,
                 procedimiento='seguridad.sp_RegistrarIntentoLogin',
                 esquema_origen='seguridad',
-                username=identificador,
+                username=norm_id,
                 ip=ip,
                 ruta_http='/login',
                 persist_in_db=False,
@@ -178,6 +202,17 @@ def _record_login_attempt(identificador: str, ip: str, exitoso: bool) -> dict:
                 pass
 
 
+_is_locked = _is_account_locked
+
+
+def _record_failed_attempt(identificador: str, ip: str) -> dict:
+    return _record_login_attempt(identificador, ip, False)
+
+
+def _clear_failed_attempts(identificador: str, ip: str) -> dict:
+    return _record_login_attempt(identificador, ip, True)
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     """Pantalla de inicio de sesión."""
@@ -186,24 +221,41 @@ def login():
 
     if request.method == 'POST':
         identificador = request.form.get('identificador', '').strip()
+        canonical_id = _normalize_login_identity(identificador)
         password = request.form.get('password', '')
         client_ip = request.remote_addr or '0.0.0.0'
 
-        if _is_account_locked(identificador, client_ip):
+        if _is_account_locked(canonical_id, client_ip):
             flash("Cuenta temporalmente bloqueada por múltiples intentos fallidos. Intente más tarde.", "error")
             return render_template('login.html'), 429
 
         # 1. Intentar como Administrador / Empleado
         user, password_hash = User.get_by_username(identificador)
+        if not user and canonical_id and canonical_id != identificador:
+            user, password_hash = User.get_by_username(canonical_id)
+        user_canonical = _normalize_login_identity(user.username) if user else None
+        if user_canonical and user_canonical != canonical_id and _is_account_locked(user_canonical, client_ip):
+            flash("Cuenta temporalmente bloqueada por múltiples intentos fallidos. Intente más tarde.", "error")
+            return render_template('login.html'), 429
+
         if user and check_password_hash(password_hash, password):
-            _record_login_attempt(identificador, client_ip, True)
             if getattr(user, 'totp_enabled', False) or totp_is_required():
-                auth_challenges.revoke(session.pop('totp_challenge_id', None))
+                # L09: NO limpiar los intentos fallidos de login antes de superar el segundo factor TOTP
                 enroll = not user.totp_secret or not user.totp_enabled
-                session['totp_challenge_id'] = auth_challenges.start_totp(user, enroll=enroll)
+                try:
+                    new_challenge = auth_challenges.start_totp(user, enroll=enroll)
+                except auth_challenges.TOTPLocked:
+                    flash("Cuenta temporalmente bloqueada por múltiples intentos fallidos de segundo factor. Intente más tarde.", "error")
+                    return render_template('login.html'), 429
+                auth_challenges.revoke(session.pop('totp_challenge_id', None))
+                session['totp_challenge_id'] = new_challenge
+                session['pre_totp_identificador'] = canonical_id
                 session['next_page'] = request.args.get('next')
                 return redirect(url_for('auth.enroll_totp' if enroll else 'auth.login_totp'))
             else:
+                _record_login_attempt(canonical_id, client_ip, True)
+                if user_canonical and user_canonical != canonical_id:
+                    _record_login_attempt(user_canonical, client_ip, True)
                 login_user(user, remember=False)
                 next_page = request.args.get('next')
                 return redirect(safe_next(next_page))
@@ -214,16 +266,31 @@ def login():
             try:
                 normalized = auth_challenges.normalize_phone(identificador)
             except ValueError:
-                normalized = None
+                normalized = canonical_id if canonical_id.startswith('+505') else None
             if normalized:
                 cliente, password_hash_cli = _customer_by_normalized_phone(normalized)
+        cli_canonical = _normalize_login_identity(cliente.telefono) if (cliente and getattr(cliente, 'telefono', None)) else None
+        if cli_canonical and cli_canonical != canonical_id and _is_account_locked(cli_canonical, client_ip):
+            flash("Cuenta temporalmente bloqueada por múltiples intentos fallidos. Intente más tarde.", "error")
+            return render_template('login.html'), 429
+
         if cliente and password_hash_cli and check_password_hash(password_hash_cli, password):
-            _record_login_attempt(identificador, client_ip, True)
+            _record_login_attempt(canonical_id, client_ip, True)
+            if cli_canonical and cli_canonical != canonical_id:
+                _record_login_attempt(cli_canonical, client_ip, True)
             login_user(cliente, remember=False)
             return redirect('/pos')
 
         # Si ninguno coincide
-        lock_state = _record_login_attempt(identificador, client_ip, False)
+        lock_state = _record_login_attempt(canonical_id, client_ip, False)
+        if user_canonical and user_canonical != canonical_id:
+            extra_state = _record_login_attempt(user_canonical, client_ip, False)
+            if extra_state.get('bloqueado'):
+                lock_state = extra_state
+        if cli_canonical and cli_canonical != canonical_id:
+            extra_state = _record_login_attempt(cli_canonical, client_ip, False)
+            if extra_state.get('bloqueado'):
+                lock_state = extra_state
         if lock_state.get('bloqueado'):
             flash("Cuenta temporalmente bloqueada por múltiples intentos fallidos. Intente más tarde.", "error")
             return render_template('login.html'), 429
@@ -234,7 +301,7 @@ def login():
 
 def _clear_totp_session():
     for key in ('totp_challenge_id', 'setup_totp_challenge_id', 'pre_totp_user_id',
-                'setup_totp_secret', 'next_page'):
+                'pre_totp_identificador', 'setup_totp_secret', 'next_page'):
         session.pop(key, None)
 
 
@@ -258,6 +325,12 @@ def _totp_page(kind, cookie_key, authenticated=False):
         verified_id = auth_challenges.complete_totp(token, request.form.get('totp_code'), kind)
         if verified_id:
             next_page = session.get('next_page')
+            pre_ident = session.get('pre_totp_identificador')
+            client_ip = request.remote_addr or '0.0.0.0'
+            if pre_ident:
+                _record_login_attempt(pre_ident, client_ip, True)
+            if getattr(user, 'username', None):
+                _record_login_attempt(user.username, client_ip, True)
             _clear_totp_session()
             if not authenticated:
                 login_user(User.get_by_id(verified_id), remember=False)
@@ -405,14 +478,14 @@ def cliente_registro():
         if ruta_foto:
             from pathlib import Path
             (Path(current_app.static_folder) / ruta_foto).unlink(missing_ok=True)
-        if isinstance(exc, ValueError):
-            return str(exc), 400
+        if isinstance(exc, ValueError) or '52020' in str(exc) or 'pertenece a otro cliente' in str(exc):
+            return 'El teléfono ya está registrado.', 400
         current_app.logger.exception('No se pudo completar el registro de cliente')
         return 'No se pudo completar el registro. Inténtalo de nuevo.', 503
     finally:
         conn.close()
     _clear_sms_session()
-    cliente_nuevo, _ = Cliente.get_by_telefono(telefono)
+    cliente_nuevo, _ = _customer_by_normalized_phone(telefono)
     if cliente_nuevo:
         login_user(cliente_nuevo)
     return redirect(url_for('auth.cliente_inicio_exitoso'))

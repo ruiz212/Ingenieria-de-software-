@@ -72,7 +72,7 @@ body.tienda-body {
 .utility-bar {
     background: var(--espresso);
     color: #F4E9DA;
-    font-size: 0.78rem;
+    font-size: 0.875rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -113,10 +113,11 @@ body.tienda-body {
     border: none;
     color: #EAD8C0;
     font-family: inherit;
-    font-size: 0.78rem;
+    font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
-    padding: 0;
+    min-height: 44px;
+    padding: .65rem .5rem;
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
@@ -183,7 +184,7 @@ body.tienda-body {
 
 .brand-kicker {
     display: block;
-    font-size: 0.64rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.18em;
     color: var(--terracotta);
@@ -484,11 +485,20 @@ body.tienda-body {
     align-items: center;
     gap: 0.2rem;
     overflow-x: auto;
-    scrollbar-width: none;
+    min-width: 0;
+    max-width: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+    scroll-padding-inline: 1rem;
 }
 
 .store-filters::-webkit-scrollbar {
-    display: none;
+    height: 4px;
+}
+
+.store-filters::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 4px;
 }
 
 .filter-btn {
@@ -498,7 +508,7 @@ body.tienda-body {
     color: var(--ink-soft);
     padding: 0.8rem 1rem;
     font-family: inherit;
-    font-size: 0.86rem;
+    font-size: 0.9375rem;
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
@@ -523,7 +533,7 @@ body.tienda-body {
 
 .filter-count-pill {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     color: var(--ink-muted);
     background: var(--parchment-deep);
     padding: 0.1rem 0.4rem;
@@ -910,8 +920,8 @@ body.tienda-body {
 .btn-close-cart {
     background: transparent;
     border: 1px solid var(--line-strong);
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
     border-radius: 6px;
     font-size: 1.2rem;
     color: var(--ink);
@@ -937,6 +947,18 @@ body.tienda-body {
     color: var(--ink-muted);
     padding: 3.5rem 1rem;
     font-size: 0.9rem;
+}
+
+.cart-body .empty-cart-browse {
+    min-height: 44px;
+    margin-top: 1rem;
+    padding: .65rem 1rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--parchment);
+    color: var(--ink);
+    font-weight: 700;
+    cursor: pointer;
 }
 
 .cart-body .cart-item {
@@ -1545,6 +1567,17 @@ body.tienda-body {
 }
 
 @media (max-width: 600px) {
+    .department-bar,
+    .store-filters {
+        min-width: 0;
+        width: 100%;
+    }
+    .store-filters {
+        padding-bottom: 0.35rem;
+    }
+    .filter-btn {
+        min-height: 44px;
+    }
     .utility-bar-inner,
     .tienda-nav-inner,
     .editorial-showcase,

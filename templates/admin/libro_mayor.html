@@ -25,18 +25,18 @@
 
             <!-- Selector Inteligente (Buscador) -->
             <div class="libro-mayor-div-spacing-2">
-                <label class="libro-mayor-label-text">Buscar Cuenta (Código o Nombre)</label>
+                <label class="libro-mayor-label-text" for="cuenta_search">Buscar Cuenta (Código o Nombre)</label>
 
                 <!-- Input visible para búsqueda -->
                 <input type="text" id="cuenta_search" class="form-control libro-mayor-cuenta-search" list="cuentas_datalist"
                        placeholder="Ej: 1.1.01.001 o Caja General"
-                       value="{{ cuenta_seleccionada }}"
+                       value="{{ cuenta_seleccionada or '' }}"
                        autocomplete="off"
 
                        oninput="document.getElementById('cuenta_codigo').value = this.value.split(' ')[0]">
 
                 <!-- Input oculto que envía solo el código -->
-                <input type="hidden" name="cuenta_codigo" id="cuenta_codigo" value="{{ cuenta_seleccionada }}">
+                <input type="hidden" name="cuenta_codigo" id="cuenta_codigo" value="{{ cuenta_seleccionada or '' }}">
 
                 <datalist id="cuentas_datalist">
                     {% for c in cuentas %}
@@ -46,8 +46,8 @@
             </div>
 
             <div>
-                <label class="libro-mayor-label-text">Mes Contable</label>
-                <select name="mes" class="form-control libro-mayor-form-control">
+                <label class="libro-mayor-label-text" for="mayor-mes">Mes Contable</label>
+                <select id="mayor-mes" name="mes" class="form-control libro-mayor-form-control">
                     {% set meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'] %}
                     {% for m in range(1, 13) %}
                     <option value="{{ m }}" {% if mes|int == m %}selected{% endif %}>{{ meses[m-1] }}</option>
@@ -56,8 +56,8 @@
             </div>
 
             <div>
-                <label class="libro-mayor-label-text">Año</label>
-                <select name="anio" class="form-control libro-mayor-form-control">
+                <label class="libro-mayor-label-text" for="mayor-anio">Año</label>
+                <select id="mayor-anio" name="anio" class="form-control libro-mayor-form-control">
                     {% for a in range(2025, 2030) %}
                     <option value="{{ a }}" {% if anio|int == a %}selected{% endif %}>{{ a }}</option>
                     {% endfor %}
@@ -132,6 +132,8 @@
         </div>
     </div>
 </div>
+{% else %}
+<p class="libro-mayor-empty-prompt" role="status">Seleccione una cuenta y un período para consultar sus movimientos.</p>
 {% endif %}
 
 

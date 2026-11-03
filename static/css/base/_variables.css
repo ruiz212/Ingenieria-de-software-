@@ -118,7 +118,8 @@
     --text-3xl:  2.25rem;   /* 36px  */
 
     /* ── Focus Ring ── */
-    --focus-ring: 0 0 0 3px rgba(212, 149, 43, 0.35);
+    --focus-color: #855715;
+    --focus-shadow: 0 0 0 3px rgba(212, 149, 43, 0.35);
     --focus-ring-danger: 0 0 0 3px rgba(196, 69, 54, 0.30);
 
     /* ── Texture (artisanal grain) ── */

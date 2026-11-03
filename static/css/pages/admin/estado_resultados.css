@@ -32,3 +32,14 @@
 .page-estado-resultados .result-loss {
     color:var(--danger);
 }
+
+.page-estado-resultados .c-report__section { overflow-x: auto; }
+.page-estado-resultados .c-table { min-width: 420px; }
+.page-estado-resultados .c-table__cell--amount,
+.page-estado-resultados .c-table__cell--amount-total,
+.page-estado-resultados .c-table__cell--amount-supertotal { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.page-estado-resultados .c-report__empty { padding: 1.25rem; background: var(--surface-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 12px; }
+@media (max-width: 600px) {
+    .page-estado-resultados .c-report { padding: 1rem 0; }
+    .page-estado-resultados .c-report__section { padding: 1rem; }
+}

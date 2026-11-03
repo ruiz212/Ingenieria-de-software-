@@ -197,12 +197,16 @@ def snapshot(cursor, period, obligation):
         fallback_sql='''SELECT f.ID AS id,f.NumeroFactura AS numero,f.FechaHora AS fecha,
         f.Subtotal AS base,f.IVA AS iva,f.Total AS total,f.EstadoFiscal AS estado,
         f.FechaAnulacion AS anulada_en,f.MotivoAnulacion AS motivo_anulacion,
-        f.DocumentoJSON AS documento,a.Fecha AS fecha_asiento,r.Fecha AS fecha_reversion
-        FROM Facturas f OUTER APPLY (SELECT TRY_CONVERT(int,JSON_VALUE(
-          CASE WHEN ISJSON(f.DocumentoJSON)=1 THEN f.DocumentoJSON ELSE N'{}' END,'$.asiento_id')) AS AsientoID) j
+        f.DocumentoJSON AS documento,j.AsientoID AS asiento_id,a.Fecha AS fecha_asiento,
+        r.ID AS reversion_asiento_id,r.Fecha AS fecha_reversion
+        FROM Facturas f OUTER APPLY (SELECT COALESCE(
+          TRY_CONVERT(int,JSON_VALUE(CASE WHEN ISJSON(f.DocumentoJSON)=1 THEN f.DocumentoJSON ELSE N'{}' END,'$.asiento_id')),
+          (SELECT TOP 1 a0.ID FROM AsientosDiario a0 WHERE a0.ReferenciaExterna=f.NumeroFactura ORDER BY a0.ID)
+        ) AS AsientoID) j
         LEFT JOIN AsientosDiario a ON a.ID=j.AsientoID
-        OUTER APPLY (SELECT TOP 1 Fecha FROM AsientosDiario v
-          WHERE v.ReferenciaExterna=CONCAT('REV-',j.AsientoID) AND v.TipoDocumento=N'Reversión' ORDER BY v.ID) r
+        OUTER APPLY (SELECT TOP 1 v.ID,v.Fecha FROM AsientosDiario v
+          WHERE (v.ReferenciaExterna=CONCAT('REV-',j.AsientoID) OR v.ReferenciaExterna=CONCAT('REV-',f.NumeroFactura) OR v.ReferenciaExterna=CONCAT('REV-FACT-',f.ID))
+          ORDER BY v.ID) r
         WHERE (f.FechaHora>=? AND f.FechaHora<?) OR (f.FechaAnulacion>=? AND f.FechaAnulacion<?)
         ORDER BY f.ID''',
     )
@@ -216,9 +220,14 @@ def snapshot(cursor, period, obligation):
             row['documento_corrupto'] = bool(original) and not isinstance(document, dict)
         except (ValueError, TypeError):
             document, row['documento_corrupto'] = {}, True
-        row.update(invoice_time_evidence(row['fecha'], document, row.pop('fecha_asiento')))
+        if row.get('asiento_id') is None and isinstance(document, dict) and document.get('asiento_id'):
+            try:
+                row['asiento_id'] = int(document['asiento_id'])
+            except (ValueError, TypeError):
+                pass
+        row.update(invoice_time_evidence(row['fecha'], document, row.pop('fecha_asiento', None)))
         row['anulada_en_bd'] = row['anulada_en']
-        row['anulada_en'] = reversal_time_evidence(row['anulada_en'], row.pop('fecha_reversion'))
+        row['anulada_en'] = reversal_time_evidence(row['anulada_en'], row.pop('fecha_reversion', None))
         if not (start <= row['fecha'].date() < stop or
                 (row['anulada_en'] and start <= row['anulada_en'].date() < stop)):
             continue
@@ -257,7 +266,8 @@ def snapshot(cursor, period, obligation):
         'fiscal.sp_SnapshotDGIAsientos',
         (start, stop),
         fallback_sql='''SELECT ID AS id,NumeroComprobante AS numero,Fecha AS fecha,
-        Estado AS estado,Descripcion AS descripcion,ReferenciaExterna AS referencia
+        Estado AS estado,Descripcion AS descripcion,ReferenciaExterna AS referencia,
+        TipoDocumento AS tipo_documento
         FROM AsientosDiario WHERE Fecha>=? AND Fecha<? ORDER BY ID''',
     )
     journals = rows(cursor)
@@ -288,12 +298,24 @@ def history(cursor, period_id=None):
         cursor,
         sp_name,
         (period_id,) if period_id else (),
-        fallback_sql=f'''SELECT TOP 100 r.ID,r.PeriodoID,r.Obligacion,r.Version,r.Estado,r.Motor,r.ResultadoJSON,
+        fallback_sql=f'''SELECT TOP 100 r.ID,r.PeriodoID,r.Obligacion,r.Version,r.Estado,r.Motor,r.Huella,r.ResultadoJSON,
         r.CreadoEn,r.CreadoPor,r.AprobadoPor,p.Desde,p.Hasta
         FROM DGI_Revisiones r JOIN DGI_Periodos p ON p.ID=r.PeriodoID
         {where} ORDER BY r.ID DESC''',
     )
     return rows(cursor)
+
+
+def is_review_fresh(cursor, review, period=None):
+    """Verifica si la huella actual de las fuentes coincide con la huella guardada en la revisión."""
+    if review.get('Estado') == 'OBSOLETO' or review.get('Motor') != ENGINE_VERSION:
+        return False
+    target_period = period or get_period(cursor, review['PeriodoID'])
+    saved_hash = review.get('Huella')
+    if not saved_hash:
+        saved_hash = get_review(cursor, review['ID']).get('Huella')
+    current_hash = fingerprint(snapshot(cursor, target_period, review['Obligacion']))
+    return current_hash == saved_hash
 
 
 def get_review(cursor, review_id):

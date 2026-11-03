@@ -551,12 +551,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('encargo-modal');
     const btnConfirmarEncargo = document.getElementById('btn-confirmar-encargo');
     const btnCerrarModal = document.getElementById('btn-cerrar-modal');
+    let encargoTrigger = null;
+    let encargoBackground = [];
+
+    if (modal) modal.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            cerrarModal();
+        } else if (event.key === 'Tab') {
+            const controls = [...modal.querySelectorAll('button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), a[href]')]
+                .filter(control => control.getClientRects().length && getComputedStyle(control).visibility !== 'hidden');
+            if (!controls.length) { event.preventDefault(); modal.focus(); return; }
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }
+    });
 
     const inputAdelanto = document.getElementById('modal-adelanto');
     const inputSaldo = document.getElementById('modal-saldo');
     const inputTotalModal = document.getElementById('modal-total');
 
     window.abrirModalEncargo = function(esClienteOnline = false) {
+        if (!modal || !modal.classList.contains('hidden')) return;
         const { total } = calcularTotales();
         document.getElementById('modal-total').value = `C$${total.toFixed(2)}`;
         document.getElementById('modal-adelanto').value = esClienteOnline ? 0 : (total / 2).toFixed(2);
@@ -591,7 +609,19 @@ document.addEventListener('DOMContentLoaded', () => {
             fechaContainer.style.display = 'block';
         }
 
+        encargoTrigger = esClienteOnline ? document.getElementById('btn-abrir-carrito-nav') : document.activeElement;
+        let branch = modal;
+        while (branch.parentElement) {
+            for (const sibling of branch.parentElement.children) {
+                if (sibling !== branch && sibling.tagName !== 'SCRIPT' && sibling.tagName !== 'LINK') {
+                    encargoBackground.push([sibling, sibling.inert]);
+                    sibling.inert = true;
+                }
+            }
+            branch = branch.parentElement;
+        }
         modal.classList.remove('hidden');
+        document.getElementById('modal-nombre-cliente')?.focus();
     }
 
     if (btnFacturar) {
@@ -681,8 +711,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('modal-efectivo-encargo').addEventListener('input', debounce(actualizarCambioEncargo, 150));
 
-    function cerrarModal() {
+    function cerrarModal(restoreFocus = true) {
         modal.classList.add('hidden');
+        encargoBackground.forEach(([element, wasInert]) => { element.inert = wasInert; });
+        encargoBackground = [];
+        if (restoreFocus && encargoTrigger?.isConnected) encargoTrigger.focus();
+        encargoTrigger = null;
     }
 
     if(btnCerrarModal) {
@@ -1015,7 +1049,9 @@ function renderizarCarrito() {
     const btnRealizarPedido = document.getElementById('btn-realizar-pedido');
 
     if (carrito.length === 0) {
-        cartItemsContainer.innerHTML = '<div class="empty-cart">Selecciona productos para comenzar</div>';
+        cartItemsContainer.innerHTML = window.esClienteOnline
+            ? '<div class="empty-cart"><strong>Tu bolsa está vacía</strong><p>Selecciona productos para comenzar.</p><button type="button" class="empty-cart-browse" data-browse-products>Seguir viendo productos</button></div>'
+            : '<div class="empty-cart">Selecciona productos para comenzar</div>';
         subtotalDisplay.textContent = 'C$0.00';
         if (ivaDisplay) ivaDisplay.textContent = 'C$0.00';
         totalDisplay.textContent = 'C$0.00';
@@ -1123,7 +1159,7 @@ async function procesarFactura(esEncargo = false, datosExtra = null) {
             });
             const resumenItems = carrito.map(i => ({ ...i }));
             carrito=[];renderizarCarrito();
-            document.getElementById('encargo-modal').classList.add('hidden');
+            cerrarModal(false);
             showToast('Solicitud enviada. La panadería confirmará disponibilidad, precio y pago.');
             if (typeof window.mostrarConfirmacionPedidoTienda === 'function') {
                 window.mostrarConfirmacionPedidoTienda({
@@ -1477,10 +1513,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         modalMisCotizaciones.classList.add('hidden');
 
                         // Abrir drawer de carrito para que el cliente proceda
-                        const cartDrawer = document.getElementById('cartDrawer');
-                        const cartOverlay = document.getElementById('cartOverlay');
-                        if (cartDrawer) cartDrawer.classList.add('open');
-                        if (cartOverlay) cartOverlay.classList.add('active');
+                        window.dispatchEvent(new Event('abrirBolsaTienda'));
 
                         showToast('¡Cotización aceptada! Tu pastel ha sido agregado al carrito.');
                     } catch (err) {

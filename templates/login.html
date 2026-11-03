@@ -55,8 +55,8 @@
                     <div><p class="c-access-brand-mobile__name">Brajher's Cake</p><p class="c-access-brand-mobile__description">Panadería y repostería</p></div>
                 </div>
                 <header class="c-login-header">
-                    <h2 id="login-title">Bienvenido de vuelta</h2>
-                    <p>Entra a tu espacio de trabajo.</p>
+                    <h2 id="login-title">{{ 'Entra a tu cuenta de cliente' if request.args.get('source') == 'cliente' else 'Acceso del personal' }}</h2>
+                    <p>{{ 'Usa el teléfono y la contraseña con los que te registraste.' if request.args.get('source') == 'cliente' else 'Entra a tu espacio de trabajo.' }}</p>
                 </header>
 
                 <div class="c-card c-login-card">
@@ -68,7 +68,7 @@
                     <div class="login-alert" role="alert">{{ message }}</div>
                     {% endfor %}
 
-                    <form method="POST" action="/login" autocomplete="on">
+                    <form method="POST" action="{{ url_for('auth.login', next=request.args.get('next'), source='cliente' if request.args.get('source') == 'cliente' else None) }}" autocomplete="on">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                         <div class="form-group">
@@ -106,6 +106,8 @@
 
                         <button type="submit" class="btn btn-primary login-submit">Iniciar sesión <span aria-hidden="true">→</span></button>
                     </form>
+
+                    <p class="login-help">{{ 'Si perdiste el acceso, solicita ayuda al equipo de la panadería.' if request.args.get('source') == 'cliente' else 'Si no puedes entrar, solicita ayuda al administrador del sistema.' }}</p>
 
                     <div class="c-portal-link">
                         <a href="{{ url_for('auth.cliente_bienvenida') }}"><span><span class="c-portal-link__intro">¿Vienes por algo rico?</span><span class="c-portal-link__action">Ver el menú y hacer un pedido</span></span><span class="c-portal-link__arrow" aria-hidden="true">→</span></a>

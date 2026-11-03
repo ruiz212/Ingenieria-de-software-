@@ -91,6 +91,128 @@ def day(value):
     return date.fromisoformat(str(value)[:10])
 
 
+def _is_sales_account(detail):
+    if detail.get('clase') != 'Ingreso':
+        return False
+    cuenta = str(detail.get('cuenta') or '').strip().upper()
+    nombre = str(detail.get('nombre') or '').strip().lower()
+    if any(tok in nombre for tok in (
+        'otros ingresos', 'otro ingreso', 'no operacional', 'financiero',
+        'intereses', 'donacion', 'donación', 'ajeno', 'sobrante'
+    )):
+        return False
+    if cuenta.startswith(('4.2', '4.3', '4.4', '4.5', '4.9')) or 'OTRO' in cuenta or 'AJENO' in cuenta:
+        return False
+    return cuenta.startswith('4.1.01') or cuenta in ('VENTAS', '4.1.01', '4') or not cuenta.startswith('4.')
+
+
+def _is_alien_income_journal(journal, sales_list):
+    ref = str(journal.get('referencia') or '').strip()
+    ref_up = ref.upper()
+    desc = str(journal.get('descripcion') or '').strip()
+    desc_low = desc.lower()
+    tipo = str(journal.get('tipo_documento') or '').strip().lower()
+    jid = journal.get('id')
+
+    # Si tiene vínculo explícito con alguna factura del snapshot o lote DEMO sintético, es de ventas
+    for s in sales_list:
+        s_num = str(s.get('numero') or '').strip()
+        s_num_up = s_num.upper()
+        if jid is not None and (s.get('asiento_id') == jid or s.get('reversion_asiento_id') == jid):
+            return False
+        if ref_up and s_num_up and (
+            ref_up == s_num_up
+            or ref_up in {f"REV-{s_num_up}", f"REV-FACT-{s_num_up}", f"SALDO-{s_num_up}", f"FAC-{s.get('id')}".upper()}
+            or s_num_up.startswith(ref_up + '-')
+        ):
+            return False
+        if s.get('asiento_id') and ref_up == f"REV-{s.get('asiento_id')}".upper():
+            return False
+        if s_num and s_num.lower() in desc_low:
+            return False
+
+    if ref_up.startswith('DEMO-CORRECCION-'):
+        return False
+
+    if any(tok in desc_low or tok in ref_up.lower() for tok in (
+        'otros ingresos', 'otro ingreso', 'ingreso ajeno', 'no operacional',
+        'financiero', 'intereses', 'donacion', 'donación', 'sobrante', 'ajeno'
+    )):
+        return True
+
+    if tipo in ('manual', 'otroingreso', 'otrosingresos', 'ajuste', 'diario'):
+        return True
+
+    # Si existen facturas en el período pero este asiento no tiene vínculo con ninguna factura
+    # ni es un comprobante de facturación POS
+    if sales_list and tipo not in ('facturaventa', 'venta', 'ventapos', 'cobroencargo', 'reversión', 'reversion'):
+        num_up = str(journal.get('numero') or '').strip().upper()
+        if not num_up.startswith('FV-'):
+            return True
+
+    return False
+
+
+def _match_cross_period_reversal(voided_row, candidate_journals, already_matched_ids):
+    """Busca en los asientos del período actual la reversión correspondiente a una factura de período anterior anulada hoy."""
+    rid = voided_row.get('id')
+    num = str(voided_row.get('numero') or '').strip()
+    num_up = num.upper()
+    orig_asiento_id = voided_row.get('asiento_id')
+    rev_asiento_id = voided_row.get('reversion_asiento_id')
+    try:
+        inv_base = money(voided_row.get('base', 0))
+    except ValueError:
+        inv_base = None
+
+    for j in candidate_journals:
+        jid = j.get('id')
+        if jid in already_matched_ids or j.get('estado') != 'Contabilizado':
+            continue
+        j_ref = str(j.get('referencia') or '').strip().upper()
+        j_desc = str(j.get('descripcion') or '').strip().upper()
+        j_tipo = str(j.get('tipo_documento') or '').strip().lower()
+        j_num = str(j.get('numero') or '').strip().upper()
+
+        try:
+            net_sales_credit = sum(
+                (money(d['haber']) - money(d['debe']) for d in j.get('detalles', []) if _is_sales_account(d)),
+                Decimal('0'),
+            )
+        except (ValueError, KeyError):
+            net_sales_credit = None
+
+        # 1. Vínculo directo por ID o referencia documental
+        if rev_asiento_id is not None and jid == rev_asiento_id:
+            return j
+        if orig_asiento_id is not None and (
+            j_ref == f"REV-{orig_asiento_id}".upper()
+            or f"#{orig_asiento_id}" in j_desc
+        ):
+            return j
+        if num_up and (
+            j_ref in {f"REV-{num_up}", f"REV-FACT-{num_up}", f"ANUL-{num_up}", f"NC-{num_up}", num_up}
+            or num_up in j_desc
+        ):
+            if inv_base is None or net_sales_credit is None or net_sales_credit == -inv_base:
+                return j
+        if rid is not None and j_ref in {f"REV-FACT-{rid}".upper(), f"REV-{rid}".upper(), f"ANUL-{rid}".upper()}:
+            return j
+
+        # 2. Asiento de reversión/anulación en el período cuyo débito neto a Ventas coincide con la base anulada
+        is_reversal_doc = (
+            j_ref.startswith(('REV-', 'ANUL', 'NC-'))
+            or j_tipo in ('reversión', 'reversion', 'anulacion', 'anulación', 'notacredito')
+            or 'REVERSIÓN' in j_desc or 'REVERSION' in j_desc
+            or 'ANULACIÓN' in j_desc or 'ANULACION' in j_desc
+            or j_num.startswith('AJ-')
+        )
+        if is_reversal_doc and inv_base is not None and net_sales_credit is not None and net_sales_credit == -inv_base:
+            return j
+
+    return None
+
+
 def analyze(snapshot):
     """Entradas normalizadas con IDs reales. Resultados monetarios como decimales en texto."""
     start, end = day(snapshot['desde']), day(snapshot['hasta'])
@@ -100,10 +222,10 @@ def analyze(snapshot):
     totals = {key: Decimal('0') for key in (
         'ventas_base', 'ventas_iva', 'ventas_total', 'compras_total', 'compras_iva', 'ingresos_contables')}
 
-    def add(code, detail, action, kind=None, entity_id=None, difference=None):
-        name, severity = RULES[code]
+    def add(code, detail, action, kind=None, entity_id=None, difference=None, severity=None):
+        name, default_severity = RULES[code]
         findings.append(dict(id=fingerprint([code, kind, entity_id, detail])[:24],
-                             codigo=code, nombre=name, severidad=severity,
+                             codigo=code, nombre=name, severidad=severity or default_severity,
                              detalle=detail, accion=action, tipo=kind, origen_id=entity_id, categoria=category(code),
                              diferencia=str(difference) if difference is not None else None))
 
@@ -127,6 +249,12 @@ def analyze(snapshot):
     except (ValueError, KeyError):
         add('VIGENCIA', 'Las fechas del perfil son inválidas.', 'Corrija las fechas del perfil.')
 
+    period_journals = [
+        r for r in snapshot.get('asientos', [])
+        if start <= day(r['fecha']) <= end
+    ]
+    matched_cross_period_reversal_ids = set()
+
     seen = {}
     for source in snapshot['ventas']:
         row = dict(source)
@@ -142,10 +270,21 @@ def analyze(snapshot):
         issued = day(row['fecha'])
         voided = day(row['anulada_en']) if row.get('anulada_en') else None
         if not start <= issued <= end:
-            add('FUERA_PERIODO', 'Emisión fuera del período: se excluye de ventas.', 'Consulte el período de emisión.', 'factura', rid)
-            if voided and start <= voided <= end:
+            if voided and start <= voided <= end and row.get('estado') == 'Anulada':
+                matched_rev = _match_cross_period_reversal(row, period_journals, matched_cross_period_reversal_ids)
+                if matched_rev is not None:
+                    matched_cross_period_reversal_ids.add(matched_rev['id'])
+                    row['anulacion_periodo_anterior_conciliada'] = True
+                    add('FUERA_PERIODO',
+                        'Anulación en este período de factura emitida en período anterior conciliada con su asiento de reversión.',
+                        'El asiento de reversión compensa la anulación del período anterior; no altera las ventas del mes actual.',
+                        'factura', rid)
+                    continue
+                add('FUERA_PERIODO', 'Emisión fuera del período: se excluye de ventas.', 'Consulte el período de emisión.', 'factura', rid)
                 add('ANULACION', 'La anulación corresponde a una factura de otro período.',
                     'Revise con contabilidad el documento de ajuste; no se genera automáticamente.', 'factura', rid)
+            else:
+                add('FUERA_PERIODO', 'Emisión fuera del período: se excluye de ventas.', 'Consulte el período de emisión.', 'factura', rid)
             continue
         if row.get('estado') not in ('Emitida', 'Anulada'):
             add('ESTADO', 'Estado no reconocido; no se incluye en el resumen.', 'Revise el documento en control fiscal.', 'factura', rid)
@@ -225,6 +364,7 @@ def analyze(snapshot):
         add('PROVEEDOR_RUC', 'El catálogo de proveedores no almacena RUC.', 'Solicite y conserve soportes; no se valida crédito fiscal.')
 
     posted = 0
+    posted_sales_journals = []
     for row in snapshot['asientos']:
         if not start <= day(row['fecha']) <= end:
             continue
@@ -244,17 +384,61 @@ def analyze(snapshot):
             except ValueError as error:
                 add('PARTIDA_DOBLE', f'{error} Debe {debit}; Haber {credit}.',
                     'Revise y corrija mediante ajuste o reversión.', 'asiento', row['id'])
-            totals['ingresos_contables'] += sum((money(d['haber']) - money(d['debe'])
-                for d in row['detalles'] if d['clase'] == 'Ingreso'), Decimal('0'))
             posted += 1
+            if row['id'] in matched_cross_period_reversal_ids:
+                continue
+            if _is_alien_income_journal(row, sales):
+                continue
+            sales_credit = sum(
+                (money(d['haber']) - money(d['debe']) for d in row['detalles'] if _is_sales_account(d)),
+                Decimal('0'),
+            )
+            totals['ingresos_contables'] += sales_credit
+            if row['estado'] in ('Contabilizado', 'Anulado') and sales_credit > 0:
+                posted_sales_journals.append(row)
         except (ValueError, KeyError):
             add('IMPORTE', 'Detalle contable con importe inválido.', 'Revise el asiento original.', 'asiento', row['id'])
     if not posted and any(r['incluida'] for r in sales):
         add('SIN_CONTABILIDAD', 'Hay ventas, pero no hay asientos contabilizados en el período.', 'Revise la integridad del mayor y las fechas de contabilización.')
+
+    # Verificar individualmente que cada factura activa tenga su asiento de venta correspondiente
+    unlinked_invoices = []
+    if posted and any(r['incluida'] for r in sales):
+        for r in sales:
+            if not r.get('incluida'):
+                continue
+            r_num = str(r.get('numero') or '').strip()
+            r_num_up = r_num.upper()
+            r_asiento_id = r.get('asiento_id')
+            has_entry = False
+            for j in posted_sales_journals:
+                j_ref_up = str(j.get('referencia') or '').strip().upper()
+                j_desc_up = str(j.get('descripcion') or '').strip().upper()
+                if r_asiento_id is not None and j.get('id') == r_asiento_id:
+                    has_entry = True
+                    break
+                if r_num_up and (
+                    j_ref_up == r_num_up
+                    or j_ref_up == f"FAC-{r['id']}".upper()
+                    or r_num_up.startswith(j_ref_up + '-')
+                    or r_num_up in j_desc_up
+                ):
+                    has_entry = True
+                    break
+            if not has_entry:
+                unlinked_invoices.append(r)
+
     difference = totals['ventas_base'] - totals['ingresos_contables']
     if difference:
         add('CONCILIACION', f'Base de ventas {totals["ventas_base"]} − ingresos contables {totals["ingresos_contables"]} = {difference} C$.',
             'Compare los documentos de Ventas y Trazabilidad. Revise fechas, ajustes y registros faltantes; la diferencia no es impuesto ni multa.', difference=difference)
+    elif unlinked_invoices:
+        for r in unlinked_invoices:
+            r_base = money(r.get('base', 0))
+            add('CONCILIACION',
+                f'La factura {r.get("numero") or r["id"]} por {r_base} C$ no tiene asiento contable de venta vinculado.',
+                'Contabilice la factura de venta o concilie su referencia en el Mayor General; otros ingresos no compensan ventas sin asiento.',
+                'factura', r['id'], difference=r_base)
     add('NORMATIVA', 'No hay reglas ni plantilla oficial validadas para esta obligación y período.',
         'El responsable debe verificar régimen, obligación, guía y plantilla vigentes antes de una fase oficial.')
     totals['diferencia'] = difference

@@ -112,15 +112,40 @@ def dgi_dashboard():
         all_reviews = repo.history(cursor, selected_id) if selected_id else []
         show_history = request.args.get('historial') == '1'
         reviews, seen = [], set()
+        any_stale = False
+        snapshot_hashes = {}
         for review in all_reviews:
             latest = review['Obligacion'] not in seen
             seen.add(review['Obligacion'])
             if show_history or latest:
-                review['actual'] = review['Motor'] == ENGINE_VERSION
+                obligation = review['Obligacion']
+                if selected and obligation not in snapshot_hashes:
+                    snapshot_hashes[obligation] = fingerprint(repo.snapshot(cursor, selected, obligation))
+                saved_hash = review.get('Huella')
+                if not saved_hash:
+                    saved_hash = repo.get_review(cursor, review['ID']).get('Huella')
+                hash_matches = bool(selected and saved_hash and snapshot_hashes.get(obligation) == saved_hash)
+                is_fresh = review['Estado'] != 'OBSOLETO' and review['Motor'] == ENGINE_VERSION and hash_matches
+                review['actual'] = is_fresh
+                review['stale'] = not is_fresh
+                review['EstadoOriginal'] = review['Estado']
+                if not is_fresh and review['Estado'] != 'OBSOLETO':
+                    review['Estado'] = 'Requiere Revalidación'
+                    if latest:
+                        any_stale = True
                 summary = json.loads(review.pop('ResultadoJSON'))
                 review['errores'] = summary['bloqueantes']
                 review['pendientes'] = summary.get('pendientes_configuracion', 0)
                 reviews.append(review)
+        if selected:
+            selected['stale'] = any_stale
+            if any_stale and selected['Estado'] == 'Cerrado':
+                selected['EstadoOriginal'] = selected['Estado']
+                selected['Estado'] = 'Requiere Revalidación'
+                for p in periods:
+                    if p['ID'] == selected['ID']:
+                        p['Estado'] = 'Requiere Revalidación'
+                        p['stale'] = True
         execute_sp(
             cursor,
             'fiscal.sp_ListarEventosBitacoraDGI',

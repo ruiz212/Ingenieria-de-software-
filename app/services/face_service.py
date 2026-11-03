@@ -8,21 +8,23 @@ from app.db import get_db_connection, execute_sp
 
 logger = logging.getLogger(__name__)
 
+
 class FaceRecognitionService:
     _instance = None
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(FaceRecognitionService, cls).__new__(cls)
             cls._instance.encodings_cache = {}  # {empleado_id: numpy_array}
             cls._instance._cache_loaded = False
-            
+            cls._instance._cache_version = None
+
             # Rutas de los modelos ONNX
             base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             model_dir = os.path.join(base_dir, 'static', 'models')
             det_model_path = os.path.join(model_dir, 'face_detection_yunet.onnx')
             rec_model_path = os.path.join(model_dir, 'face_recognition_sface.onnx')
-            
+
             # Inicializamos OpenCV YuNet (Detector) y SFace (Reconocedor)
             try:
                 # Los parámetros por defecto de YuNet
@@ -34,18 +36,74 @@ class FaceRecognitionService:
                 )
             except Exception as e:
                 logger.error(f"Error cargando modelos OpenCV ONNX: {e}. Asegúrate de que existan en static/models/")
-                
+
         return cls._instance
 
-    def cargar_cache_desde_db(self):
+    @property
+    def _descriptor_cache(self):
+        return self.encodings_cache
+
+    @_descriptor_cache.setter
+    def _descriptor_cache(self, value):
+        self.encodings_cache = value
+
+    def obtener_huella_cache_db(self, cursor=None):
+        """Consulta ligera de versión/huella sobre los descriptores biométricos activos en BD."""
+        own_conn = None
+        try:
+            if cursor is None:
+                own_conn = get_db_connection()
+                cursor = own_conn.cursor()
+            execute_sp(
+                cursor,
+                'rrhh.sp_ObtenerHuellaDescriptoresFacialesKiosco',
+                fallback_sql=(
+                    "SELECT COUNT(*) AS TotalActivos, COALESCE(MAX(ID), 0) AS MaxID, "
+                    "COALESCE(MAX(CreadoEn), '') AS Huella "
+                    "FROM Empleados WHERE EstadoEmpleado = 'Activo' AND FaceDescriptor IS NOT NULL"
+                ),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return (0, 0, 0)
+            return tuple(row)
+        finally:
+            if own_conn is not None:
+                own_conn.close()
+
+    def verificar_y_sincronizar_cache(self):
+        """Verifica si la huella biométrica en BD cambió respecto a _cache_version y recarga si es necesario."""
+        try:
+            huella_actual = self.obtener_huella_cache_db()
+        except Exception as e:
+            logger.warning(f"No se pudo consultar huella biométrica en DB: {e}")
+            if not self._cache_loaded:
+                self.cargar_cache_desde_db(forzar=True)
+            return False
+
+        if not self._cache_loaded or self._cache_version != huella_actual:
+            logger.info(
+                f"Cambio detectado en huella biométrica ({self._cache_version} -> {huella_actual}). Recargando caché..."
+            )
+            self.cargar_cache_desde_db(forzar=True, huella_conocida=huella_actual)
+            return True
+        return False
+
+    def cargar_cache_desde_db(self, forzar=False, huella_conocida=None):
         """Carga en memoria RAM todos los descriptores válidos de la base de datos."""
-        if self._cache_loaded:
+        if self._cache_loaded and not forzar:
             return
-            
+
         logger.info("Iniciando carga de descriptores faciales en caché...")
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
+            if huella_conocida is None:
+                try:
+                    huella_conocida = self.obtener_huella_cache_db(cursor=cursor)
+                except Exception:
+                    huella_conocida = None
+
             execute_sp(
                 cursor,
                 'rrhh.sp_ObtenerDescriptoresFacialesKiosco',
@@ -54,6 +112,7 @@ class FaceRecognitionService:
                     "WHERE EstadoEmpleado = 'Activo' AND FaceDescriptor IS NOT NULL"
                 ),
             )
+            nuevos_descriptores = {}
             count = 0
             for row in cursor.fetchall():
                 try:
@@ -62,12 +121,15 @@ class FaceRecognitionService:
                     if isinstance(descriptor_list, list) and len(descriptor_list) == 128:
                         # SFace requiere float32 shape(1, 128)
                         desc_array = np.array([descriptor_list], dtype=np.float32)
-                        self.encodings_cache[row.ID] = desc_array
+                        nuevos_descriptores[int(row.ID)] = desc_array
                         count += 1
                 except Exception as e:
                     logger.warning(f"Error parseando descriptor del empleado {row.ID}: {e}")
+            self.encodings_cache.clear()
+            self.encodings_cache.update(nuevos_descriptores)
             self._cache_loaded = True
-            logger.info(f"Caché de reconocimiento facial cargada con {count} empleados.")
+            self._cache_version = huella_conocida
+            logger.info(f"Caché de reconocimiento facial cargada con {count} empleados (versión {self._cache_version}).")
         except Exception as e:
             logger.error(f"Error al cargar caché desde DB: {e}")
         finally:
@@ -78,10 +140,10 @@ class FaceRecognitionService:
         try:
             if ',' in base64_str:
                 base64_str = base64_str.split(',')[1]
-                
+
             img_bytes = base64.b64decode(base64_str)
             img_array = np.frombuffer(img_bytes, dtype=np.uint8)
-            
+
             # cv2.imdecode lee nativamente en formato BGR (que es el requerido por OpenCV YuNet y SFace)
             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
             return img
@@ -96,27 +158,27 @@ class FaceRecognitionService:
             img_bytes = image_file.read()
             img_array = np.frombuffer(img_bytes, dtype=np.uint8)
             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-            
+
             if img is None:
                 return {"status": "error", "message": "Formato de imagen inválido."}
-                
+
             # Ajustar el tamaño de entrada del detector a las dimensiones de esta imagen
             height, width, _ = img.shape
             self.detector.setInputSize((width, height))
-            
+
             # Detectar caras
             _, faces = self.detector.detect(img)
-            
+
             if faces is None or len(faces) == 0:
                 return {"status": "error", "message": "No se detectó ningún rostro en la imagen."}
             if len(faces) > 1:
                 return {"status": "error", "message": "Se detectó más de un rostro en la imagen. Usa una foto individual."}
-                
+
             # Alinear cara y extraer feature (descriptor de 128-d)
             face = faces[0]
             aligned_face = self.recognizer.alignCrop(img, face)
             face_feature = self.recognizer.feature(aligned_face)
-            
+
             # Extraer el descriptor de 128 dimensiones y enviarlo como lista plana
             descriptor = face_feature[0].tolist()
             return {"status": "success", "descriptor": descriptor}
@@ -130,21 +192,21 @@ class FaceRecognitionService:
             img = self.decodificar_base64_a_numpy(base64_str)
             if img is None:
                 return {"status": "error", "message": "Formato de imagen inválido."}
-                
+
             height, width, _ = img.shape
             self.detector.setInputSize((width, height))
-            
+
             _, faces = self.detector.detect(img)
-            
+
             if faces is None or len(faces) == 0:
                 return {"status": "error", "message": "No se detectó ningún rostro en la imagen."}
             if len(faces) > 1:
                 return {"status": "error", "message": "Se detectó más de un rostro en la imagen. Usa una foto individual."}
-                
+
             face = faces[0]
             aligned_face = self.recognizer.alignCrop(img, face)
             face_feature = self.recognizer.feature(aligned_face)
-            
+
             descriptor = face_feature[0].tolist()
             return {"status": "success", "descriptor": descriptor}
         except Exception as e:
@@ -152,8 +214,13 @@ class FaceRecognitionService:
             return {"status": "error", "message": f"Error procesando imagen: {str(e)}"}
 
     def actualizar_cache_empleado(self, empleado_id, descriptor_list):
-        """Actualiza la memoria RAM con el nuevo descriptor tras un registro."""
+        """Actualiza la memoria RAM con el nuevo descriptor tras un registro y sincroniza versión."""
         self.encodings_cache[int(empleado_id)] = np.array([descriptor_list], dtype=np.float32)
+        try:
+            self._cache_version = self.obtener_huella_cache_db()
+            self._cache_loaded = True
+        except Exception:
+            self._cache_version = None
         logger.info(f"Caché actualizada para empleado ID {empleado_id}")
 
     def reconocer_rostro(self, base64_img, tolerancia=0.50):
@@ -163,9 +230,8 @@ class FaceRecognitionService:
         Mayor valor = mayor similitud. El umbral recomendado por OpenCV es 0.363, pero para
         entornos de producción y seguridad, usaremos 0.50 (tolerancia más estricta).
         """
-        if not self._cache_loaded:
-            self.cargar_cache_desde_db()
-            
+        self.verificar_y_sincronizar_cache()
+
         if not self.encodings_cache:
             return {"status": "error", "message": "No hay descriptores cargados en el sistema."}
 
@@ -175,7 +241,7 @@ class FaceRecognitionService:
 
         height, width, _ = img.shape
         self.detector.setInputSize((width, height))
-        
+
         _, faces = self.detector.detect(img)
 
         if faces is None or len(faces) == 0:
@@ -190,10 +256,10 @@ class FaceRecognitionService:
         mejor_similitud = -1.0  # La similitud coseno va de -1 a 1. Empezamos en lo más bajo.
 
         # Buscar el match más cercano (MAYOR similitud coseno)
-        for emp_id, desc_conocido in self.encodings_cache.items():
+        for emp_id, desc_conocido in self._descriptor_cache.items():
             # cv2.FaceRecognizerSF_FR_COSINE = 1
             similitud = self.recognizer.match(desc_conocido, encoding_a_buscar, cv2.FaceRecognizerSF_FR_COSINE)
-            
+
             if similitud > mejor_similitud:
                 mejor_similitud = similitud
                 mejor_id = emp_id
@@ -204,6 +270,7 @@ class FaceRecognitionService:
             return {"status": "match", "empleado_id": mejor_id, "similitud": float(mejor_similitud)}
 
         return {"status": "unknown"}
+
 
 # Inicializamos el singleton automáticamente al cargar el módulo
 face_service = FaceRecognitionService()

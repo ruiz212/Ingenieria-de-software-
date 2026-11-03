@@ -14,6 +14,7 @@ from app.admin import (
     routes_pos,
     routes_hr,
     routes_fidelizacion,
+    routes_marketing,
     routes_fiscal,
     routes_dgi,
     manual_admi

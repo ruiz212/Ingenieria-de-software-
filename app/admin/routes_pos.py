@@ -1,3 +1,4 @@
+from decimal import Decimal, InvalidOperation
 from app.services.validation import amount, positive_int
 from app.services.currency import official_usd_rate
 # app/admin/routes_pos.py
@@ -12,6 +13,87 @@ from app.db import get_db_connection, execute_sp
 from app.auth.decorators import roles_required
 from app.extensions import csrf
 from datetime import datetime
+
+DENOMINACIONES_VALIDAS = {
+    'NIO': {
+        Decimal('1000.00'), Decimal('500.00'), Decimal('200.00'), Decimal('100.00'),
+        Decimal('50.00'), Decimal('20.00'), Decimal('10.00'), Decimal('5.00'),
+        Decimal('1.00'), Decimal('0.50'), Decimal('0.25'), Decimal('0.10'), Decimal('0.05'),
+    },
+    'USD': {
+        Decimal('100.00'), Decimal('50.00'), Decimal('20.00'), Decimal('10.00'),
+        Decimal('5.00'), Decimal('2.00'), Decimal('1.00'),
+        Decimal('0.50'), Decimal('0.25'), Decimal('0.10'), Decimal('0.05'), Decimal('0.01'),
+    },
+}
+
+
+def _validar_denominaciones_arqueo(denominaciones, efectivo_declarado, efectivo_explicit, dolares_declarados, dolares_explicit):
+    """Valida el desglose de denominaciones en servidor y exige congruencia con los montos declarados."""
+    if denominaciones is None:
+        return [], efectivo_declarado, dolares_declarados
+    if not isinstance(denominaciones, list):
+        raise ValueError('El desglose de denominaciones debe ser una lista.')
+    if len(denominaciones) == 0:
+        return [], efectivo_declarado, dolares_declarados
+
+    validadas = []
+    total_nio = Decimal('0.00')
+    total_usd = Decimal('0.00')
+    tiene_nio = False
+    tiene_usd = False
+
+    for item in denominaciones:
+        if not isinstance(item, dict):
+            raise ValueError('Cada elemento de denominación debe ser un objeto válido.')
+        tipo = str(item.get('tipo', 'NIO')).strip().upper()
+        if tipo not in DENOMINACIONES_VALIDAS:
+            raise ValueError(f'Moneda de denominación inválida: {tipo}.')
+        denom = amount(item.get('denominacion'), 'Denominación', minimum=Decimal('0.01'))
+        if denom not in DENOMINACIONES_VALIDAS[tipo]:
+            raise ValueError(f'Denominación inexistente ({denom}) para moneda {tipo}.')
+
+        raw_cant = item.get('cantidad', 0)
+        if isinstance(raw_cant, bool) or raw_cant is None or raw_cant == '':
+            raise ValueError('La cantidad de denominación debe ser un número entero.')
+        try:
+            dec_cant = Decimal(str(raw_cant))
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise ValueError('La cantidad de denominación debe ser un número entero.') from exc
+        if not dec_cant.is_finite() or dec_cant != int(dec_cant) or int(dec_cant) < 0 or int(dec_cant) > 1_000_000:
+            raise ValueError('La cantidad de denominación debe ser un entero no negativo.')
+        cantidad = int(dec_cant)
+
+        subtotal = amount(denom * cantidad)
+        if tipo == 'NIO':
+            tiene_nio = True
+            total_nio = amount(total_nio + subtotal)
+        else:
+            tiene_usd = True
+            total_usd = amount(total_usd + subtotal)
+        validadas.append({'tipo': tipo, 'denominacion': denom, 'cantidad': cantidad, 'subtotal': subtotal})
+
+    if tiene_nio or not tiene_usd:
+        if efectivo_explicit and abs(efectivo_declarado - total_nio) > Decimal('0.01'):
+            raise ValueError(
+                f'Incongruencia entre el efectivo declarado (C${efectivo_declarado:.2f}) '
+                f'y el desglose de denominaciones (C${total_nio:.2f}).'
+            )
+        efectivo_declarado = total_nio
+    elif efectivo_explicit and efectivo_declarado > Decimal('0.00'):
+        raise ValueError(
+            f'Incongruencia entre el efectivo declarado (C${efectivo_declarado:.2f}) y el desglose sin denominaciones NIO.'
+        )
+
+    if tiene_usd:
+        if dolares_explicit and abs(dolares_declarados - total_usd) > Decimal('0.01'):
+            raise ValueError(
+                f'Incongruencia entre los dólares declarados (${dolares_declarados:.2f}) '
+                f'y el desglose de denominaciones USD (${total_usd:.2f}).'
+            )
+        dolares_declarados = total_usd
+
+    return validadas, efectivo_declarado, dolares_declarados
 
 @admin_bp.route('/arqueos')
 @login_required
@@ -125,17 +207,32 @@ def arqueos():
 @login_required
 @roles_required('Estandar', 'Admin', 'SuperAdmin')
 def arqueo_etapa1_conteo():
-    """Etapa 1: Cajero envía conteo desglosado por denominación."""
-    datos = request.json
-    efectivo_contado = amount(datos.get('efectivo_contado', 0))
-    transferencias_contadas = amount(datos.get('transferencias_contadas', 0))
-    dolares_contados = amount(datos.get('dolares_contados', 0))
-    observaciones = datos.get('observaciones', '')
-    denominaciones = datos.get('denominaciones', [])
+    """Etapa 1: Cajero envía conteo desglosado por denominación.
 
+    Nota contable (L13): El arqueo de turno POS concilia exclusivamente la gaveta
+    operativa del turno (ventas en efectivo, adelantos, liquidaciones de saldo y
+    devoluciones/anulaciones en efectivo atribuidas a TurnoReceptorID en ventas.Pagos).
+    Los egresos privados (contabilidad.EgresosPrivados) y vales (rrhh.ValesEmpleados)
+    se desembolsan desde Caja General de oficina (1.1.01.001) y no desde la gaveta POS.
+    """
+    datos = request.json or {}
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        efectivo_explicit = 'efectivo_contado' in datos and datos.get('efectivo_contado') not in (None, '')
+        dolares_explicit = 'dolares_contados' in datos and datos.get('dolares_contados') not in (None, '')
+        efectivo_contado = amount(datos.get('efectivo_contado', 0) if efectivo_explicit else 0)
+        transferencias_contadas = amount(datos.get('transferencias_contadas', 0) if datos.get('transferencias_contadas') not in (None, '') else 0)
+        dolares_contados = amount(datos.get('dolares_contados', 0) if dolares_explicit else 0)
+        observaciones = datos.get('observaciones', '')
+        denominaciones, efectivo_contado, dolares_contados = _validar_denominaciones_arqueo(
+            datos.get('denominaciones', []),
+            efectivo_contado,
+            efectivo_explicit,
+            dolares_contados,
+            dolares_explicit,
+        )
+
         # Buscar turno activo del usuario
         execute_sp(
             cursor,
@@ -157,7 +254,7 @@ def arqueo_etapa1_conteo():
         if cursor.fetchone():
             return jsonify(error='Ya existe un arqueo pendiente para este turno.'), 409
 
-        # Calcular valores del sistema
+        # Calcular valores del sistema de la gaveta del turno POS (incluye cobros y resta devoluciones/anulaciones del turno)
         execute_sp(
             cursor,
             'ventas.sp_CalcularValoresSistemaTurno',
@@ -234,13 +331,13 @@ def arqueo_etapa1_conteo():
 
         arqueo_id = cursor.fetchone()[0]
 
-        # Insertar detalle por denominación
+        # Insertar detalle por denominación validada
         for d in denominaciones:
-            if int(d.get('cantidad', 0)) > 0:
+            if d['cantidad'] > 0:
                 execute_sp(
                     cursor,
                     'ventas.sp_InsertarArqueoDenominacion',
-                    (arqueo_id, d.get('tipo', 'NIO'), float(d.get('denominacion', 0)), int(d.get('cantidad', 0))),
+                    (arqueo_id, d['tipo'], float(d['denominacion']), int(d['cantidad'])),
                     fallback_sql="""
                     INSERT INTO ArqueoDetalleDenominacion (ArqueoID, TipoMoneda, Denominacion, Cantidad)
                     VALUES (?, ?, ?, ?)
@@ -281,7 +378,9 @@ def arqueo_etapa1_conteo():
                 'diferencia_transferencias': float(dif_transferencias),
                 'tipo_cambio_aplicado': float(tipo_cambio),
                 'total_ventas': total_ventas,
-                'requiere_justificacion': requiere_justificacion
+                'requiere_justificacion': requiere_justificacion,
+                'origen_efectivo_sistema': 'gaveta_turno_pos',
+                'egresos_caja_general_excluidos': True
             }
         })
     except ValueError as error:

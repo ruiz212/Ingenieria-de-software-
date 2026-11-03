@@ -33,6 +33,15 @@
         </div>
 
         <div class="panel-body panel-body-flush">
+            <div class="inventario-stock-filters">
+                <label for="filtro-estado-materia">Estado del stock</label>
+                <select id="filtro-estado-materia" class="form-select">
+                    <option value="todos">Todos</option>
+                    <option value="bajo">Bajo mínimo</option>
+                    <option value="agotado">Agotado</option>
+                </select>
+                <span id="resumen-stock-materia" role="status" aria-live="polite">{{ materias | selectattr('stock', 'le', 0) | list | length }} agotados · {{ materias | length }} ingredientes</span>
+            </div>
             <div class="table-responsive">
                 <table class="data-table">
                     <thead>
@@ -45,13 +54,15 @@
                     </thead>
                     <tbody>
                         {% for m in materias %}
-                        <tr>
+                        <tr class="materia-row" data-stock="{{ m.stock }}" data-minimo="{{ m.minimo }}">
                             <td class="cell-bold">{{ m.nombre }}</td>
                             <td>{{ m.stock }} {{ m.unidad }}</td>
                             <td>{{ m.minimo }} {{ m.unidad }}</td>
                             <td>
-                                {% if m.stock <= m.minimo %}
-                                <span class="badge badge-danger badge-live">Stock Bajo</span>
+                                {% if m.stock <= 0 %}
+                                <span class="badge badge-danger badge-live">Agotado</span>
+                                {% elif m.stock <= m.minimo %}
+                                <span class="badge badge-danger badge-live">Bajo mínimo</span>
                                 {% else %}
                                 <span class="badge badge-success">Óptimo</span>
                                 {% endif %}
@@ -226,7 +237,7 @@
             </div>
             <div class="form-group">
                 <label class="form-label" for="prov_telefono">Teléfono de Contacto</label>
-                <input type="text" id="prov_telefono" class="form-input" placeholder="Opcional">
+                <input type="tel" id="prov_telefono" class="form-input" placeholder="8888-8888 (Opcional)" data-mask="telefono" maxlength="9">
             </div>
 
             <div class="modal-actions">
@@ -329,9 +340,31 @@
         }, 200));
     }
 
-    setupSearch('search-materia', 'materia');
     setupSearch('search-compras', 'compras');
     setupSearch('search-proveedor', 'proveedores');
+
+    function filtrarMaterias() {
+        const term = document.getElementById('search-materia').value.trim().toLowerCase();
+        const estado = document.getElementById('filtro-estado-materia').value;
+        let visibles = 0, agotados = 0, bajos = 0;
+        document.querySelectorAll('#materia .materia-row').forEach(row => {
+            const stock = Number(row.dataset.stock);
+            const minimo = Number(row.dataset.minimo);
+            if (stock <= 0) agotados++;
+            else if (stock <= minimo) bajos++;
+            const coincideEstado = estado === 'todos' || (estado === 'agotado' && stock <= 0) ||
+                (estado === 'bajo' && stock > 0 && stock <= minimo);
+            const mostrar = coincideEstado && row.textContent.toLowerCase().includes(term);
+            row.hidden = !mostrar;
+            row.style.display = mostrar ? '' : 'none';
+            if (mostrar) visibles++;
+        });
+        document.getElementById('resumen-stock-materia').textContent =
+            `${agotados} agotados · ${bajos} bajo mínimo · ${visibles} mostrados`;
+    }
+    document.getElementById('search-materia').addEventListener('input', filtrarMaterias);
+    document.getElementById('filtro-estado-materia').addEventListener('change', filtrarMaterias);
+    filtrarMaterias();
 
     // Handlers para formularios
     document.getElementById('form-materia').addEventListener('submit', async (e) => {

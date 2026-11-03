@@ -20,8 +20,13 @@
         </div>
         <div class="panel-body">
             <div class="estadistica-div-spacing">
-                <canvas id="chart-ventas-hora"></canvas>
+                <canvas id="chart-ventas-hora" role="img" aria-label="Ventas por hora en córdobas; datos disponibles en la tabla siguiente"></canvas>
             </div>
+            <details class="estadistica-data-details"><summary>Ver datos de ventas por hora</summary>
+                <div class="table-responsive" role="region" aria-label="Datos de ventas por hora" tabindex="0"><table id="chart-ventas-hora-datos" class="data-table"><thead><tr><th scope="col">Hora</th><th scope="col">Ingresos (C$)</th></tr></thead><tbody>
+                {% for d in ventas_por_hora %}<tr><td>{{ d.hora }}:00</td><td>{{ d.total }}</td></tr>{% else %}<tr><td colspan="2">Sin datos de ventas por hora.</td></tr>{% endfor %}
+                </tbody></table></div>
+            </details>
         </div>
     </div>
 
@@ -34,8 +39,13 @@
         </div>
         <div class="panel-body">
             <div class="estadistica-div-spacing">
-                <canvas id="chart-ventas-diarias"></canvas>
+                <canvas id="chart-ventas-diarias" role="img" aria-label="Tendencia diaria de ventas en córdobas; datos disponibles en la tabla siguiente"></canvas>
             </div>
+            <details class="estadistica-data-details"><summary>Ver datos de ventas diarias</summary>
+                <div class="table-responsive" role="region" aria-label="Datos de ventas diarias" tabindex="0"><table id="chart-ventas-diarias-datos" class="data-table"><thead><tr><th scope="col">Fecha</th><th scope="col">Ingresos (C$)</th></tr></thead><tbody>
+                {% for d in ventas_diarias %}<tr><td>{{ d.dia }}</td><td>{{ d.total }}</td></tr>{% else %}<tr><td colspan="2">Sin datos de ventas diarias.</td></tr>{% endfor %}
+                </tbody></table></div>
+            </details>
         </div>
     </div>
 </div>
@@ -50,9 +60,20 @@
         <span class="text-muted estadistica-text-muted">Modelo predictivo de Regresión Lineal</span>
     </div>
     <div class="panel-body">
+        {% if pronostico_ventas_data.fechas %}
         <div class="estadistica-div-spacing-2">
-            <canvas id="chart-pronostico-ventas"></canvas>
+            <canvas id="chart-pronostico-ventas" role="img" aria-label="Ventas históricas y pronóstico en córdobas; datos disponibles en la tabla siguiente"></canvas>
         </div>
+        <details class="estadistica-data-details"><summary>Ver datos históricos y del pronóstico</summary>
+            <div class="table-responsive" role="region" aria-label="Datos del pronóstico de ventas" tabindex="0"><table id="chart-pronostico-ventas-datos" class="data-table"><thead><tr><th scope="col">Fecha</th><th scope="col">Ventas históricas (C$)</th><th scope="col">Pronóstico (C$)</th></tr></thead><tbody>
+            {% for fecha in pronostico_ventas_data.fechas %}<tr><td>{{ fecha }}</td><td>{{ pronostico_ventas_data.historico[loop.index0] if pronostico_ventas_data.historico[loop.index0] is not none else '—' }}</td><td>{{ pronostico_ventas_data.prediccion[loop.index0] if pronostico_ventas_data.prediccion[loop.index0] is not none else '—' }}</td></tr>{% else %}<tr><td colspan="3">Sin datos de pronóstico.</td></tr>{% endfor %}
+            </tbody></table></div>
+        </details>
+        {% else %}
+        <div class="empty-state" role="status">
+            <p>No hay ventas facturadas en los últimos 30 días para calcular el pronóstico.</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -174,9 +195,14 @@
         </div>
         <div class="panel-body flex-center">
             <div class="estadistica-div-spacing-3">
-                <canvas id="chart-clientes-nivel"></canvas>
+                <canvas id="chart-clientes-nivel" role="img" aria-label="Cantidad de clientes por nivel; datos disponibles en la tabla siguiente"></canvas>
             </div>
         </div>
+        <details class="estadistica-data-details"><summary>Ver datos de clientes por nivel</summary>
+            <div class="table-responsive" role="region" aria-label="Datos de clientes por nivel" tabindex="0"><table id="chart-clientes-nivel-datos" class="data-table"><thead><tr><th scope="col">Nivel</th><th scope="col">Clientes</th></tr></thead><tbody>
+            {% for d in clientes_nivel %}<tr><td>{{ d.nivel }}</td><td>{{ d.cantidad }}</td></tr>{% else %}<tr><td colspan="2">Sin datos de clientes por nivel.</td></tr>{% endfor %}
+            </tbody></table></div>
+        </details>
     </div>
 
     <div class="panel panel-accent-warning">

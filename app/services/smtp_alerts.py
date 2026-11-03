@@ -41,6 +41,34 @@ def reset_rate_limit_cache() -> None:
         _LAST_SENT_BY_KEY.clear()
 
 
+def _normalize_recipients(raw_recipients: Any) -> list[str]:
+    """Normaliza destinatarios desde lista, tupla, cadena JSON o texto separado por comas."""
+    if raw_recipients is None:
+        return []
+    if isinstance(raw_recipients, (list, tuple, set)):
+        out: list[str] = []
+        for item in raw_recipients:
+            out.extend(_normalize_recipients(item))
+        return out
+    if isinstance(raw_recipients, str):
+        stripped = raw_recipients.strip()
+        if not stripped:
+            return []
+        if stripped.startswith(('[', '"')):
+            try:
+                parsed = json.loads(stripped)
+            except (ValueError, TypeError):
+                pass
+            else:
+                if isinstance(parsed, str):
+                    return [r.strip() for r in parsed.split(',') if r.strip()]
+                if isinstance(parsed, (list, tuple)):
+                    return [str(r).strip() for r in parsed if str(r).strip()]
+        return [r.strip() for r in stripped.split(',') if r.strip()]
+    text = str(raw_recipients).strip()
+    return [text] if text else []
+
+
 def _should_allow_send(key: tuple[str, ...], window_seconds: int, force_send=False) -> bool:
     """Atomically reserve transient notifications which have no durable DB ID."""
     now = time.monotonic()
@@ -148,10 +176,7 @@ def get_smtp_config(app_config: dict[str, Any] | None = None) -> dict[str, Any]:
         or cfg.get('SMTP_ADMIN_RECIPIENTS')
         or os.environ.get('SMTP_ALERT_RECIPIENTS', '')
     )
-    if isinstance(raw_recipients, (list, tuple)):
-        recipients = [str(r).strip() for r in raw_recipients if str(r).strip()]
-    else:
-        recipients = [r.strip() for r in str(raw_recipients).split(',') if r.strip()]
+    recipients = _normalize_recipients(raw_recipients)
     if 'SMTP_RATE_LIMIT_SECONDS' in cfg:
         rate_limit = int(cfg['SMTP_RATE_LIMIT_SECONDS'])
     elif 'SMTP_RATE_LIMIT_MINUTES' in cfg:
@@ -282,7 +307,7 @@ def send_smtp_message(msg: EmailMessage, smtp_cfg: dict[str, Any]) -> bool:
     """Envía un EmailMessage usando smtplib (soporta STARTTLS y SSL)."""
     if not smtp_cfg.get('enabled', True):
         return False
-    recipients = smtp_cfg.get('recipients') or []
+    recipients = _normalize_recipients(smtp_cfg.get('recipients'))
     if not recipients:
         return False
 
@@ -453,7 +478,12 @@ def _outbox_call(smtp_cfg, sql, params=(), connection=None):
 
 def _enqueue_error(error_id, smtp_cfg, payload=None, connection=None) -> bool:
     payload = payload or {}
-    recipients = payload.get('override_recipients')
+    raw_override = (
+        payload.get('override_recipients')
+        if payload.get('override_recipients') is not None
+        else (payload.get('destinatarios') if payload.get('destinatarios') is not None else payload.get('destinatario'))
+    )
+    recipients = _normalize_recipients(raw_override)
     try:
         result = _outbox_call(smtp_cfg,
             'SET NOCOUNT ON; EXEC seguridad.sp_EncolarAlertaSMTP @ErrorID=?, @DestinatariosJSON=?, @Forzar=?',
@@ -497,10 +527,19 @@ def _deliver_claim(claim, smtp_cfg, connection=None):
     completed = False
     try:
         payload = _claim_payload(claim)
-        raw_recipients = claim.get('DestinatariosJSON')
-        recipients = json.loads(raw_recipients) if raw_recipients else list(smtp_cfg.get('recipients') or [])
-        cfg = dict(smtp_cfg, recipients=recipients)
-        sent = bool(send_smtp_message(build_alert_email(payload, recipients, cfg['from_email']), cfg))
+        raw_row_recipients = (
+            claim.get('DestinatariosJSON')
+            or claim.get('Destinatario')
+            or claim.get('destinatarios')
+            or claim.get('destinatario')
+        )
+        row_recipients = _normalize_recipients(raw_row_recipients)
+        recipients = row_recipients if row_recipients else _normalize_recipients(smtp_cfg.get('recipients'))
+        if recipients:
+            cfg = dict(smtp_cfg, recipients=recipients)
+            sent = bool(send_smtp_message(build_alert_email(payload, recipients, cfg.get('from_email') or 'alertas@brajherscake.local'), cfg))
+        else:
+            sent = False
     except Exception as exc:
         logger.warning('Fallo al enviar alerta SMTP ErrorID=%s: %s', claim['ID'], exc)
     finally:
@@ -521,7 +560,12 @@ def _dispatch_worker(payload: dict[str, Any], smtp_cfg: dict[str, Any], connecti
         payload['error_id'] = error_id
     queued = bool(error_id is not None and _enqueue_error(error_id, smtp_cfg, payload, connection))
     result = {'error_id': error_id, 'sent': False, 'rate_limited': False, 'queued': queued}
-    recipients = list(payload.get('override_recipients') or smtp_cfg.get('recipients') or [])
+    override_recips = _normalize_recipients(
+        payload.get('override_recipients')
+        if payload.get('override_recipients') is not None
+        else (payload.get('destinatarios') if payload.get('destinatarios') is not None else payload.get('destinatario'))
+    )
+    recipients = override_recips if override_recips else _normalize_recipients(smtp_cfg.get('recipients'))
     # The caller owns this transaction. SMTP must wait until its explicit commit
     # makes the event visible to the independent consumer.
     if connection is not None:
@@ -581,7 +625,7 @@ def retry_pending_alerts(max_batch: int = 20, smtp_cfg: dict[str, Any] | None = 
         raise ValueError('SMTP consumer requires connection=None; caller owns transaction')
     cfg = smtp_cfg or get_smtp_config()
     stats = {'attempted': 0, 'delivered': 0, 'failed': 0, 'errors': 0}
-    if not cfg.get('enabled', True) or not cfg.get('recipients'):
+    if not cfg.get('enabled', True):
         return stats
     for _ in range(max_batch):
         if not _SEND_SLOTS.acquire(blocking=False):
@@ -626,12 +670,13 @@ def notify_error(
     persist_in_db: bool = True,
     async_send: bool | None = None,
     force_send: bool = False,
-    override_recipients: list[str] | None = None,
+    override_recipients: list[str] | str | None = None,
     connection=None,
 ) -> dict[str, Any]:
     """Registra un error/evento de seguridad en BD y despacha alerta por correo SMTP."""
     req_ctx = _extract_request_context()
     smtp_cfg = get_smtp_config()
+    normalized_override = _normalize_recipients(override_recipients) or None
 
     payload = {
         'origen': origen,
@@ -653,7 +698,7 @@ def notify_error(
         'error_id': error_id,
         'persist_in_db': persist_in_db,
         'force_send': force_send,
-        'override_recipients': override_recipients,
+        'override_recipients': normalized_override,
     }
 
     use_async = smtp_cfg['async'] if async_send is None else async_send

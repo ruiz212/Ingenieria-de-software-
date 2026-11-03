@@ -7,3 +7,42 @@
     align-items: end;
     flex-wrap: wrap;
 }
+
+.page-auditoria .auditoria-time-note {
+    margin: 0.75rem 1rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.page-auditoria .data-table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.page-auditoria .data-table th:last-child,
+.page-auditoria .data-table td:last-child {
+    width: 23%;
+}
+
+.page-auditoria .data-table td {
+    overflow-wrap: anywhere;
+}
+
+.page-auditoria .auditoria-detail pre {
+    max-height: 12rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: var(--surface-sunken);
+    padding: 0.5rem;
+}
+
+.page-auditoria .auditoria-detail dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.25rem 0.75rem;
+}
+
+@media (max-width: 700px) {
+    .page-auditoria .data-table { min-width: 640px; }
+}

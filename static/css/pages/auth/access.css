@@ -303,3 +303,9 @@
         margin-bottom:28px;
     }
 }
+.login-help {
+    margin: 1rem 0 0;
+    color: var(--text-muted, #65584f);
+    font-size: .875rem;
+    line-height: 1.5;
+}

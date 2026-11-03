@@ -43,6 +43,9 @@
   "pages/admin/dgi": [
     "pages/admin/dgi.css"
   ],
+  "pages/admin/fiscal": [
+    "pages/admin/fiscal.css"
+  ],
   "pages/sales/monitor": [
     "pages/sales/monitor.css"
   ],
@@ -54,7 +57,8 @@
   ],
   "pages/customer/store": [
     "components/_sales-widgets.css",
-    "pages/customer/store.css"
+    "pages/customer/store.css",
+    "pages/customer/recommendations.css"
   ],
   "pages/admin/arqueos": [
     "pages/admin/arqueos.css"
@@ -97,6 +101,9 @@
   ],
   "pages/admin/estadistica": [
     "pages/admin/estadistica.css"
+  ],
+  "pages/admin/mercadotecnia": [
+    "pages/admin/mercadotecnia.css"
   ],
   "pages/admin/estado_resultados": [
     "pages/admin/estado_resultados.css"

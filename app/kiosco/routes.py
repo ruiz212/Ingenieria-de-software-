@@ -9,7 +9,7 @@ from flask_login import login_required, current_user
 from app.auth.decorators import roles_required
 from datetime import datetime, timedelta
 from app.services.business_time import business_now
-from app.services.hr_calculations import can_mark_exit
+from app.services.hr_calculations import can_mark_exit, resolver_horario_y_clasificar_asistencia
 import logging
 import json
 
@@ -107,7 +107,7 @@ def _procesar_marcaje(empleado_id, accion='entrada', *, exception_reason=None, s
             'rrhh.sp_ObtenerEmpleadoActivoPorIDBloqueo',
             (int(empleado_id),),
             fallback_sql=(
-                "SELECT ID, NombreCompleto FROM Empleados WITH (UPDLOCK, HOLDLOCK) "
+                "SELECT ID, NombreCompleto, HoraEntrada, HoraSalida FROM Empleados WITH (UPDLOCK, HOLDLOCK) "
                 "WHERE ID = ? AND EstadoEmpleado = 'Activo'"
             ),
         )
@@ -118,10 +118,11 @@ def _procesar_marcaje(empleado_id, accion='entrada', *, exception_reason=None, s
         execute_sp(
             cursor,
             'rrhh.sp_ObtenerTurnoLaboralActivoDefecto',
-            fallback_sql="SELECT TOP 1 ID, HoraEntrada, ToleranciaMinutos FROM TurnosLaborales WHERE Activo = 1",
+            fallback_sql="SELECT TOP 1 ID, HoraEntrada, ToleranciaMinutos FROM TurnosLaborales WHERE Activo = 1 ORDER BY ID ASC",
         )
         turno = cursor.fetchone()
-        turno_id = turno.ID if turno else 1
+        clasificacion = resolver_horario_y_clasificar_asistencia(empleado, turno, ahora)
+        turno_id = clasificacion['turno_id']
         execute_sp(
             cursor,
             'rrhh.sp_ObtenerAsistenciaPorEmpleadoFechaBloqueo',
@@ -138,11 +139,7 @@ def _procesar_marcaje(empleado_id, accion='entrada', *, exception_reason=None, s
                                mensaje=f'{nombre}, tu entrada ya está registrada hoy.')
             if asistencia and asistencia.HoraSalida:
                 return jsonify(status='error', message='Registro de asistencia incompleto; solicita revisión.'), 409
-            estado = 'A Tiempo'
-            if turno and turno.HoraEntrada:
-                limite = datetime.combine(ahora.date(), turno.HoraEntrada) + timedelta(minutes=turno.ToleranciaMinutos or 0)
-                if ahora > limite:
-                    estado = 'Llegada Tardia'
+            estado = clasificacion['estado']
             if asistencia:
                 execute_sp(
                     cursor,

@@ -3,3 +3,12 @@
 .page-inventario .inventario-search-materia {
     max-width: 200px;
 }
+.page-inventario .inventario-stock-filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+}
+
+.page-inventario .inventario-stock-filters .form-select { width: auto; min-width: 10rem; }

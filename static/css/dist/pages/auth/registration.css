@@ -341,32 +341,42 @@ body {
 }
 
 .page-cliente-registro .progress-container {
-    display: flex;
-    justify-content: space-between;
-    position: relative;
-    max-width: 200px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .75rem;
+    padding: 0;
+    list-style: none;
     margin: 1.5rem 0 2rem;
 }
-.page-cliente-registro .progress-line {
-    position: absolute;
-    top: 16px;
-    height: 1px;
-    background: #D4A359;
-}
 .page-cliente-registro .step-indicator {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    min-width: 0;
+    color: #7A6558;
+    font: 600 .75rem/1.25 'Inter', sans-serif;
+}
+.page-cliente-registro .step-number {
     display: grid;
     place-items: center;
-    position: relative;
-    width: 32px;
+    flex: 0 0 32px;
     height: 32px;
-    border: 1px solid #EAE0D5;
+    border: 1px solid #B9A99A;
     border-radius: 50%;
     background: #FDFBF7;
-    color: #7A6558;
-    font: 600 0.9rem 'Inter', sans-serif;
+    color: #4A352B;
+    font-size: .875rem;
 }
 .page-cliente-registro .step-indicator.active,
-.page-cliente-registro .step-indicator.completed { background: #D4A359; color: #2B1810; }
+.page-cliente-registro .step-indicator.completed { color: #2B1810; }
+.page-cliente-registro .step-indicator.active .step-number,
+.page-cliente-registro .step-indicator.completed .step-number { background: #D4A359; border-color: #B87D1E; color: #2B1810; }
+.page-cliente-registro .registration-brand-subtitle { display: block; font: 600 .85rem 'Inter', sans-serif; color: #765941; }
+.page-cliente-registro [aria-invalid="true"] { border-color: #a33728; }
+@media (max-width: 420px) {
+    .page-cliente-registro .progress-container { gap: .35rem; }
+    .page-cliente-registro .step-indicator { flex-direction: column; align-items: flex-start; gap: .35rem; font-size: .7rem; }
+}
 .page-cliente-registro .registration-step-title { margin-bottom: 1.25rem; font: 600 1.15rem 'Inter', sans-serif; }
 .page-cliente-registro .form-grid { display: grid; gap: 1.25rem; }
 .page-cliente-registro .form-grid .form-group { margin-bottom: 0; }

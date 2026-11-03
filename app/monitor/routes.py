@@ -241,9 +241,21 @@ def actualizar_estado(codigo):
     data = request.get_json() or {}
     nuevo_estado = data.get('estado')
 
+    if nuevo_estado == 'En Preparacion':
+        nuevo_estado = 'En Proceso'
     estados_validos = ['Pendiente', 'En Proceso', 'Listo', 'Entregado']
     if nuevo_estado not in estados_validos:
         return jsonify({'error': 'Estado inválido. Debe ser Pendiente, En Proceso, Listo o Entregado.'}), 400
+
+    transiciones_validas = {
+        'Pendiente': {'En Proceso', 'Listo', 'Entregado'},
+        'En Proceso': {'Listo', 'Entregado'},
+        'En Preparacion': {'Listo', 'Entregado'},
+        'Listo': {'Entregado'},
+        'Entregado': set(),
+        'Cancelado': set(),
+        'Anulada': set(),
+    }
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -271,6 +283,14 @@ def actualizar_estado(codigo):
 
         if nuevo_estado == estado_anterior:
             return jsonify(status='success', nuevo_estado=nuevo_estado)
+
+        if estado_anterior == 'Entregado':
+            conn.rollback()
+            return jsonify(error='Un encargo ya entregado es terminal en KDS y no puede revertirse a un estado anterior.'), 409
+
+        if nuevo_estado not in transiciones_validas.get(estado_anterior, set()):
+            conn.rollback()
+            return jsonify(error=f'Transición de estado no permitida de {estado_anterior} a {nuevo_estado}.'), 409
 
         # Validate collection policy and lock the receiving shift before changing the order.
         saldo_pendiente = 0
@@ -364,6 +384,8 @@ def actualizar_estado(codigo):
         return jsonify(error=f'No se confirmó la entrega ni el cobro: {error}'), 409
     except Exception as e:
         conn.rollback()
+        if '51034' in str(e) or '51035' in str(e):
+            return jsonify(error=str(e)), 409
         current_app.logger.exception('Error actualizando encargo')
         return jsonify(error='No se pudo actualizar el encargo.'), 500
     finally:

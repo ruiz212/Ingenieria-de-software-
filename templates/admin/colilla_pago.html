@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Colilla de Pago - {{ nomina.NombreCompleto }}</title>
+    <title>{% if nomina.Estado == 'Pagada' %}Recibo Oficial de Pago{% else %}Comprobante de Liquidación{% endif %} - {{ nomina.NombreCompleto }}</title>
     <!-- Tipografía Moderna -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,7 +37,13 @@
                 <div class="logo-placeholder">BC</div>
                 <div class="company-info">
                     <h1>Brajher's Cake</h1>
-                    <p>{% if nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}Comprobante de Aguinaldo{% else %}Nómina de Pago{% endif %}</p>
+                    <p>
+                        {% if nomina.Estado == 'Pagada' %}
+                            RECIBO OFICIAL DE PAGO DE NÓMINA — OBLIGACIÓN CANCELADA
+                        {% else %}
+                            COMPROBANTE DE LIQUIDACIÓN DE NÓMINA (CONTABILIZADA — PENDIENTE DE DESEMBOLSO)
+                        {% endif %}
+                    </p>
                 </div>
             </div>
 
@@ -45,6 +51,10 @@
                 <div class="meta-row">
                     <span class="meta-label">Colilla N°:</span>
                     <span class="meta-value highlight-value">N-{{ "{:04d}".format(nomina.ID) }}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">Estado:</span>
+                    <span class="meta-value highlight-value">{{ nomina.Estado }}</span>
                 </div>
                 <div class="meta-row">
                     <span class="meta-label">Fecha Emisión:</span>
@@ -77,7 +87,25 @@
             </div>
         </section>
 
-        <!-- Detalle de Conceptos -->
+        <!-- Métricas de Asistencia y Puntualidad del Período -->
+        {% if nomina.PromedioAsistencia is defined and nomina.PromedioAsistencia is not none %}
+        <div class="attendance-badge-card">
+            <div class="attendance-metric">
+                <div class="metric-val">{{ "{:0.1f}".format(nomina.PromedioAsistencia) }}%</div>
+                <div class="metric-lbl">Promedio Asistencia</div>
+            </div>
+            <div class="attendance-metric">
+                <div class="metric-val">{{ "{:0.1f}".format(nomina.PromedioPuntualidad or 100.0) }}%</div>
+                <div class="metric-lbl">Puntualidad</div>
+            </div>
+            <div class="attendance-metric">
+                <div class="metric-val">C$ {{ "{:,.2f}".format(nomina.CostoTotalEmpresa or nomina.TotalDevengado) }}</div>
+                <div class="metric-lbl">Costo Total Empresa</div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Detalle de Conceptos (Parte 1: Ingresos y Parte 2: Deducciones) -->
         <div class="details-grid">
 
             <!-- Ingresos -->
@@ -85,40 +113,49 @@
                 <table class="detail-table table-incomes">
                     <thead>
                         <tr>
-                            <th>Conceptos de Ingreso</th>
+                            <th>Parte 1: Ingresos</th>
                             <th>Monto (C$)</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% if not aguinaldo_detalles %}
-                        <tr>
-                            <td>Salario Base</td>
-                            <td>{{ "{:,.2f}".format(nomina.SalarioBruto) }}</td>
-                        </tr>
-                        {% endif %}
-                        {% if nomina.HorasExtras > 0 %}
-                        <tr>
-                            <td>Horas Extras ({{ nomina.HorasExtras }} hrs)</td>
-                            <td>{{ "{:,.2f}".format(nomina.MontoHorasExtras) }}</td>
-                        </tr>
-                        {% endif %}
-                        {% if nomina.OtrosIngresos > 0 %}
-                        <tr>
-                            <td>
-                                {% if aguinaldo_detalles %}
-                                    Treceavo Mes / Aguinaldo Proporcional
-                                    <span class="colilla-pago-span-text">Calculado por {{ aguinaldo_detalles.dias }} días. Base utilizada (Salario Max 6M): C$ {{ "{:,.2f}".format(aguinaldo_detalles.salario_max_6m) }}.<br>Exento de deducciones (Art. 97, Ley 185).</span>
-                                {% elif nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}
-                                    Treceavo Mes (Aguinaldo)
-                                {% else %}
-                                    Comisiones / Otros Ingresos
-                                {% endif %}
-                            </td>
-                            <td>{{ "{:,.2f}".format(nomina.OtrosIngresos) }}</td>
-                        </tr>
+                        {% if detalles %}
+                            {% for d in detalles if (d.Tipo if d.Tipo is defined else d[3]) == 'Ingreso' %}
+                            <tr>
+                                <td>{{ d.Concepto if d.Concepto is defined else d[2] }}</td>
+                                <td>{{ "{:,.2f}".format(d.Monto if d.Monto is defined else d[4]) }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            {% if not aguinaldo_detalles %}
+                            <tr>
+                                <td>Salario Base</td>
+                                <td>{{ "{:,.2f}".format(nomina.SalarioBruto) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if nomina.HorasExtras > 0 %}
+                            <tr>
+                                <td>Horas Extras ({{ nomina.HorasExtras }} hrs)</td>
+                                <td>{{ "{:,.2f}".format(nomina.MontoHorasExtras) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if nomina.OtrosIngresos > 0 %}
+                            <tr>
+                                <td>
+                                    {% if aguinaldo_detalles %}
+                                        Treceavo Mes / Aguinaldo Proporcional
+                                        <span class="colilla-pago-span-text">Calculado por {{ aguinaldo_detalles.dias }} días. Base utilizada (Salario Max 6M): C$ {{ "{:,.2f}".format(aguinaldo_detalles.salario_max_6m) }}.<br>Exento de deducciones (Art. 97, Ley 185).</span>
+                                    {% elif nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}
+                                        Treceavo Mes (Aguinaldo)
+                                    {% else %}
+                                        Comisiones / Otros Ingresos
+                                    {% endif %}
+                                </td>
+                                <td>{{ "{:,.2f}".format(nomina.OtrosIngresos) }}</td>
+                            </tr>
+                            {% endif %}
                         {% endif %}
                         <tr class="total-row">
-                            <td>Total Devengado</td>
+                            <td>Total Ingresos</td>
                             <td>{{ "{:,.2f}".format(nomina.TotalDevengado) }}</td>
                         </tr>
                     </tbody>
@@ -130,29 +167,42 @@
                 <table class="detail-table table-deductions">
                     <thead>
                         <tr>
-                            <th>Conceptos de Deducción</th>
+                            <th>Parte 2: Deducciones</th>
                             <th>Monto (C$)</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr>
-                            <td>INSS Laboral (7%)</td>
-                            <td>{{ "{:,.2f}".format(nomina.INSSLaboral) }}</td>
-                        </tr>
-                        {% if nomina.IRMensual > 0 %}
-                        <tr>
-                            <td>IR (Impuesto sobre la Renta)</td>
-                            <td>{{ "{:,.2f}".format(nomina.IRMensual) }}</td>
-                        </tr>
+                        {% if detalles %}
+                            {% for d in detalles if (d.Tipo if d.Tipo is defined else d[3]) == 'Deduccion' %}
+                            <tr>
+                                <td>{{ d.Concepto if d.Concepto is defined else d[2] }}</td>
+                                <td>{{ "{:,.2f}".format(d.Monto if d.Monto is defined else d[4]) }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td>INSS Laboral (7%)</td>
+                                <td>{{ "{:,.2f}".format(nomina.INSSLaboral) }}</td>
+                            </tr>
+                            {% if nomina.IRMensual > 0 %}
+                            <tr>
+                                <td>IR (Impuesto sobre la Renta)</td>
+                                <td>{{ "{:,.2f}".format(nomina.IRMensual) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if nomina.PensionAlimenticia > 0 %}
+                            <tr>
+                                <td>Deducción Judicial / Pensión</td>
+                                <td>{{ "{:,.2f}".format(nomina.PensionAlimenticia) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if nomina.ValesDescontados and nomina.ValesDescontados > 0 %}
+                            <tr>
+                                <td>Anticipos / Vales Descontados</td>
+                                <td>{{ "{:,.2f}".format(nomina.ValesDescontados) }}</td>
+                            </tr>
+                            {% endif %}
                         {% endif %}
-                        {% if nomina.PensionAlimenticia > 0 %}
-                        <tr>
-                            <td>Deducción Judicial / Pensión</td>
-                            <td>{{ "{:,.2f}".format(nomina.PensionAlimenticia) }}</td>
-                        </tr>
-                        {% endif %}
-
-                        <!-- NOTA: Eliminado el apartado de préstamos/vales por solicitud del usuario -->
 
                         <tr class="total-row">
                             <td>Total Deducciones</td>
@@ -164,9 +214,50 @@
 
         </div>
 
+        <!-- Parte 3: Cargos y Provisiones Patronales -->
+        <div class="patronal-section">
+            <table class="detail-table table-patronal">
+                <thead>
+                    <tr>
+                        <th>Parte 3: Cargas y Provisiones Patronales (Obligaciones Empleador)</th>
+                        <th>Monto (C$)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if detalles %}
+                        {% for d in detalles if (d.Tipo if d.Tipo is defined else d[3]) == 'Patronal' %}
+                        <tr>
+                            <td>{{ d.Concepto if d.Concepto is defined else d[2] }}</td>
+                            <td>{{ "{:,.2f}".format(d.Monto if d.Monto is defined else d[4]) }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        {% if nomina.INSSPatronal is defined and nomina.INSSPatronal and nomina.INSSPatronal > 0 %}
+                        <tr>
+                            <td>INSS Patronal (21.5% / 22.5%)</td>
+                            <td>{{ "{:,.2f}".format(nomina.INSSPatronal) }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if nomina.INATEC is defined and nomina.INATEC and nomina.INATEC > 0 %}
+                        <tr>
+                            <td>INATEC (2%)</td>
+                            <td>{{ "{:,.2f}".format(nomina.INATEC) }}</td>
+                        </tr>
+                        {% endif %}
+                    {% endif %}
+                    {% if nomina.CostoTotalEmpresa is defined and nomina.CostoTotalEmpresa > 0 %}
+                    <tr class="total-row">
+                        <td>Costo Total Empresa</td>
+                        <td>{{ "{:,.2f}".format(nomina.CostoTotalEmpresa) }}</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
         <!-- Resumen Final -->
         <div class="net-summary">
-            <div class="net-label">Neto a Recibir (Córdobas)</div>
+            <div class="net-label">{% if nomina.Estado == 'Pagada' %}Neto Pagado (Córdobas){% else %}Neto por Desembolsar (Córdobas){% endif %}</div>
             <div class="net-value">C$ {{ "{:,.2f}".format(nomina.SalarioNeto) }}</div>
         </div>
 
@@ -178,17 +269,29 @@
             </div>
             <div class="signature-box">
                 <div class="signature-line"></div>
-                <div class="signature-title">Recibí Conforme (Firma del Empleado)</div>
+                <div class="signature-title">
+                    {% if nomina.Estado == 'Pagada' %}
+                        Recibí Conforme el Pago (Firma del Empleado)
+                    {% else %}
+                        Conformidad de Liquidación — Pendiente de Pago (Firma del Empleado)
+                    {% endif %}
+                </div>
                 <div class="signature-date">Fecha: _____ / _____ / _________</div>
             </div>
         </div>
 
         <!-- Pie Legal -->
         <div class="legal-note">
-            {% if nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}
-            Este documento constituye el recibo oficial de pago del Treceavo Mes (Aguinaldo), exento de retenciones de INSS e IR según Art. 97 y 98 del Código del Trabajo (Ley 185) y la Ley de Concertación Tributaria (Ley 822).
+            {% if nomina.Estado == 'Pagada' %}
+                <strong>RECIBO OFICIAL DE PAGO DE NÓMINA — OBLIGACIÓN CANCELADA.</strong>
+                {% if nomina.SalarioBruto == 0 and nomina.OtrosIngresos > 0 %}
+                Este documento constituye el recibo oficial de pago del Treceavo Mes (Aguinaldo), exento de retenciones de INSS e IR según Art. 97 y 98 del Código del Trabajo (Ley 185) y la Ley de Concertación Tributaria (Ley 822).
+                {% else %}
+                Este documento constituye el recibo oficial de pago de salario y deducciones de ley aplicables correspondientes al período indicado, habiéndose efectuado el desembolso correspondiente.
+                {% endif %}
             {% else %}
-            Este documento constituye el recibo oficial de pago de salario y deducciones de ley aplicables correspondientes al período indicado.
+                <strong>COMPROBANTE DE LIQUIDACIÓN DE NÓMINA (CONTABILIZADA — PENDIENTE DE DESEMBOLSO).</strong>
+                Este documento certifica el cálculo y provisión contable de la nómina (reconocimiento del pasivo en Sueldos por Pagar), pero NO constituye constancia de entrega de efectivo ni cancelación de la obligación hasta que se registre su desembolso efectivo.
             {% endif %}
         </div>
 

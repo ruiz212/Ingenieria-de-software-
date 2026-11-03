@@ -17,14 +17,15 @@
         </h3>
         <div class="panel-tools">
             <input type="search" id="search-catalogo" aria-label="Buscar producto" class="form-input catalogo-search-catalogo" placeholder="Buscar producto...">
-            <button class="btn btn-primary btn-sm" onclick="abrirModal()">
+            <button class="btn btn-primary btn-sm" onclick="abrirModal(this)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Nuevo Producto
             </button>
         </div>
     </div>
     <div class="panel-body panel-body-flush">
-        <div class="table-responsive">
+        <p class="catalogo-scroll-hint">Desliza la tabla para ver todas las columnas.</p>
+        <div class="table-responsive" role="region" aria-label="Listado de productos; desplaza horizontalmente para ver más columnas" tabindex="0">
             <table class="data-table">
                 <thead>
                     <tr>
@@ -35,7 +36,7 @@
                         <th>Precio (C$)</th>
                         <th>Descuento</th>
                         <th>Estado</th>
-                        <th>Acción</th>
+                        <th class="catalogo-action-column">Acción</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -73,12 +74,12 @@
                                 <span class="badge badge-danger">Inactivo</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td class="catalogo-action-column">
                             <div class="btn-group">
-                                <button class="btn btn-outline btn-sm" onclick="toggleProducto({{ p.id }})">
+                                <button class="btn btn-outline btn-sm" aria-label="{% if p.activo %}Desactivar{% else %}Activar{% endif %} {{ p.nombre }}" onclick="toggleProducto({{ p.id }})">
                                     {% if p.activo %}Desactivar{% else %}Activar{% endif %}
                                 </button>
-                                <button class="btn btn-primary btn-sm"
+                                <button class="btn btn-primary btn-sm" aria-label="Editar {{ p.nombre }}"
                                     onclick="abrirModalEditar({{ p.id }}, '{{ p.nombre|replace("'", "\\'") }}', {{ p.categoria_id }}, {{ p.precio }}, {{ p.descuento }}, '{{ p.imagen_url }}')">
                                     Editar
                                 </button>
@@ -104,7 +105,7 @@
 <!-- ══════════════════════════════════════════════════════════
      MODAL — Nuevo / Editar Producto
      ══════════════════════════════════════════════════════════ -->
-<div id="modal-nuevo-producto" class="modal-overlay hidden">
+<div id="modal-nuevo-producto" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-subtitle">
     <div class="modal-content catalogo-modal-content">
         <h2 id="modal-title">Agregar Producto</h2>
         <p class="subtitle" id="modal-subtitle">Crea un nuevo producto para tu catálogo de venta.</p>
@@ -219,6 +220,44 @@
 // ─── Estado del upload ────────────────────────────────────────────────────────
 let uploadedImageUrl = null;   // URL ya subida a ImgBB
 let uploadPending   = false;   // ¿hay un upload en progreso?
+let modalTrigger = null;
+let inertBackground = [];
+
+function mostrarModalProducto(trigger) {
+    const modal = document.getElementById('modal-nuevo-producto');
+    modalTrigger = trigger || document.activeElement;
+    inertBackground = [];
+    let branch = modal;
+    while (branch.parentElement) {
+        for (const sibling of branch.parentElement.children) {
+            if (sibling !== branch && sibling.tagName !== 'SCRIPT' && sibling.tagName !== 'LINK') {
+                inertBackground.push([sibling, sibling.inert]);
+                sibling.inert = true;
+            }
+        }
+        branch = branch.parentElement;
+    }
+    modal.classList.remove('hidden');
+    document.getElementById('np-nombre').focus();
+}
+
+document.getElementById('modal-nuevo-producto').addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        cerrarModal();
+    } else if (e.key === 'Tab') {
+        const focusable = [...e.currentTarget.querySelectorAll('button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled])')]
+            .filter(el => el.getClientRects().length);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault(); first.focus();
+        }
+    }
+});
 
 // ─── Drag & Drop ─────────────────────────────────────────────────────────────
 function dropZoneDragOver(e) {
@@ -333,11 +372,11 @@ function quitarImagen(e) {
 }
 
 // ─── Modal open/close ─────────────────────────────────────────────────────────
-function abrirModal() {
+function abrirModal(trigger) {
     resetModal();
     document.getElementById('modal-title').textContent    = 'Agregar Producto';
     document.getElementById('modal-subtitle').textContent = 'Crea un nuevo producto para tu catálogo de venta.';
-    document.getElementById('modal-nuevo-producto').classList.remove('hidden');
+    mostrarModalProducto(trigger);
 }
 
 function abrirModalEditar(id, nombre, categoriaId, precio, descuento, imagenUrl) {
@@ -358,12 +397,16 @@ function abrirModalEditar(id, nombre, categoriaId, precio, descuento, imagenUrl)
         setUploadStatus('done');
     }
 
-    document.getElementById('modal-nuevo-producto').classList.remove('hidden');
+    mostrarModalProducto(document.activeElement);
 }
 
 function cerrarModal() {
     document.getElementById('modal-nuevo-producto').classList.add('hidden');
+    inertBackground.forEach(([element, wasInert]) => { element.inert = wasInert; });
+    inertBackground = [];
     resetModal();
+    if (modalTrigger && modalTrigger.isConnected) modalTrigger.focus();
+    modalTrigger = null;
 }
 
 function resetModal() {
@@ -469,10 +512,10 @@ document.getElementById('form-producto').addEventListener('submit', async (e) =>
                     <td class="cell-money">C$${parseFloat(precio).toFixed(2)}</td>
                     <td>${descHTML}</td>
                     <td><span class="badge badge-success">Activo</span></td>
-                    <td>
+                    <td class="catalogo-action-column">
                         <div class="btn-group">
-                            <button class="btn btn-outline btn-sm" onclick="toggleProducto(${data.id})">Desactivar</button>
-                            <button class="btn btn-primary btn-sm"
+                            <button class="btn btn-outline btn-sm" aria-label="Desactivar ${escapeHTML(nombre)}" onclick="toggleProducto(${data.id})">Desactivar</button>
+                            <button class="btn btn-primary btn-sm" aria-label="Editar ${escapeHTML(nombre)}"
                                 onclick="abrirModalEditar(${data.id}, '${escapeHTML(nombre).replace(/'/g,"\\'")}', ${categoria_id}, ${precio}, ${descuento}, '${escapeHTML(imgUrl)}')">
                                 Editar
                             </button>

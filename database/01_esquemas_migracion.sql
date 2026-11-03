@@ -720,6 +720,7 @@ IF OBJECT_ID('rrhh.PerfilesPuesto', 'U') IS NULL
         PerfilPuesto NVARCHAR(1000) NOT NULL CONSTRAINT DF_PerfilesPuesto_Perfil DEFAULT N'',
         Obligaciones NVARCHAR(2000) NOT NULL CONSTRAINT DF_PerfilesPuesto_Obligaciones DEFAULT N'',
         RequisitosCompetencias NVARCHAR(1000) NOT NULL CONSTRAINT DF_PerfilesPuesto_Requisitos DEFAULT N'',
+        Activo BIT NOT NULL CONSTRAINT DF_PerfilesPuesto_Activo DEFAULT 1,
         ActualizadoEn DATETIME2 NOT NULL CONSTRAINT DF_PerfilesPuesto_Fecha DEFAULT SYSUTCDATETIME(),
         ActualizadoPor INT NULL REFERENCES [seguridad].[Usuarios](ID)
     );
@@ -729,6 +730,22 @@ SELECT DISTINCT LTRIM(RTRIM(e.Cargo)) FROM [rrhh].[Empleados] e
 WHERE NULLIF(LTRIM(RTRIM(e.Cargo)),N'') IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM [rrhh].[PerfilesPuesto] p WHERE p.Cargo=LTRIM(RTRIM(e.Cargo)));
 GO
+
+-- Escala Salarial (Valuación de puestos por puntos y banda salarial)
+IF OBJECT_ID('rrhh.escala_salarial', 'U') IS NULL
+    CREATE TABLE [rrhh].[escala_salarial] (
+        [id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        [nivel] VARCHAR(10) NOT NULL,
+        [cargo] VARCHAR(100) NOT NULL,
+        [limite_inferior] INT NULL,
+        [limite_superior] INT NOT NULL,
+        [salario_base] DECIMAL(12,2) NOT NULL
+    );
+GO
+IF OBJECT_ID('dbo.escala_salarial') IS NULL
+    CREATE SYNONYM [dbo].[escala_salarial] FOR [rrhh].[escala_salarial];
+GO
+
 
 EXEC('
 CREATE OR ALTER TRIGGER [TR_DDL_ProteccionEsquemas]

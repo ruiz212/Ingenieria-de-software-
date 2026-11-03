@@ -73,7 +73,7 @@
 /* ── Brand premium badge ── */
 .badge-brand {
     background: var(--gradient-primary);
-    color: #fff;
+    color: var(--on-primary);
     border: none;
     box-shadow: 0 2px 8px rgba(212, 149, 43, 0.30);
     letter-spacing: 0.06em;

@@ -51,7 +51,9 @@
     align-items: center;
     gap: 0.5rem;
     font-family: 'Playfair Display', serif;
+    color: inherit;
 }
+.page-balance-comprobacion .balance-comprobacion-row-3 svg { color: inherit; }
 
 .page-balance-comprobacion .balance-comprobacion-panel-body-flush {
     padding: 0;

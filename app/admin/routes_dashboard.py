@@ -11,6 +11,101 @@ from app.extensions import csrf
 from datetime import datetime, date, timedelta
 from app.services.business_time import business_now
 
+
+def business_today() -> date:
+    """Retorna la fecha operativa actual del negocio (Nicaragua)."""
+    now_val = business_now()
+    return now_val.date() if isinstance(now_val, datetime) else now_val
+
+
+def _coerce_day(value) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value)[:10])
+
+
+def calcular_pronostico_ventas(historico_ventas, hoy=None) -> dict:
+    """
+    Calcula la serie diaria continua (rellenando días sin ventas con 0.0) hasta `hoy`
+    y proyecta los próximos 7 días mediante regresión lineal sobre días calendario reales.
+    """
+    hoy_ni = _coerce_day(hoy) if hoy is not None else business_today()
+    inicio_ventana = hoy_ni - timedelta(days=29)
+
+    ventas_por_dia = {}
+    for r in (historico_ventas or []):
+        if isinstance(r, dict):
+            raw_dia = r.get('Dia') or r.get('dia')
+            raw_total = r.get('Total', r.get('total', 0.0))
+        elif hasattr(r, 'Dia') or hasattr(r, 'Total'):
+            raw_dia = getattr(r, 'Dia')
+            raw_total = getattr(r, 'Total', 0.0)
+        else:
+            raw_dia, raw_total = r[0], r[1]
+        dia = _coerce_day(raw_dia)
+        if dia <= hoy_ni:
+            ventas_por_dia[dia] = round(ventas_por_dia.get(dia, 0.0) + float(raw_total or 0.0), 2)
+
+    pronostico_ventas_data = {
+        'fechas': [],
+        'historico': [],
+        'prediccion': [],
+        'fechas_iso': [],
+        'prediccion_fechas_iso': [],
+        'serie_diaria': [],
+    }
+
+    if not ventas_por_dia:
+        return pronostico_ventas_data
+
+    primer_dia = max(min(ventas_por_dia.keys()), inicio_ventana)
+    if (hoy_ni - primer_dia).days + 1 < 3:
+        primer_dia = min(min(ventas_por_dia.keys()), hoy_ni - timedelta(days=2))
+
+    dias_calendario = []
+    cursor_dia = primer_dia
+    while cursor_dia <= hoy_ni:
+        total_dia = round(float(ventas_por_dia.get(cursor_dia, 0.0)), 2)
+        dias_calendario.append((cursor_dia, total_dia))
+        cursor_dia += timedelta(days=1)
+
+    if len(dias_calendario) < 3:
+        return pronostico_ventas_data
+
+    n = len(dias_calendario)
+    sum_x = sum(range(1, n + 1))
+    sum_y = sum(total for _, total in dias_calendario)
+    sum_xy = sum(i * total for i, (_, total) in enumerate(dias_calendario, 1))
+    sum_x2 = sum(i ** 2 for i in range(1, n + 1))
+
+    denominador = (n * sum_x2 - sum_x ** 2)
+    m = (n * sum_xy - sum_x * sum_y) / denominador if denominador != 0 else 0.0
+    b = (sum_y - m * sum_x) / n
+
+    for i, (dia_cal, total_dia) in enumerate(dias_calendario, 1):
+        pronostico_ventas_data['fechas'].append(dia_cal.strftime('%d/%m'))
+        pronostico_ventas_data['fechas_iso'].append(dia_cal.isoformat())
+        pronostico_ventas_data['historico'].append(float(total_dia))
+        pronostico_ventas_data['serie_diaria'].append({'dia': dia_cal.isoformat(), 'total': float(total_dia)})
+        if i == n:
+            pronostico_ventas_data['prediccion'].append(float(total_dia))
+        else:
+            pronostico_ventas_data['prediccion'].append(None)
+
+    for i in range(1, 8):
+        next_x = n + i
+        predicted_y = max(0.0, m * next_x + b)
+        next_date = hoy_ni + timedelta(days=i)
+        pronostico_ventas_data['fechas'].append(next_date.strftime('%d/%m'))
+        pronostico_ventas_data['fechas_iso'].append(next_date.isoformat())
+        pronostico_ventas_data['prediccion_fechas_iso'].append(next_date.isoformat())
+        pronostico_ventas_data['historico'].append(None)
+        pronostico_ventas_data['prediccion'].append(round(predicted_y, 2))
+
+    return pronostico_ventas_data
+
 @admin_bp.route('/dashboard')
 @login_required
 @roles_required('Admin', 'SuperAdmin')
@@ -280,52 +375,25 @@ def estadistica():
     pronostico.sort(key=lambda x: x['dias_restantes'])
 
     # 9. Pronóstico Estadístico de Ventas (Regresión Lineal para próximos 7 días)
+    hoy_ni = business_today()
+    inicio_30d = hoy_ni - timedelta(days=29)
     execute_sp(
         cursor,
         'ventas.sp_EstadisticaHistoricoVentasRegresion',
+        (hoy_ni,),
         fallback_sql="""
         SELECT CONVERT(date, FechaHora) AS Dia, ISNULL(SUM(Total), 0) AS Total
         FROM Facturas
-        WHERE EstadoFiscal='Emitida' AND FechaHora >= DATEADD(DAY, -30, GETDATE())
+        WHERE EstadoFiscal='Emitida'
+          AND CONVERT(date, FechaHora) >= ?
+          AND CONVERT(date, FechaHora) <= ?
         GROUP BY CONVERT(date, FechaHora)
         ORDER BY Dia
     """,
+        fallback_params=(inicio_30d, hoy_ni),
     )
     historico_ventas = cursor.fetchall()
-    
-    pronostico_ventas_data = {
-        'fechas': [],
-        'historico': [],
-        'prediccion': []
-    }
-
-    if len(historico_ventas) >= 3:
-        n = len(historico_ventas)
-        sum_x = sum(range(1, n + 1))
-        sum_y = sum(float(r.Total) for r in historico_ventas)
-        sum_xy = sum(i * float(r.Total) for i, r in enumerate(historico_ventas, 1))
-        sum_x2 = sum(i ** 2 for i in range(1, n + 1))
-        
-        denominador = (n * sum_x2 - sum_x ** 2)
-        m = (n * sum_xy - sum_x * sum_y) / denominador if denominador != 0 else 0
-        b = (sum_y - m * sum_x) / n
-        
-        for i, r in enumerate(historico_ventas, 1):
-            pronostico_ventas_data['fechas'].append(r.Dia.strftime('%d/%m'))
-            pronostico_ventas_data['historico'].append(float(r.Total))
-            if i == n:
-                pronostico_ventas_data['prediccion'].append(float(r.Total))
-            else:
-                pronostico_ventas_data['prediccion'].append(None)
-            
-        last_date = historico_ventas[-1].Dia
-        for i in range(1, 8):
-            next_x = n + i
-            predicted_y = max(0, m * next_x + b)
-            next_date = last_date + timedelta(days=i)
-            pronostico_ventas_data['fechas'].append(next_date.strftime('%d/%m'))
-            pronostico_ventas_data['historico'].append(None)
-            pronostico_ventas_data['prediccion'].append(round(predicted_y, 2))
+    pronostico_ventas_data = calcular_pronostico_ventas(historico_ventas, hoy=hoy_ni)
 
     conn.close()
 

@@ -7,7 +7,7 @@ a single drawer below 900px. */
     background:var(--background);
 }
 .glass-dock{
-    --focus-ring:var(--brand-dorado);
+    --focus-color:#f0bb69;
     position:fixed;
     inset:16px auto 16px 16px;
     width:232px;

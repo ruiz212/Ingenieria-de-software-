@@ -1,0 +1,30 @@
+.page-fiscal .fiscal-task-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+.page-fiscal .fiscal-task-nav a { color: var(--text-main); text-decoration: underline; text-underline-offset: .2em; }
+.page-fiscal .fiscal-card { scroll-margin-top: 1.5rem; }
+.page-fiscal .fiscal-task { padding: 0; }
+.page-fiscal .fiscal-task > summary {
+    display: list-item;
+    cursor: pointer;
+    padding: 1.25rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+.page-fiscal .fiscal-task > :not(summary) { margin-inline: 1.25rem; }
+.page-fiscal .fiscal-task > .table-responsive { margin-bottom: 1.25rem; }
+.page-fiscal .fiscal-list-controls,
+.page-fiscal .fiscal-pages { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: 1rem 0; }
+.page-fiscal .fiscal-list-controls select { min-height: 44px; }
+.page-fiscal .fiscal-void { margin-top: .5rem; }
+.page-fiscal .fiscal-void summary { cursor: pointer; text-decoration: underline; }
+.page-fiscal .fiscal-void form { margin-top: .75rem; }
+.page-fiscal #fiscal-invoice-body [hidden] { display: none; }
+.page-fiscal :is(summary, a, button, select):focus-visible { outline: 3px solid var(--brand-dorado-dark); outline-offset: 3px; }
+@media (max-width: 600px) {
+    .page-fiscal .fiscal-task > summary { padding: 1rem; }
+    .page-fiscal .fiscal-task > :not(summary) { margin-inline: 1rem; }
+}

@@ -14,6 +14,7 @@
     <div class="kds-toolbar">
         <div class="kds-toolbar-left">
             <input type="search" id="kds-search" class="kds-search-input" aria-label="Buscar factura, cliente o notas" placeholder="🔍 Buscar factura o cliente..." oninput="filtrarTablero()">
+            <label class="kds-overdue-filter"><input type="checkbox" id="kds-overdue-only" onchange="renderBoard()"> Solo fuera de plazo</label>
             <div class="kds-sync-status" data-state="synced" role="status" aria-live="polite">
                 <span class="kds-sync-dot" id="sync-dot"></span>
                 <span id="sync-label">Sincronizado</span>
@@ -224,6 +225,8 @@
         let counts = { 'Pendiente': 0, 'En Proceso': 0, 'Listo': 0 };
 
         const pedidosFiltrados = encargos.filter(encargo => {
+            if (document.getElementById('kds-overdue-only')?.checked &&
+                !window.isOverdueDelivery(encargo.encargo_detalles?.fecha_entrega)) return false;
             if (!busquedaActual) return true;
             const factura = (encargo.numero_factura || '').toLowerCase();
             const cliente = (encargo.encargo_detalles?.nombre_cliente || '').toLowerCase();

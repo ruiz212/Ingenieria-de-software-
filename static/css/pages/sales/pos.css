@@ -310,7 +310,7 @@ body.pos-body {
 }
 .qty-btn:hover {
     background: var(--primary-color);
-    color: #fff;
+    color: var(--on-primary);
     border-color: var(--primary-color);
     transform: scale(1.1);
 }
@@ -643,7 +643,7 @@ body.pos-body {
 
 .modal-btn--primary {
     background: var(--primary-color);
-    color: #fff;
+    color: var(--on-primary);
     border-color: var(--primary-color);
 }
 .modal-btn--primary:hover {
@@ -827,7 +827,7 @@ body.pos-body {
 
 .btn-encargo {
     background: var(--warning-bg);
-    color: var(--warning);
+    color: #76500f;
     border: 1px solid var(--warning);
 }
 .btn-encargo:hover {
@@ -874,7 +874,7 @@ body.pos-body {
 /* WhatsApp button */
 .btn-whatsapp {
     border-color: #25D366 !important;
-    color: #25D366 !important;
+    color: #116b37 !important;
 }
 .btn-whatsapp:hover {
     background: #25D366 !important;
@@ -917,11 +917,22 @@ body.pos-body {
 }
 
 .page-pos .pos-empty-state {
+    flex: 1;
+    width: 100%;
     grid-column: 1 / -1;
     min-height: 50vh;
     display: grid;
     place-items: center;
     text-align: center;
+}
+
+.page-pos .pos-empty-state > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    max-width: 34rem;
+    padding: 2rem;
 }
 
 .page-pos .pos-form-search {
@@ -1272,4 +1283,97 @@ body.pos-body {
 
 .page-pos .pos-initially-hidden {
     display:none;
+}
+
+/* Keep the cashier's controls in document flow as the viewport narrows. */
+@media (max-width: 1100px) {
+    .page-pos .app-header {
+        flex-wrap: wrap;
+        gap: 0.75rem 1.5rem;
+        height: auto;
+        min-height: 72px;
+        flex-shrink: 0;
+    }
+    .page-pos .header-actions {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 720px) {
+    body.page-pos {
+        height: auto;
+        min-height: 100dvh;
+        overflow: auto;
+    }
+    .page-pos .app-header {
+        padding: 1rem;
+    }
+    .page-pos .app-header > div,
+    .page-pos .header-actions {
+        width: 100%;
+        min-width: 0;
+    }
+    .page-pos .header-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+    }
+    .page-pos .btn-header,
+    .page-pos .pos-a-text {
+        min-height: 44px;
+        margin: 0;
+        justify-content: center;
+        text-align: center;
+        line-height: 1.25;
+    }
+    .page-pos .pos-a-text {
+        display: inline-flex;
+        align-items: center;
+    }
+    .page-pos .pos-layout {
+        flex-direction: column;
+        overflow: visible;
+        height: auto;
+        padding: 1rem;
+        gap: 1rem;
+    }
+    .page-pos .pos-main,
+    .page-pos .invoice-panel {
+        width: 100%;
+        min-width: 0;
+        flex: none;
+    }
+    .page-pos .category-tabs {
+        min-height: 56px;
+        scroll-padding-inline: 1rem;
+    }
+    .page-pos .category-btn {
+        min-height: 44px;
+    }
+    .page-pos .pos-form-search {
+        width: auto;
+        max-width: none;
+        margin: 0.75rem 1rem;
+    }
+    .page-pos .catalog-panel {
+        overflow: visible;
+        padding: 1rem;
+    }
+    .page-pos .invoice-panel {
+        min-height: 300px;
+    }
+}
+
+@media (max-width: 420px) {
+    .page-pos .app-header h1 {
+        font-size: clamp(1.15rem, 5vw, 1.5rem);
+    }
+    .page-pos .app-header .header-info {
+        line-height: 1.45;
+    }
+    .page-pos .btn-header {
+        padding: 0.55rem 0.65rem;
+        font-size: 0.875rem;
+    }
 }

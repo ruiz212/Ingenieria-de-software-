@@ -85,35 +85,6 @@
     </div>
 </div>
 
-<section class="panel panel-full rrhh-profiles" aria-labelledby="rrhh-profiles-title">
-    <div class="panel-header"><h3 id="rrhh-profiles-title">Perfiles de puesto</h3></div>
-    <div class="panel-body">
-        <p>Describe el rol, sus obligaciones y las competencias del contrato. Los cargos históricos pueden completarse aquí.</p>
-        <div class="rrhh-profile-list">
-            {% for p in perfiles %}
-            <article class="rrhh-profile-card">
-                <h4>{{ p.cargo }}</h4>
-                {% if p.perfil or p.obligaciones or p.competencias %}
-                <p>{{ p.perfil or 'Descripción pendiente' }}</p>
-                <details><summary>Obligaciones y competencias</summary><p><strong>Obligaciones</strong><br>{{ p.obligaciones or 'Pendiente' }}</p><p><strong>Competencias</strong><br>{{ p.competencias or 'Pendiente' }}</p></details>
-                {% else %}<p>Perfil contractual pendiente de completar.</p>{% endif %}
-                <button type="button" class="btn btn-outline btn-sm" data-edit-profile="{{ loop.index0 }}">Editar perfil</button>
-            </article>
-            {% else %}<p>No hay perfiles registrados. Agrega el primero antes de crear un empleado.</p>{% endfor %}
-        </div>
-        <details class="rrhh-profile-editor" id="rrhh-profile-editor"><summary>Registrar o actualizar un perfil</summary>
-            <form id="form-perfil-puesto" data-draft-key="perfil-puesto">
-                <label>Cargo<input id="perfil-cargo" maxlength="100" required></label>
-                <label>Perfil general<textarea id="perfil-descripcion" maxlength="1000" rows="2" required></textarea></label>
-                <label>Obligaciones contractuales<textarea id="perfil-obligaciones" maxlength="2000" rows="3" required></textarea></label>
-                <label>Requisitos y competencias<textarea id="perfil-competencias" maxlength="1000" rows="2" required></textarea></label>
-                <button type="submit" class="btn btn-primary">Guardar perfil</button>
-            </form>
-        </details>
-        <script id="rrhh-profiles-data" type="application/json">{{ perfiles|tojson }}</script>
-    </div>
-</section>
-
 <!-- Empleados Grid -->
 <div class="panel panel-full panel-accent-primary mb-3">
     <div class="panel-header">
@@ -126,18 +97,18 @@
     <div class="rrhh-dossier-toolbar">
         <div class="rrhh-search-wrapper">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="rrhh-search-icon" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="search" id="filtro-empleados-busqueda" placeholder="Buscar por nombre, cédula o cargo..." class="form-input rrhh-search-input" autocomplete="off" oninput="filtrarEmpleadosDossier()">
+            <input type="search" id="filtro-empleados-busqueda" aria-label="Buscar expedientes por nombre, cédula o cargo" placeholder="Buscar por nombre, cédula o cargo..." class="form-input rrhh-search-input" autocomplete="off" oninput="filtrarEmpleadosDossier()">
         </div>
         <div class="rrhh-toolbar-filters">
-            <div class="rrhh-filter-chips" role="radiogroup" aria-label="Filtrar por estado">
-                <button type="button" class="rrhh-chip active" data-estado="ALL" onclick="cambiarEstadoFiltroDossier('ALL', this)">
+            <div class="rrhh-filter-chips" role="group" aria-label="Filtrar por estado">
+                <button type="button" class="rrhh-chip active" data-estado="ALL" aria-pressed="true" onclick="cambiarEstadoFiltroDossier('ALL', this)">
                     Todos <span class="rrhh-chip-count" id="count-total-empleados">{{ empleados|length }}</span>
                 </button>
-                <button type="button" class="rrhh-chip" data-estado="Activo" onclick="cambiarEstadoFiltroDossier('Activo', this)">
-                    Activos <span class="rrhh-chip-count" id="count-activos-empleados">0</span>
+                <button type="button" class="rrhh-chip" data-estado="Activo" aria-pressed="false" onclick="cambiarEstadoFiltroDossier('Activo', this)">
+                    Activos <span class="rrhh-chip-count" id="count-activos-empleados">{{ empleados | selectattr('estado', 'equalto', 'Activo') | list | length }}</span>
                 </button>
-                <button type="button" class="rrhh-chip" data-estado="Liquidado" onclick="cambiarEstadoFiltroDossier('Liquidado', this)">
-                    Inactivos <span class="rrhh-chip-count" id="count-liquidados-empleados">0</span>
+                <button type="button" class="rrhh-chip" data-estado="INACTIVE" aria-pressed="false" onclick="cambiarEstadoFiltroDossier('INACTIVE', this)">
+                    Inactivos <span class="rrhh-chip-count" id="count-liquidados-empleados">{{ empleados | rejectattr('estado', 'equalto', 'Activo') | list | length }}</span>
                 </button>
             </div>
             <select id="filtro-cargo-dossier" class="form-select rrhh-cargo-select" onchange="filtrarEmpleadosDossier()" aria-label="Filtrar por cargo">
@@ -248,7 +219,7 @@
                 </footer>
             </article>
             {% endfor %}
-            <div id="dossier-no-results" class="empty-state hidden" style="grid-column: 1 / -1; padding: 30px;">
+            <div id="dossier-no-results" class="empty-state hidden rrhh-dossier-no-results">
                 <div class="empty-state-icon">🔍</div>
                 <p>No se encontraron colaboradores que coincidan con los filtros aplicados.</p>
                 <button type="button" class="btn btn-outline btn-sm" onclick="limpiarFiltrosDossier()">Restablecer búsqueda</button>
@@ -262,6 +233,48 @@
         {% endif %}
     </div>
 </div>
+
+<section class="panel panel-full rrhh-profiles" aria-labelledby="rrhh-profiles-title">
+    <div class="panel-header"><h3 id="rrhh-profiles-title">Perfiles de puesto</h3></div>
+    <div class="panel-body">
+        <p>Describe el rol, sus obligaciones y las competencias del contrato. Los cargos históricos pueden completarse aquí.</p>
+        <div class="rrhh-profile-list">
+            {% for p in perfiles %}
+            {% set is_active = (p.activo is not defined or (p.activo != false and p.activo != 0)) %}
+            <article class="rrhh-profile-card {% if not is_active %}profile-card-inactive{% endif %}">
+                <div class="rrhh-profile-card-header">
+                    <h4>{{ p.cargo }}</h4>
+                    <span class="rrhh-profile-status-badge {% if is_active %}status-activo{% else %}status-inactivo{% endif %}">
+                        {{ 'Activo' if is_active else 'Inactivo' }}
+                    </span>
+                </div>
+                <div class="rrhh-profile-card-body">
+                    {% if p.perfil or p.obligaciones or p.competencias %}
+                    <p>{{ p.perfil or 'Descripción pendiente' }}</p>
+                    <details><summary>Obligaciones y competencias</summary><p><strong>Obligaciones</strong><br>{{ p.obligaciones or 'Pendiente' }}</p><p><strong>Competencias</strong><br>{{ p.competencias or 'Pendiente' }}</p></details>
+                    {% else %}<p>Perfil contractual pendiente de completar.</p>{% endif %}
+                </div>
+                <div class="rrhh-profile-card-footer">
+                    <button type="button" class="btn btn-outline btn-sm btn-edit-profile" data-edit-profile="{{ loop.index0 }}">Editar perfil</button>
+                    <button type="button" class="btn-toggle-status {% if is_active %}btn-deactivate{% else %}btn-activate{% endif %}" onclick="cambiarEstadoPerfil('{{ p.cargo }}', {{ 'false' if is_active else 'true' }})">
+                        {{ 'Desactivar' if is_active else 'Activar' }}
+                    </button>
+                </div>
+            </article>
+            {% else %}<p>No hay perfiles registrados. Agrega el primero antes de crear un empleado.</p>{% endfor %}
+        </div>
+        <details class="rrhh-profile-editor" id="rrhh-profile-editor"><summary>Registrar o actualizar un perfil</summary>
+            <form id="form-perfil-puesto" data-draft-key="perfil-puesto">
+                <label>Cargo<input id="perfil-cargo" maxlength="100" required></label>
+                <label>Perfil general<textarea id="perfil-descripcion" maxlength="1000" rows="2" required></textarea></label>
+                <label>Obligaciones contractuales<textarea id="perfil-obligaciones" maxlength="2000" rows="3" required></textarea></label>
+                <label>Requisitos y competencias<textarea id="perfil-competencias" maxlength="1000" rows="2" required></textarea></label>
+                <button type="submit" class="btn btn-primary">Guardar perfil</button>
+            </form>
+        </details>
+        <script id="rrhh-profiles-data" type="application/json">{{ perfiles|tojson }}</script>
+    </div>
+</section>
 
 <!-- Monitor de Asistencia -->
 <div class="panel panel-full panel-accent-warning mb-3">
@@ -318,6 +331,70 @@
     </div>
 </div>
 
+<!-- Gestión de Vacaciones, Días Libres y Plan Rotativo Semestral -->
+<div class="panel panel-full panel-accent-primary mb-3" id="panel-vacaciones">
+    <div class="panel-header flex-between">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+            Gestión de Vacaciones, Días Libres y Plan Rotativo Semestral
+        </h3>
+        <div class="rrhh-nominas-controls">
+            <button type="button" class="btn btn-outline btn-sm" onclick="cargarSaldosVacaciones()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Actualizar Saldos
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="recomendarPlanVacaciones()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                Recomendar Plan Rotativo
+            </button>
+        </div>
+    </div>
+    <div class="panel-body">
+        <p class="subtitle mb-2">Monitoreo de acumulación de vacaciones de ley (2.5 días/mes, art. 76 Ley 185) con semáforo de riesgo y recomendador rotativo para evitar pasivos laborales acumulados.</p>
+        
+        <div class="table-responsive mb-3">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Colaborador</th>
+                        <th>Cargo</th>
+                        <th>Ingreso</th>
+                        <th>Días Devengados</th>
+                        <th>Días Gozados</th>
+                        <th>Días Disponibles</th>
+                        <th>Semáforo de Riesgo</th>
+                        <th>Días Vence Semestre</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-saldos-vacaciones">
+                    <tr><td colspan="8" class="text-center cell-muted">Cargando saldos de vacaciones...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4>Plan Sugerido de Vacaciones Rotativas</h4>
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Colaborador</th>
+                        <th>Cargo</th>
+                        <th>Fecha Inicio</th>
+                        <th>Fecha Fin</th>
+                        <th>Días</th>
+                        <th>Motivo / Prioridad</th>
+                        <th>Estado</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-propuestas-vacaciones">
+                    <tr><td colspan="8" class="text-center cell-muted">Sin propuestas pendientes. Haga clic en "Recomendar Plan Rotativo".</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <!-- Nóminas Recientes -->
 <div class="panel panel-full panel-accent-success">
     <div class="panel-header flex-between">
@@ -340,6 +417,10 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="rrhh-search-icon" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input type="search" id="filtro-nomina-colaborador" placeholder="Buscar colaborador..." class="form-input rrhh-nomina-search-input" oninput="aplicarFiltroNominasRRHH()" autocomplete="off">
             </div>
+            <select id="metodo-pago-nomina-rrhh" class="rrhh-filter-select" aria-label="Método de desembolso de nómina">
+                <option value="Efectivo">Desembolso: Efectivo (Caja General)</option>
+                <option value="Transferencia">Desembolso: Transferencia (Bancos MN)</option>
+            </select>
             <button class="btn btn-outline btn-sm" onclick="window.location.href='/admin/rrhh/reportes/inss_patronal'">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Reporte INSS Mensual
             </button>
@@ -379,7 +460,7 @@
                         <td class="cell-money text-success fw-700 rrhh-th-spacing">C${{ "{:,.2f}".format(n.neto) }}</td>
                         <td class="cell-money text-warning rrhh-th-spacing">C${{ "{:,.2f}".format((n.inss_patronal or 0) + (n.inatec or 0)) }}</td>
                         <td class="rrhh-th-spacing-2">
-                            <span class="badge {% if n.es_aguinaldo %}badge-primary{% elif n.estado in ['Pagada','Contabilizada'] %}badge-success{% elif n.estado == 'Borrador' %}badge-warning{% else %}badge-danger{% endif %}">{% if n.es_aguinaldo %}Aguinaldo ({{ n.estado }}){% else %}{{ n.estado }}{% endif %}</span>
+                            <span class="badge {% if n.es_aguinaldo %}badge-primary{% elif n.estado == 'Pagada' %}badge-success{% elif n.estado == 'Contabilizada' %}badge-warning{% elif n.estado == 'Borrador' %}badge-neutral{% else %}badge-danger{% endif %}">{% if n.es_aguinaldo %}Aguinaldo ({{ n.estado }}){% else %}{{ n.estado }}{% endif %}</span>
                         </td>
                         <td class="rrhh-th-spacing-2">
                             <div class="rrhh-actions-cell">
@@ -393,6 +474,11 @@
                                 {% elif n.estado == 'Borrador' %}
                                 <button type="button" class="btn btn-primary btn-sm" onclick="contabilizarNominaBorrador({{ n.id }})" title="Contabilizar en Diario NIIF">
                                     Contabilizar
+                                </button>
+                                {% endif %}
+                                {% if n.estado == 'Contabilizada' %}
+                                <button type="button" class="btn btn-primary btn-sm" onclick="pagarNominaContabilizada({{ n.id }})" title="Registrar desembolso y cancelar Sueldos por Pagar">
+                                    Pagar
                                 </button>
                                 {% endif %}
                             </div>
@@ -428,23 +514,96 @@
         <p class="subtitle">Registrar un nuevo colaborador en el sistema.</p>
         <form id="form-nuevo-empleado" data-draft-key="nuevo-empleado">
             <div class="form-group">
-                <label class="form-label">Nombre Completo</label>
+                <label class="form-label" for="ne-nombre">Nombre Completo</label>
                 <input type="text" id="ne-nombre" class="form-input" required>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Cédula</label>
-                    <input type="text" id="ne-cedula" class="form-input" required>
+                    <label class="form-label" for="ne-cedula">Cédula</label>
+                    <input type="text" id="ne-cedula" class="form-input" placeholder="001-000000-0000A" data-mask="cedula" maxlength="16" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Teléfono</label>
-                    <input type="text" id="ne-telefono" class="form-input">
+                    <label class="form-label" for="ne-telefono">Teléfono</label>
+                    <input type="tel" id="ne-telefono" class="form-input" placeholder="8888-8888" data-mask="telefono" maxlength="9">
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Cargo</label>
-                    <select id="ne-cargo" class="form-select" required><option value="">Selecciona un perfil</option>{% for p in perfiles %}<option value="{{ p.cargo }}">{{ p.cargo }}</option>{% endfor %}</select>
+                    <label class="form-label" id="lbl-ne-cargo">Cargo</label>
+                    <div class="custom-select-wrapper" id="cargo-dropdown-wrapper">
+                        <input type="hidden" id="ne-cargo" name="cargo" value="" required>
+                        <button type="button" class="form-select custom-select-trigger" id="cargo-select-trigger" onclick="toggleCargoDropdown(event)" aria-haspopup="true" aria-expanded="false" aria-labelledby="lbl-ne-cargo cargo-select-label">
+                            <span class="custom-select-label" id="cargo-select-label">Selecciona un perfil</span>
+                        </button>
+                        <div class="custom-select-dropdown" id="cargo-select-dropdown" role="menu">
+                            <div class="custom-select-option custom-select-placeholder" data-value="" onclick="seleccionarCargoOpcion('', event)" role="menuitem">Selecciona un perfil</div>
+                            {% set perfil_estado_map = {} %}
+                            {% for p in perfiles %}
+                                {% set p_is_act = (p.activo is not defined or (p.activo != false and p.activo != 0)) %}
+                                {% set _ = perfil_estado_map.update({p.cargo: p_is_act}) %}
+                            {% endfor %}
+                            {% set panadero_parent_active = perfil_estado_map.get('Panadero', true) %}
+                            {% set panadero_aprendiz_act = perfil_estado_map.get('Panadero Aprendiz', true) %}
+                            {% set panadero_junior_act = perfil_estado_map.get('Panadero Junior', true) %}
+                            {% set panadero_senior_act = perfil_estado_map.get('Panadero Senior', true) %}
+                            {% set maestro_panadero_act = perfil_estado_map.get('Maestro Panadero', true) %}
+                            {% set any_panadero_sub_active = panadero_aprendiz_act or panadero_junior_act or panadero_senior_act or maestro_panadero_act %}
+                            {% set mostrar_panadero = panadero_parent_active and any_panadero_sub_active %}
+                            {% for p in perfiles %}
+                                {% set p_activo = (p.activo is not defined or (p.activo != false and p.activo != 0)) %}
+                                {% if p_activo and p.cargo not in ['Panadero Aprendiz', 'Panadero Junior', 'Panadero Senior', 'Maestro Panadero'] %}
+                                    {% if p.cargo == 'Panadero' %}
+                                        {% if mostrar_panadero %}
+                                            <div class="custom-select-option has-cascade" data-value="Panadero" onclick="toggleCascadeSubmenu(event)" role="menuitem" aria-haspopup="true">
+                                                <div class="cascade-label-wrap">
+                                                    <span>Panadero</span>
+                                                    <svg class="cascade-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                                                </div>
+                                                <div class="custom-cascade-menu" role="menu">
+                                                    {% if panadero_aprendiz_act %}
+                                                    <div class="custom-cascade-option" data-value="Panadero Aprendiz" data-salario="10626.34" onclick="seleccionarCargoOpcion('Panadero Aprendiz', event)" role="menuitem">Panadero Aprendiz (Salario: C$ 10,626.34)</div>
+                                                    {% endif %}
+                                                    {% if panadero_junior_act %}
+                                                    <div class="custom-cascade-option" data-value="Panadero Junior" data-salario="16786.48" onclick="seleccionarCargoOpcion('Panadero Junior', event)" role="menuitem">Panadero Junior (Salario: C$ 16,786.48)</div>
+                                                    {% endif %}
+                                                    {% if panadero_senior_act %}
+                                                    <div class="custom-cascade-option" data-value="Panadero Senior" data-salario="20893.24" onclick="seleccionarCargoOpcion('Panadero Senior', event)" role="menuitem">Panadero Senior (Salario: C$ 20,893.24)</div>
+                                                    {% endif %}
+                                                    {% if maestro_panadero_act %}
+                                                    <div class="custom-cascade-option" data-value="Maestro Panadero" data-salario="22946.62" onclick="seleccionarCargoOpcion('Maestro Panadero', event)" role="menuitem">Maestro Panadero (Salario: C$ 22,946.62)</div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <div class="custom-select-option" data-value="{{ p.cargo }}" onclick="seleccionarCargoOpcion('{{ p.cargo }}', event)" role="menuitem">{{ p.cargo }}</div>
+                                    {% endif %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if 'Panadero' not in perfiles|map(attribute='cargo')|list and mostrar_panadero %}
+                                <div class="custom-select-option has-cascade" data-value="Panadero" onclick="toggleCascadeSubmenu(event)" role="menuitem" aria-haspopup="true">
+                                    <div class="cascade-label-wrap">
+                                        <span>Panadero</span>
+                                        <svg class="cascade-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                                    </div>
+                                    <div class="custom-cascade-menu" role="menu">
+                                        {% if panadero_aprendiz_act %}
+                                        <div class="custom-cascade-option" data-value="Panadero Aprendiz" data-salario="10626.34" onclick="seleccionarCargoOpcion('Panadero Aprendiz', event)" role="menuitem">Panadero Aprendiz (Salario: C$ 10,626.34)</div>
+                                        {% endif %}
+                                        {% if panadero_junior_act %}
+                                        <div class="custom-cascade-option" data-value="Panadero Junior" data-salario="16786.48" onclick="seleccionarCargoOpcion('Panadero Junior', event)" role="menuitem">Panadero Junior (Salario: C$ 16,786.48)</div>
+                                        {% endif %}
+                                        {% if panadero_senior_act %}
+                                        <div class="custom-cascade-option" data-value="Panadero Senior" data-salario="20893.24" onclick="seleccionarCargoOpcion('Panadero Senior', event)" role="menuitem">Panadero Senior (Salario: C$ 20,893.24)</div>
+                                        {% endif %}
+                                        {% if maestro_panadero_act %}
+                                        <div class="custom-cascade-option" data-value="Maestro Panadero" data-salario="22946.62" onclick="seleccionarCargoOpcion('Maestro Panadero', event)" role="menuitem">Maestro Panadero (Salario: C$ 22,946.62)</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Fecha de Ingreso</label>
@@ -454,7 +613,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">Salario Base (C$)</label>
-                    <input type="number" id="ne-salario" class="form-input form-number" step="0.01" required>
+                    <input type="number" id="ne-salario" class="form-input form-number rrhh-input-readonly" step="0.01" readonly required placeholder="0.00" title="Autocompletado automáticamente según la escala salarial del cargo">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Jornada</label>
@@ -592,10 +751,17 @@
     <div class="modal-content rrhh-modal-content">
         <h2>Nómina Individual y Deducciones de Ley</h2>
         <p class="subtitle">Calcula retenciones (IR, INSS) y horas extras automáticamente.</p>
-        <form id="form-nomina">
+                <form id="form-nomina">
+            <div id="ni-auto-banner" class="rrhh-auto-banner hidden">
+                <div>
+                    <span class="rrhh-auto-badge">⚡ Cálculo Automático:</span>
+                    <span id="ni-auto-detalles" class="rrhh-auto-detalles">Seleccione empleado para calcular horas extras, ausencias y préstamos.</span>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" onclick="precargarDatosNominaIndividual()">↻ Recalcular</button>
+            </div>
             <div class="form-group">
                 <label class="form-label">Empleado</label>
-                <select id="ni-empleado" class="form-select" required>
+                <select id="ni-empleado" class="form-select" onchange="precargarDatosNominaIndividual()" required>
                     <option value="">Seleccione un empleado...</option>
                     {% for e in empleados %}
                         {% if e.estado == 'Activo' %}
@@ -664,6 +830,36 @@
                 <div class="form-group">
                     <label class="form-label">Otros Ingresos (C$)</label>
                     <input type="number" id="ni-otros-ingresos" class="form-input form-number" step="0.01" value="0">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Incentivos / Bonos (C$)</label>
+                    <input type="number" id="ni-incentivos" class="form-input form-number" step="0.01" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Sueldo Extraordinario (C$)</label>
+                    <input type="number" id="ni-sueldo-extra" class="form-input form-number" step="0.01" value="0" placeholder="Feriados al doble">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Viáticos (C$ - No Salarial)</label>
+                    <input type="number" id="ni-viaticos" class="form-input form-number" step="0.01" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Depreciación Vehículo (C$ - No Salarial)</label>
+                    <input type="number" id="ni-depreciacion" class="form-input form-number" step="0.01" value="0">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Deducción Préstamos (C$)</label>
+                    <input type="number" id="ni-prestamos" class="form-input form-number" step="0.01" value="0" placeholder="Auto si se omite">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cobros por Pérdidas (C$)</label>
+                    <input type="number" id="ni-perdidas" class="form-input form-number" step="0.01" value="0" placeholder="Auto si se omite">
                 </div>
             </div>
             <div class="modal-actions">
@@ -754,10 +950,37 @@
 
 {% block extra_scripts %}
 <script>
-    function abrirModalEmpleado() { document.getElementById('modal-nuevo-empleado').classList.remove('hidden'); }
+    function abrirModalEmpleado() {
+        document.getElementById('modal-nuevo-empleado').classList.remove('hidden');
+        const hiddenInput = document.getElementById('ne-cargo');
+        const label = document.getElementById('cargo-select-label');
+        if (hiddenInput) {
+            if (hiddenInput.value) {
+                const opt = document.querySelector(`#cargo-select-dropdown [data-value="${CSS.escape(hiddenInput.value)}"]`);
+                if (!opt) {
+                    hiddenInput.value = '';
+                    const salarioInput = document.getElementById('ne-salario');
+                    if (salarioInput) salarioInput.value = '';
+                }
+            }
+            if (label) {
+                label.textContent = hiddenInput.value || 'Selecciona un perfil';
+            }
+            if (hiddenInput.value && typeof consultarSalarioEscala === 'function') {
+                consultarSalarioEscala(hiddenInput.value);
+            }
+        }
+    }
     function cerrarModalEmpleado() {
         document.getElementById('modal-nuevo-empleado').classList.add('hidden');
         if (typeof stopEmployeeCamera === 'function') stopEmployeeCamera();
+        const dropdown = document.getElementById('cargo-select-dropdown');
+        if (dropdown) dropdown.classList.remove('open');
+        const trigger = document.getElementById('cargo-select-trigger');
+        if (trigger) {
+            trigger.classList.remove('active');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
     }
 
     let tipoNominaFiltroActual = 'MENSUAL';
@@ -838,6 +1061,9 @@
         const rango = obtenerRangoMes(anioEl.value, mesEl.value);
         inicioEl.value = rango.inicio;
         finEl.value = rango.fin;
+        if (prefijo === 'ni' && typeof precargarDatosNominaIndividual === 'function') {
+            precargarDatosNominaIndividual();
+        }
     }
 
     function ajustarRangoMesDesdeFecha(prefijo) {
@@ -902,6 +1128,30 @@
                 setTimeout(() => location.reload(), 1000);
             } else {
                 showToast(result.error || 'Error al contabilizar nómina', true);
+            }
+        } catch (err) {
+            hideLoading();
+            showToast('Error de conexión', true);
+        }
+    }
+
+    async function pagarNominaContabilizada(id) {
+        const metodoEl = document.getElementById('metodo-pago-nomina-rrhh');
+        const metodoPago = metodoEl ? metodoEl.value : 'Efectivo';
+        showLoading();
+        try {
+            const res = await fetch(`/admin/rrhh/nomina/pagar/${id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ metodo_pago: metodoPago })
+            });
+            hideLoading();
+            const result = await res.json();
+            if (res.ok) {
+                showToast(result.mensaje || 'Nómina pagada y desembolsada');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(result.error || 'Error al desembolsar nómina', true);
             }
         } catch (err) {
             hideLoading();
@@ -1012,8 +1262,53 @@
         }
     });
 
-    function abrirModalNomina() {
+        async function precargarDatosNominaIndividual() {
+        const empEl = document.getElementById('ni-empleado');
+        const empId = empEl ? empEl.value : null;
+        const inicioEl = document.getElementById('ni-inicio');
+        const finEl = document.getElementById('ni-fin');
+        const inicio = inicioEl ? inicioEl.value : null;
+        const fin = finEl ? finEl.value : null;
+
+        const banner = document.getElementById('ni-auto-banner');
+        const detalles = document.getElementById('ni-auto-detalles');
+
+        if (!empId) {
+            if (banner) banner.classList.add('hidden');
+            return;
+        }
+
+        if (banner) banner.classList.remove('hidden');
+        if (detalles) detalles.textContent = 'Calculando automáticamente horas extras, feriados, ausencias y préstamos...';
+
+        try {
+            const resp = await fetch(`/admin/api/rrhh/nomina/precargar_datos?empleado_id=${encodeURIComponent(empId)}&periodo_inicio=${encodeURIComponent(inicio)}&periodo_fin=${encodeURIComponent(fin)}`);
+            const res = await resp.json();
+            if (resp.ok && res.status === 'success') {
+                const auto = res.automaticos;
+                document.getElementById('ni-horas-extras').value = auto.horas_extras || 0;
+                document.getElementById('ni-feriados').value = auto.feriados_trabajados || 0;
+                document.getElementById('ni-ausentes').value = auto.dias_ausentes || 0;
+                document.getElementById('ni-sueldo-extra').value = auto.sueldo_extraordinario || 0;
+                document.getElementById('ni-prestamos').value = auto.deduccion_prestamos || 0;
+                document.getElementById('ni-perdidas').value = auto.cobros_perdidas || 0;
+
+                let txt = `Ausencias: ${auto.dias_ausentes}d | Horas Extras: ${auto.horas_extras}h | Feriados: ${auto.feriados_trabajados}d`;
+                if (auto.deduccion_prestamos > 0) txt += ` | Préstamos: C$${auto.deduccion_prestamos}`;
+                if (auto.cobros_perdidas > 0) txt += ` | Pérdidas: C$${auto.cobros_perdidas}`;
+                txt += ' (Valores precargados, editables).';
+                if (detalles) detalles.textContent = txt;
+            } else {
+                if (detalles) detalles.textContent = 'Valores estándar cargados. Puede ajustarlos manualmente.';
+            }
+        } catch (e) {
+            if (detalles) detalles.textContent = 'No se pudo consultar el precálculo automático.';
+        }
+    }
+
+function abrirModalNomina() {
         inicializarSelectorMesActual('ni');
+        precargarDatosNominaIndividual();
         document.getElementById('modal-nomina').classList.remove('hidden');
     }
     function cerrarModalNomina() { document.getElementById('modal-nomina').classList.add('hidden'); }
@@ -1027,7 +1322,13 @@
             horas_extras: parseFloat(document.getElementById('ni-horas-extras').value) || 0,
             dias_feriados_trabajados: parseFloat(document.getElementById('ni-feriados').value) || 0,
             dias_ausentes: parseFloat(document.getElementById('ni-ausentes').value) || 0,
-            otros_ingresos: parseFloat(document.getElementById('ni-otros-ingresos').value) || 0
+            otros_ingresos: parseFloat(document.getElementById('ni-otros-ingresos').value) || 0,
+            incentivos: parseFloat(document.getElementById('ni-incentivos')?.value) || 0,
+            sueldo_extraordinario: parseFloat(document.getElementById('ni-sueldo-extra')?.value) || 0,
+            viaticos: parseFloat(document.getElementById('ni-viaticos')?.value) || 0,
+            depreciacion_vehiculo: parseFloat(document.getElementById('ni-depreciacion')?.value) || 0,
+            deduccion_prestamo: parseFloat(document.getElementById('ni-prestamos')?.value) || 0,
+            cobro_perdida: parseFloat(document.getElementById('ni-perdidas')?.value) || 0
         };
 
         const btn = document.getElementById('btn-submit-nomina');
@@ -1187,8 +1488,195 @@
         if (video) video.srcObject = null;
     }
 
+    // ==========================================
+    // Requisito 2 y 3: Dropdown personalizado con submenú cascada y autocompletado salarial
+    // ==========================================
+    async function consultarSalarioEscala(cargo) {
+        const salarioInput = document.getElementById('ne-salario');
+        if (!salarioInput || !cargo) return;
+
+        try {
+            salarioInput.classList.add('loading-salary');
+            salarioInput.placeholder = 'Consultando...';
+            const res = await fetch(`/admin/api/rrhh/escala-salarial?cargo=${encodeURIComponent(cargo)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.salario_base !== undefined) {
+                    salarioInput.value = Number(data.salario_base).toFixed(2);
+                    salarioInput.classList.add('salary-updated');
+                    setTimeout(() => salarioInput.classList.remove('salary-updated'), 1000);
+                }
+            } else {
+                console.warn(`No se encontró registro en escala salarial para "${cargo}".`);
+            }
+        } catch (err) {
+            console.error('Error al consultar escala salarial:', err);
+        } finally {
+            salarioInput.classList.remove('loading-salary');
+            salarioInput.placeholder = '0.00';
+        }
+    }
+
+    window.toggleCargoDropdown = function(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const dropdown = document.getElementById('cargo-select-dropdown');
+        const trigger = document.getElementById('cargo-select-trigger');
+        if (!dropdown || !trigger) return;
+        const isOpen = dropdown.classList.contains('open');
+        if (isOpen) {
+            dropdown.classList.remove('open');
+            trigger.classList.remove('active');
+            trigger.setAttribute('aria-expanded', 'false');
+            const cascadeOpt = dropdown.querySelector('.custom-select-option.has-cascade');
+            if (cascadeOpt) cascadeOpt.classList.remove('cascade-active');
+        } else {
+            dropdown.classList.add('open');
+            trigger.classList.add('active');
+            trigger.setAttribute('aria-expanded', 'true');
+        }
+    };
+
+    window.toggleCascadeSubmenu = function(e) {
+        if (e && e.target.closest('.custom-cascade-option')) return;
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const opt = e ? (e.currentTarget || e.target.closest('.has-cascade')) : document.querySelector('.custom-select-option.has-cascade');
+        if (opt) {
+            opt.classList.toggle('cascade-active');
+        }
+    };
+
+    window.seleccionarCargoOpcion = function(valor, e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const hiddenInput = document.getElementById('ne-cargo');
+        const label = document.getElementById('cargo-select-label');
+        const dropdown = document.getElementById('cargo-select-dropdown');
+        const trigger = document.getElementById('cargo-select-trigger');
+        if (hiddenInput) {
+            hiddenInput.value = valor;
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (label) label.textContent = valor ? valor : 'Selecciona un perfil';
+        if (dropdown) dropdown.classList.remove('open');
+        if (trigger) {
+            trigger.classList.remove('active');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+        const cascadeOpt = dropdown ? dropdown.querySelector('.custom-select-option.has-cascade') : null;
+        if (cascadeOpt) cascadeOpt.classList.remove('cascade-active');
+
+        if (valor) {
+            consultarSalarioEscala(valor);
+        } else {
+            const salarioInput = document.getElementById('ne-salario');
+            if (salarioInput) salarioInput.value = '';
+        }
+    };
+
+    window.cambiarEstadoPerfil = async function(cargo, nuevoEstado) {
+        if (!cargo) return;
+        const accion = nuevoEstado ? 'activar' : 'desactivar';
+        let confirmed = false;
+        if (typeof window.showConfirm === 'function') {
+            confirmed = await window.showConfirm({
+                title: nuevoEstado ? '¿Activar perfil de puesto?' : '¿Desactivar perfil de puesto?',
+                message: nuevoEstado
+                    ? `El cargo "${cargo}" volverá a estar disponible para la selección en nuevos registros de empleados.`
+                    : `El cargo "${cargo}" se desactivará (soft delete). Se conservará todo el historial de colaboradores actuales, pero no aparecerá disponible para nuevos registros.`,
+                confirmText: nuevoEstado ? 'Activar' : 'Desactivar',
+                type: nuevoEstado ? 'success' : 'warning',
+                icon: nuevoEstado ? '✅' : '⚠️'
+            });
+        } else {
+            confirmed = confirm(`¿Está seguro de que desea ${accion} el perfil "${cargo}"?`);
+        }
+        if (!confirmed) return;
+
+        try {
+            window.showLoading?.();
+            const res = await fetch('/admin/api/rrhh/puestos/estado', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                },
+                body: JSON.stringify({ cargo: cargo, activo: nuevoEstado })
+            });
+            window.hideLoading?.();
+            const data = await res.json();
+            if (res.ok) {
+                window.showToast?.(`Perfil "${cargo}" ${nuevoEstado ? 'activado' : 'desactivado'} con éxito.`);
+                setTimeout(() => location.reload(), 700);
+            } else {
+                window.showToast?.(data.error || 'No se pudo cambiar el estado del perfil.', true);
+            }
+        } catch (err) {
+            window.hideLoading?.();
+            window.showToast?.('Error de conexión con el servidor.', true);
+        }
+    };
+
+    function inicializarCustomDropdownCargo() {
+        const wrapper = document.getElementById('cargo-dropdown-wrapper');
+        if (!wrapper || wrapper.dataset.inited === 'true') return;
+        wrapper.dataset.inited = 'true';
+
+        const trigger = document.getElementById('cargo-select-trigger');
+        const dropdown = document.getElementById('cargo-select-dropdown');
+        const label = document.getElementById('cargo-select-label');
+        const hiddenInput = document.getElementById('ne-cargo');
+
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) {
+                if (dropdown) dropdown.classList.remove('open');
+                if (trigger) {
+                    trigger.classList.remove('active');
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && dropdown && dropdown.classList.contains('open')) {
+                dropdown.classList.remove('open');
+                if (trigger) {
+                    trigger.classList.remove('active');
+                    trigger.setAttribute('aria-expanded', 'false');
+                    trigger.focus();
+                }
+            }
+        });
+
+        if (hiddenInput && hiddenInput.value) {
+            if (label) label.textContent = hiddenInput.value;
+            consultarSalarioEscala(hiddenInput.value);
+        }
+    }
+
+
     document.getElementById('form-nuevo-empleado').addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        const cargoVal = document.getElementById('ne-cargo').value;
+        if (!cargoVal) {
+            showToast('Por favor, selecciona un cargo.', true);
+            document.getElementById('cargo-select-trigger')?.focus();
+            return;
+        }
+
+        const salarioVal = document.getElementById('ne-salario').value;
+        if (!salarioVal || parseFloat(salarioVal) <= 0) {
+            showToast('El salario base no puede estar vacío (autocompletado desde la escala salarial).', true);
+            return;
+        }
 
         showLoading();
         let fotoBase64 = capturedFaceBase64;
@@ -1197,9 +1685,9 @@
             nombre: document.getElementById('ne-nombre').value,
             cedula: document.getElementById('ne-cedula').value,
             telefono: document.getElementById('ne-telefono').value,
-            cargo: document.getElementById('ne-cargo').value,
+            cargo: cargoVal,
             fecha_ingreso: document.getElementById('ne-ingreso').value,
-            salario_base: document.getElementById('ne-salario').value,
+            salario_base: salarioVal,
             tipo_jornada: document.getElementById('ne-jornada').value,
             tipo_contrato: document.getElementById('ne-tipo-contrato').value,
             fecha_fin_contrato: document.getElementById('ne-fin-contrato').value,
@@ -1217,10 +1705,15 @@
             hideLoading();
             if (res.ok) {
                 window.clearFormDraft?.(e.currentTarget);
+                const hiddenCargo = document.getElementById('ne-cargo');
+                if (hiddenCargo) hiddenCargo.value = '';
+                const cargoLabel = document.getElementById('cargo-select-label');
+                if (cargoLabel) cargoLabel.textContent = 'Selecciona un perfil';
                 showToast('Empleado registrado exitosamente');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast('Error al registrar empleado', true);
+                const errData = await res.json().catch(() => ({}));
+                showToast(errData.error || 'Error al registrar empleado', true);
             }
         } catch(err) {
             hideLoading();
@@ -1420,7 +1913,8 @@
         }
     }
 </script>
-<script src="{{ url_for('static', filename='js/rrhh_corte5.js', v=1) }}" defer>
+<script src="{{ url_for('static', filename='js/rrhh_corte5.js', v=1) }}" defer></script>
+<script>
     let estadoFiltroDossierActual = 'ALL';
 
     function togglePayrollMenu(e) {
@@ -1439,7 +1933,10 @@
 
     function cambiarEstadoFiltroDossier(estado, btn) {
         estadoFiltroDossierActual = estado;
-        document.querySelectorAll('.rrhh-filter-chips .rrhh-chip').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.rrhh-filter-chips .rrhh-chip').forEach(c => {
+            c.classList.remove('active');
+            c.setAttribute('aria-pressed', String(c === btn));
+        });
         if (btn) btn.classList.add('active');
         filtrarEmpleadosDossier();
     }
@@ -1461,8 +1958,11 @@
             const cargo = card.dataset.cargo || '';
             const estado = card.dataset.estado || '';
 
-            const coincideQuery = !query || nombre.includes(query) || cedula.includes(query) || cargo.includes(query);
-            const coincideEstado = (estadoFiltroDossierActual === 'ALL' || estado === estadoFiltroDossierActual);
+            const cleanQ = query.replace(/[\s.-]/g, '');
+            const cleanC = cedula.replace(/[\s.-]/g, '');
+            const coincideQuery = !query || nombre.includes(query) || cedula.includes(query) || (cleanQ && cleanC.includes(cleanQ)) || cargo.includes(query);
+            const coincideEstado = estadoFiltroDossierActual === 'ALL' ||
+                (estadoFiltroDossierActual === 'INACTIVE' ? estado !== 'Activo' : estado === estadoFiltroDossierActual);
             const coincideCargo = (cargoFiltro === 'all' || cargo === cargoFiltro);
 
             const mostrar = coincideQuery && coincideEstado && coincideCargo;
@@ -1496,8 +1996,122 @@
         if (elActivos) elActivos.textContent = activos;
         if (elLiquidados) elLiquidados.textContent = liquidados;
     }
+    // Funciones de Gestión y Recomendación de Vacaciones
+    async function cargarSaldosVacaciones() {
+        const tbody = document.getElementById('tbody-saldos-vacaciones');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center cell-muted">Cargando saldos de vacaciones...</td></tr>';
+        try {
+            const resp = await fetch('/admin/api/rrhh/vacaciones/saldos');
+            const data = await resp.json();
+            if (!resp.ok || !data.saldos || data.saldos.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center cell-muted">No se encontraron empleados activos.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.saldos.map(s => {
+                let badgeClass = 'badge-success';
+                if (s.alerta_semaforo === 'Amarillo') badgeClass = 'badge-warning';
+                else if (s.alerta_semaforo === 'Rojo') badgeClass = 'badge-danger';
+                return `<tr>
+                    <td class="cell-bold">${s.nombre}</td>
+                    <td class="cell-muted">${s.cargo}</td>
+                    <td>${s.fecha_ingreso}</td>
+                    <td class="text-right">${s.dias_devengados.toFixed(1)}</td>
+                    <td class="text-right">${s.dias_gozados.toFixed(1)}</td>
+                    <td class="text-right fw-600">${s.dias_disponibles.toFixed(1)}</td>
+                    <td><span class="badge ${badgeClass}">${s.alerta_semaforo}</span></td>
+                    <td class="text-right">${s.dias_para_vencer_semestre !== null ? s.dias_para_vencer_semestre + ' días' : 'Al día'}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center cell-danger">Error al cargar saldos.</td></tr>';
+        }
+    }
+
+    async function cargarPropuestasVacaciones() {
+        const tbody = document.getElementById('tbody-propuestas-vacaciones');
+        if (!tbody) return;
+        try {
+            const resp = await fetch('/admin/api/rrhh/vacaciones/propuestas');
+            const data = await resp.json();
+            if (!resp.ok || !data.propuestas || data.propuestas.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center cell-muted">Sin propuestas pendientes. Haga clic en "Recomendar Plan Rotativo".</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.propuestas.map(p => {
+                const btnAccion = p.estado === 'Propuesta' 
+                    ? `<button type="button" class="btn btn-outline btn-sm" onclick="aprobarPropuestaVacacion(${p.id})">Aprobar</button>`
+                    : `<span class="badge badge-success">Aprobada</span>`;
+                return `<tr>
+                    <td class="cell-bold">${p.nombre}</td>
+                    <td class="cell-muted">${p.cargo}</td>
+                    <td>${p.fecha_inicio}</td>
+                    <td>${p.fecha_fin}</td>
+                    <td class="text-right">${p.dias}</td>
+                    <td>${p.motivo}</td>
+                    <td><span class="badge ${p.estado === 'Aprobada' ? 'badge-success' : 'badge-warning'}">${p.estado}</span></td>
+                    <td>${btnAccion}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center cell-danger">Error al cargar propuestas.</td></tr>';
+        }
+    }
+
+    async function recomendarPlanVacaciones() {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        try {
+            const resp = await fetch('/admin/api/rrhh/vacaciones/recomendar', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ meses: 6, guardar: true })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                if (data.propuestas && data.propuestas.length > 0) {
+                    if (typeof showToast === 'function') showToast(`Plan rotativo generado con éxito (${data.propuestas.length} propuestas)`, 'success');
+                } else {
+                    if (typeof showToast === 'function') showToast('Todos los colaboradores están al día en sus vacaciones. No se requieren períodos forzosos actualmente.', 'info');
+                }
+                cargarPropuestasVacaciones();
+                cargarSaldosVacaciones();
+            } else {
+                alert(data.error || 'Error al generar plan rotativo');
+            }
+        } catch (err) {
+            alert('Error de conexión al generar plan rotativo.');
+        }
+    }
+
+    async function aprobarPropuestaVacacion(propuestaId) {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (!confirm('¿Desea aprobar esta propuesta de vacaciones y generar la licencia oficial?')) return;
+        try {
+            const resp = await fetch(`/admin/api/rrhh/vacaciones/aprobar/${propuestaId}`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken }
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                if (typeof showToast === 'function') showToast(data.mensaje || 'Vacación aprobada', 'success');
+                cargarPropuestasVacaciones();
+                cargarSaldosVacaciones();
+            } else {
+                alert(data.error || 'Error al aprobar vacación');
+            }
+        } catch (err) {
+            alert('Error al comunicarse con el servidor.');
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         actualizarContadoresDossier();
+        inicializarCustomDropdownCargo();
+        cargarSaldosVacaciones();
+        cargarPropuestasVacaciones();
     });
 </script>
 {% endblock %}

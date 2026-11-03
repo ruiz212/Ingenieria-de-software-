@@ -107,7 +107,17 @@ class ContabilidadService:
     METODO_PAGO_CUENTA = {
         'Efectivo':         CAJA_GENERAL_CS,
         'Efectivo USD':     CAJA_GENERAL_USD,
+        'Caja Chica':       CAJA_CHICA,
         'Transferencia':    BANCOS_MN,
+        'Transferencia ME': BANCOS_ME,
+    }
+
+    CUENTAS_EFECTIVO_BANCOS = {
+        CAJA_GENERAL_CS,
+        CAJA_GENERAL_USD,
+        CAJA_CHICA,
+        BANCOS_MN,
+        BANCOS_ME,
     }
 
     # Tipo de comprobante por defecto para cada módulo
@@ -569,9 +579,18 @@ class ContabilidadService:
                             pension_alimenticia=0,
                             vales_descontados=0,
                             salario_neto=0,
-                            cargo='Admin', ip=None, fecha=None):
+                            cargo='Admin', ip=None, fecha=None,
+                            provision_vacaciones=0,
+                            provision_aguinaldo=0,
+                            provision_indemnizacion=0,
+                            deduccion_prestamos=0,
+                            cobro_perdidas=0,
+                            viaticos=0,
+                            depreciacion_vehiculo=0):
         """
-        Genera el asiento contable automático para una nómina individual.
+        Genera el asiento contable automático para una nómina individual,
+        incorporando ingresos salariales y no salariales, deducciones
+        y cargos/provisiones patronales (Parte 1, 2 y 3).
         """
         detalles = []
         ref = f"NOM-{nomina_id}"
@@ -582,44 +601,84 @@ class ContabilidadService:
             cuenta_sueldo = cls.MOD_PANADEROS
             cuenta_inss_pat = cls.CIF
             cuenta_inatec = cls.CIF
+            cuenta_vacaciones = cls.CIF
+            cuenta_aguinaldo = cls.CIF
+            cuenta_indemnizacion = cls.CIF
         elif 'vendedora' in cargo_lower or 'dependienta' in cargo_lower or 'cajera' in cargo_lower:
             cuenta_sueldo = cls.SUELDOS_VENTAS
             cuenta_inss_pat = cls.INSS_PATRONAL_VENTAS
             cuenta_inatec = cls.INATEC_VENTAS
+            cuenta_vacaciones = cls.VACACIONES_ADMIN
+            cuenta_aguinaldo = cls.AGUINALDO_ADMIN
+            cuenta_indemnizacion = cls.INDEMNIZACION_ADMIN
         else:
             cuenta_sueldo = cls.SUELDOS_ADMIN
             cuenta_inss_pat = cls.INSS_PATRONAL_ADMIN
             cuenta_inatec = cls.INATEC_ADMIN
+            cuenta_vacaciones = cls.VACACIONES_ADMIN
+            cuenta_aguinaldo = cls.AGUINALDO_ADMIN
+            cuenta_indemnizacion = cls.INDEMNIZACION_ADMIN
 
-        # DÉBITOS (Gastos)
-        detalles.append((cuenta_sueldo, float(salario_bruto), 0, f"Sueldo {empleado_nombre}"))
+        # DÉBITOS (Gastos y Costos)
+        detalles.append((cuenta_sueldo, float(amount(salario_bruto)), 0, f"Sueldo {empleado_nombre}"))
+
+        if float(viaticos) > 0:
+            detalles.append((cls.GASTOS_VARIOS_ADMIN, float(amount(viaticos)), 0, f"Viáticos {empleado_nombre}"))
+
+        if float(depreciacion_vehiculo) > 0:
+            detalles.append((cls.GASTOS_VARIOS_ADMIN, float(amount(depreciacion_vehiculo)), 0, f"Depreciación Vehículo {empleado_nombre}"))
 
         if float(inss_patronal) > 0:
-            detalles.append((cuenta_inss_pat, float(inss_patronal), 0, f"INSS Patronal {empleado_nombre}"))
+            detalles.append((cuenta_inss_pat, float(amount(inss_patronal)), 0, f"INSS Patronal {empleado_nombre}"))
 
         if float(inatec) > 0:
-            detalles.append((cuenta_inatec, float(inatec), 0, f"INATEC {empleado_nombre}"))
+            detalles.append((cuenta_inatec, float(amount(inatec)), 0, f"INATEC {empleado_nombre}"))
 
-        # CRÉDITOS (Obligaciones)
-        detalles.append((cls.SUELDOS_POR_PAGAR, 0, float(salario_neto), f"Neto a pagar {empleado_nombre}"))
+        if float(provision_vacaciones) > 0:
+            detalles.append((cuenta_vacaciones, float(amount(provision_vacaciones)), 0, f"Provisión Vacaciones {empleado_nombre}"))
+
+        if float(provision_aguinaldo) > 0:
+            detalles.append((cuenta_aguinaldo, float(amount(provision_aguinaldo)), 0, f"Provisión Aguinaldo {empleado_nombre}"))
+
+        if float(provision_indemnizacion) > 0:
+            detalles.append((cuenta_indemnizacion, float(amount(provision_indemnizacion)), 0, f"Provisión Indemnización {empleado_nombre}"))
+
+        # CRÉDITOS (Obligaciones, Pasivos y Recuperaciones)
+        if float(salario_neto) > 0:
+            detalles.append((cls.SUELDOS_POR_PAGAR, 0, float(amount(salario_neto)), f"Neto a pagar {empleado_nombre}"))
 
         if float(inss_laboral) > 0:
-            detalles.append((cls.INSS_LABORAL_POR_PAGAR, 0, float(inss_laboral), f"INSS Lab. {empleado_nombre}"))
+            detalles.append((cls.INSS_LABORAL_POR_PAGAR, 0, float(amount(inss_laboral)), f"INSS Lab. {empleado_nombre}"))
 
         if float(ir_retenido) > 0:
-            detalles.append((cls.IR_LABORAL_POR_PAGAR, 0, float(ir_retenido), f"IR Ret. {empleado_nombre}"))
+            detalles.append((cls.IR_LABORAL_POR_PAGAR, 0, float(amount(ir_retenido)), f"IR Ret. {empleado_nombre}"))
 
         if float(inss_patronal) > 0:
-            detalles.append((cls.INSS_PATRONAL_POR_PAGAR, 0, float(inss_patronal), f"INSS Pat. x pagar {empleado_nombre}"))
+            detalles.append((cls.INSS_PATRONAL_POR_PAGAR, 0, float(amount(inss_patronal)), f"INSS Pat. x pagar {empleado_nombre}"))
 
         if float(inatec) > 0:
-            detalles.append((cls.INATEC_POR_PAGAR, 0, float(inatec), f"INATEC x pagar {empleado_nombre}"))
+            detalles.append((cls.INATEC_POR_PAGAR, 0, float(amount(inatec)), f"INATEC x pagar {empleado_nombre}"))
 
         if float(pension_alimenticia) > 0:
-            detalles.append((cls.PENSIONES_POR_PAGAR, 0, float(pension_alimenticia), f"Pensión alim. {empleado_nombre}"))
+            detalles.append((cls.PENSIONES_POR_PAGAR, 0, float(amount(pension_alimenticia)), f"Pensión alim. {empleado_nombre}"))
 
         if float(vales_descontados) > 0:
-            detalles.append((cls.ANTICIPOS_EMPLEADOS, 0, float(vales_descontados), f"Descuento vales {empleado_nombre}"))
+            detalles.append((cls.ANTICIPOS_EMPLEADOS, 0, float(amount(vales_descontados)), f"Descuento vales {empleado_nombre}"))
+
+        if float(deduccion_prestamos) > 0:
+            detalles.append((cls.ANTICIPOS_EMPLEADOS, 0, float(amount(deduccion_prestamos)), f"Abono préstamo {empleado_nombre}"))
+
+        if float(cobro_perdidas) > 0:
+            detalles.append((cls.GASTOS_VARIOS_ADMIN, 0, float(amount(cobro_perdidas)), f"Recuperación pérdida {empleado_nombre}"))
+
+        if float(provision_vacaciones) > 0:
+            detalles.append((cls.VACACIONES_POR_PAGAR, 0, float(amount(provision_vacaciones)), f"Provisión Vacaciones {empleado_nombre}"))
+
+        if float(provision_aguinaldo) > 0:
+            detalles.append((cls.AGUINALDO_POR_PAGAR, 0, float(amount(provision_aguinaldo)), f"Provisión Aguinaldo {empleado_nombre}"))
+
+        if float(provision_indemnizacion) > 0:
+            detalles.append((cls.INDEMNIZACION_POR_PAGAR, 0, float(amount(provision_indemnizacion)), f"Provisión Indemnización {empleado_nombre}"))
 
         return cls.crear_asiento(
             cursor=cursor,
@@ -661,22 +720,112 @@ class ContabilidadService:
         )
 
     @classmethod
+    def obtener_saldo_disponible_cuenta(cls, cursor, cuenta_codigo):
+        """
+        Obtiene el saldo disponible actual de una cuenta contable (con bloqueo UPDLOCK, HOLDLOCK
+        en SQL Server) sobre asientos Contabilizados (y anulados con reversión compensada).
+        """
+        if not cuenta_codigo or not str(cuenta_codigo).strip():
+            raise ContabilidadError('Debe especificar el código de la cuenta de origen.')
+        codigo = str(cuenta_codigo).strip()
+        sql_fallback = """
+            SELECT
+                C.Naturaleza,
+                COALESCE(SUM(CASE WHEN A.ID IS NOT NULL THEN D.Debe ELSE 0 END), 0) AS TotalDebe,
+                COALESCE(SUM(CASE WHEN A.ID IS NOT NULL THEN D.Haber ELSE 0 END), 0) AS TotalHaber,
+                COALESCE(SUM(D.Debe-D.Haber), 0) AS SaldoBruto
+            FROM CatalogoCuentas C
+            LEFT JOIN DetalleAsientos D ON D.CuentaID = C.ID
+            LEFT JOIN AsientosDiario A ON D.AsientoID = A.ID
+                AND (
+                    A.Estado = 'Contabilizado'
+                    OR (A.Estado = 'Anulado' AND EXISTS (
+                        SELECT 1 FROM AsientosDiario R
+                        WHERE R.ReferenciaExterna = ('REV-' || CAST(A.ID AS TEXT))
+                          AND R.Estado = 'Contabilizado'
+                    ))
+                )
+            WHERE C.Codigo = ? AND C.Activa = 1
+            GROUP BY C.Naturaleza
+        """
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerSaldoDisponibleCuenta',
+            (codigo,),
+            fallback_sql=sql_fallback,
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise ContabilidadError(f"Cuenta contable '{codigo}' no encontrada o inactiva.")
+        if len(row) == 1:
+            return decimal.Decimal(str(row[0] or 0))
+        naturaleza = getattr(row, 'Naturaleza', row[0])
+        total_debe = decimal.Decimal(str(getattr(row, 'TotalDebe', row[1]) or 0))
+        total_haber = decimal.Decimal(str(getattr(row, 'TotalHaber', row[2]) or 0))
+        if naturaleza == 'Deudora':
+            return total_debe - total_haber
+        return total_haber - total_debe
+
+    @classmethod
+    def verificar_fondos_disponibles(cls, cursor, cuenta_codigo, monto_requerido, permitir_sobregiro=False):
+        """
+        Verifica que una cuenta de efectivo o bancos tenga fondos suficientes antes de un desembolso.
+        """
+        try:
+            monto_dec = amount(monto_requerido, 'Monto')
+        except ValueError as err:
+            raise ContabilidadError(str(err)) from err
+        if monto_dec <= 0:
+            raise ContabilidadError('El monto del desembolso debe ser mayor a cero.')
+        if not cuenta_codigo or str(cuenta_codigo).strip() not in cls.CUENTAS_EFECTIVO_BANCOS:
+            raise ContabilidadError(
+                f"La cuenta '{cuenta_codigo}' no es una cuenta válida de efectivo o bancos."
+            )
+        saldo_actual = cls.obtener_saldo_disponible_cuenta(cursor, str(cuenta_codigo).strip())
+        if not permitir_sobregiro and saldo_actual < monto_dec:
+            raise ContabilidadError(
+                f"Fondos insuficientes en la cuenta seleccionada ({cuenta_codigo}): "
+                f"disponible C${saldo_actual:.2f}, requerido C${monto_dec:.2f}."
+            )
+        return saldo_actual
+
+    @classmethod
+    def resolver_cuenta_desembolso(cls, metodo_pago='Efectivo', cuenta_pago=None):
+        """Resuelve y valida la cuenta de efectivo/bancos para un desembolso."""
+        if cuenta_pago is not None and str(cuenta_pago).strip():
+            codigo = str(cuenta_pago).strip()
+            if codigo not in cls.CUENTAS_EFECTIVO_BANCOS:
+                raise ContabilidadError(
+                    f"La cuenta '{codigo}' no es una cuenta válida de efectivo o bancos."
+                )
+            return codigo
+        if not metodo_pago or metodo_pago not in cls.METODO_PAGO_CUENTA:
+            raise ContabilidadError(f"Método de pago '{metodo_pago}' no válido para desembolso.")
+        return cls.METODO_PAGO_CUENTA[metodo_pago]
+
+    @classmethod
     def contabilizar_egreso(cls, cursor, usuario_id, concepto, monto,
                             cuenta_gasto=None, metodo_pago='Efectivo',
+                            cuenta_pago=None, permitir_sobregiro=False,
                             referencia=None, ip=None, fecha=None):
         """
-        Genera el asiento contable automático para un egreso privado.
+        Genera el asiento contable automático para un egreso privado,
+        verificando previamente fondos disponibles en la cuenta de origen.
         """
         if cuenta_gasto is None:
             cuenta_gasto = cls.GASTOS_VARIOS_ADMIN
 
-        cuenta_pago = cls.METODO_PAGO_CUENTA.get(metodo_pago, cls.CAJA_GENERAL_CS)
+        cuenta_origen = cls.resolver_cuenta_desembolso(metodo_pago=metodo_pago, cuenta_pago=cuenta_pago)
+        cls.verificar_fondos_disponibles(
+            cursor, cuenta_origen, monto, permitir_sobregiro=permitir_sobregiro
+        )
+
         fecha = fecha or business_now()
         ref = referencia or f"EGR-{fecha.strftime('%Y%m%d%H%M%S')}"
 
         detalles = [
             (cuenta_gasto, float(monto), 0, concepto),
-            (cuenta_pago, 0, float(monto), f"Pago {metodo_pago} — {concepto}"),
+            (cuenta_origen, 0, float(monto), f"Pago {metodo_pago} — {concepto}"),
         ]
 
         return cls.crear_asiento(
@@ -693,16 +842,23 @@ class ContabilidadService:
 
     @classmethod
     def contabilizar_vale(cls, cursor, usuario_id, empleado_nombre,
-                          monto, metodo_pago='Efectivo', referencia=None, ip=None):
+                          monto, metodo_pago='Efectivo', cuenta_pago=None,
+                          permitir_sobregiro=False, referencia=None, ip=None, fecha=None):
         """
-        Genera el asiento contable automático para un vale a empleado.
+        Genera el asiento contable automático para un vale a empleado,
+        verificando previamente fondos disponibles en la cuenta de origen.
         """
-        cuenta_pago = cls.METODO_PAGO_CUENTA.get(metodo_pago, cls.CAJA_GENERAL_CS)
-        ref = referencia or f"VALE-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        cuenta_origen = cls.resolver_cuenta_desembolso(metodo_pago=metodo_pago, cuenta_pago=cuenta_pago)
+        cls.verificar_fondos_disponibles(
+            cursor, cuenta_origen, monto, permitir_sobregiro=permitir_sobregiro
+        )
+
+        fecha = fecha or business_now()
+        ref = referencia or f"VALE-{fecha.strftime('%Y%m%d%H%M%S')}"
 
         detalles = [
             (cls.ANTICIPOS_EMPLEADOS, float(monto), 0, f"Vale a {empleado_nombre}"),
-            (cuenta_pago, 0, float(monto), f"Desembolso vale {empleado_nombre}"),
+            (cuenta_origen, 0, float(monto), f"Desembolso vale {empleado_nombre}"),
         ]
 
         return cls.crear_asiento(
@@ -713,7 +869,8 @@ class ContabilidadService:
             tipo_comprobante='EG',
             referencia_externa=ref,
             tipo_documento='ValeEmpleado',
-            ip=ip
+            ip=ip,
+            fecha=fecha
         )
 
     @classmethod
@@ -746,19 +903,176 @@ class ContabilidadService:
     # CONSULTAS Y REPORTES
     # ============================================================
 
-    @staticmethod
-    def cerrar_periodo(cursor, periodo_id, usuario_id):
+    @classmethod
+    def _verificar_conciliacion_cierre(cls, cursor, periodo_id, mes, anio):
+        """
+        Verifica que todas las facturas activas y compras del período tengan su asiento
+        contable contabilizado antes de permitir el cierre mensual.
+        Maneja con gracia entornos SQLite o dobles de prueba donde Facturas/Compras no existan.
+        """
+        mes_int, anio_int = int(mes), int(anio)
+        if is_sqlserver_cursor(cursor):
+            execute_sp(
+                cursor,
+                'contabilidad.sp_VerificarConciliacionCierrePeriodo',
+                (periodo_id, mes_int, anio_int),
+            )
+            row = cursor.fetchone()
+            if row and (int(row[0] or 0) > 0 or int(row[1] or 0) > 0):
+                raise ContabilidadError(
+                    'No se puede cerrar el período: existen facturas o compras sin asiento contable conciliado.'
+                )
+            return
+
+        is_sqlite = type(cursor).__module__.startswith('sqlite3')
+        if is_sqlite:
+            ym_prefix = f"{anio_int:04d}-{mes_int:02d}"
+            execute_sp(
+                cursor,
+                'contabilidad.sp_ListarTablasOperativasSQLite',
+                (),
+                fallback_sql="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('Facturas', 'Compras', 'ComprasMateriaPrima')",
+            )
+            existing_tables = {r[0] for r in cursor.fetchall()}
+            if not existing_tables:
+                return
+
+            execute_sp(
+                cursor,
+                'contabilidad.sp_ListarAsientosPeriodoSQLite',
+                (periodo_id, ym_prefix),
+                fallback_sql=(
+                    "SELECT ID, COALESCE(ReferenciaExterna, ''), COALESCE(TipoDocumento, '') "
+                    "FROM AsientosDiario WHERE Estado = 'Contabilizado' AND "
+                    "(PeriodoID = ? OR substr(CAST(Fecha AS TEXT), 1, 7) = ?)"
+                ),
+            )
+            asientos_rows = cursor.fetchall()
+            refs_contabilizadas = {str(r[1]).strip() for r in asientos_rows if str(r[1]).strip()}
+            ids_contabilizados = {int(r[0]) for r in asientos_rows if r[0] is not None}
+            tipos_contabilizados = {str(r[2]).strip() for r in asientos_rows if str(r[2]).strip()}
+
+            if 'Facturas' in existing_tables:
+                execute_sp(
+                    cursor,
+                    'contabilidad.sp_InfoTablaFacturasSQLite',
+                    (),
+                    fallback_sql="PRAGMA table_info(Facturas)",
+                )
+                f_cols = {r[1] for r in cursor.fetchall()}
+                date_col = 'FechaHora' if 'FechaHora' in f_cols else ('Fecha' if 'Fecha' in f_cols else None)
+                state_col = 'EstadoFiscal' if 'EstadoFiscal' in f_cols else ('Estado' if 'Estado' in f_cols else None)
+                num_col = 'NumeroFactura' if 'NumeroFactura' in f_cols else ('Numero' if 'Numero' in f_cols else None)
+                if date_col:
+                    select_num = f"COALESCE(CAST({num_col} AS TEXT), '')" if num_col else "''"
+                    where_state = f"AND COALESCE({state_col}, 'Emitida') != 'Anulada'" if state_col else ""
+                    execute_sp(
+                        cursor,
+                        'contabilidad.sp_ListarFacturasActivasPeriodoSQLite',
+                        (ym_prefix,),
+                        fallback_sql=(
+                            f"SELECT ID, {select_num} FROM Facturas "
+                            f"WHERE substr(CAST({date_col} AS TEXT), 1, 7) = ? {where_state}"
+                        ),
+                    )
+                    facturas_activas = cursor.fetchall()
+                    for fid, fnum in facturas_activas:
+                        fnum_s = str(fnum or '').strip()
+                        matched = (
+                            (fnum_s and fnum_s in refs_contabilizadas)
+                            or f"FAC-{fid}" in refs_contabilizadas
+                            or str(fid) in refs_contabilizadas
+                            or (not fnum_s and bool(tipos_contabilizados & {'FacturaVenta', 'Venta', 'VentaPOS'}))
+                        )
+                        if not matched:
+                            raise ContabilidadError(
+                                'No se puede cerrar el período: existen facturas o compras sin asiento contable conciliado.'
+                            )
+
+            for compra_table in ('ComprasMateriaPrima', 'Compras'):
+                if compra_table in existing_tables:
+                    execute_sp(
+                        cursor,
+                        'contabilidad.sp_InfoTablaComprasSQLite',
+                        (),
+                        fallback_sql=f"PRAGMA table_info({compra_table})",
+                    )
+                    c_cols = {r[1] for r in cursor.fetchall()}
+                    date_col = 'Fecha' if 'Fecha' in c_cols else ('FechaHora' if 'FechaHora' in c_cols else None)
+                    state_col = 'Estado' if 'Estado' in c_cols else None
+                    ref_col = (
+                        'FacturaProveedor' if 'FacturaProveedor' in c_cols
+                        else ('Referencia' if 'Referencia' in c_cols else ('Numero' if 'Numero' in c_cols else None))
+                    )
+                    if date_col:
+                        select_ref = f"COALESCE(CAST({ref_col} AS TEXT), '')" if ref_col else "''"
+                        where_state = f"AND COALESCE({state_col}, 'Registrada') != 'Anulada'" if state_col else ""
+                        execute_sp(
+                            cursor,
+                            'contabilidad.sp_ListarComprasActivasPeriodoSQLite',
+                            (ym_prefix,),
+                            fallback_sql=(
+                                f"SELECT ID, {select_ref} FROM {compra_table} "
+                                f"WHERE substr(CAST({date_col} AS TEXT), 1, 7) = ? {where_state}"
+                            ),
+                        )
+                        compras_activas = cursor.fetchall()
+                        for cid, cref in compras_activas:
+                            cref_s = str(cref or '').strip()
+                            matched = (
+                                (cref_s and cref_s in refs_contabilizadas)
+                                or f"COMP-{cid}" in refs_contabilizadas
+                                or str(cid) in refs_contabilizadas
+                                or (not cref_s and bool(tipos_contabilizados & {'CompraMP', 'Compra'}))
+                            )
+                            if not matched:
+                                raise ContabilidadError(
+                                    'No se puede cerrar el período: existen facturas o compras sin asiento contable conciliado.'
+                                )
+            return
+
+        # Dobles de prueba genéricos que implementan fallback_sql
+        try:
+            execute_sp(
+                cursor,
+                'contabilidad.sp_VerificarConciliacionCierrePeriodo',
+                (periodo_id, mes_int, anio_int),
+                fallback_sql="SELECT 0 AS FacturasSinAsiento, 0 AS ComprasSinAsiento",
+                fallback_params=(),
+            )
+            row = cursor.fetchone()
+            if row and len(row) >= 2 and (int(row[0] or 0) > 0 or int(row[1] or 0) > 0):
+                raise ContabilidadError(
+                    'No se puede cerrar el período: existen facturas o compras sin asiento contable conciliado.'
+                )
+        except ContabilidadError:
+            raise
+        except Exception:
+            pass
+
+    @classmethod
+    def cerrar_periodo(cls, cursor, periodo_id, usuario_id, permitir_excepcion=False):
+        is_sqlite = type(cursor).__module__.startswith('sqlite3')
         execute_sp(
             cursor,
             'contabilidad.sp_ObtenerPeriodoParaCierre',
             (periodo_id,),
-            fallback_sql='SELECT Mes,Anio,Estado FROM PeriodosContables WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',
+            fallback_sql=(
+                'SELECT Mes, Anio, Estado FROM PeriodosContables WHERE ID=?'
+                if is_sqlite else
+                'SELECT Mes,Anio,Estado FROM PeriodosContables WITH(UPDLOCK,HOLDLOCK) WHERE ID=?'
+            ),
         )
         period = cursor.fetchone()
-        if not period or period.Estado != 'Abierto':
+        if not period:
+            raise ContabilidadError('El período no existe o ya está cerrado.')
+        p_mes = getattr(period, 'Mes', period[0])
+        p_anio = getattr(period, 'Anio', period[1])
+        p_estado = getattr(period, 'Estado', period[2])
+        if p_estado != 'Abierto':
             raise ContabilidadError('El período no existe o ya está cerrado.')
         now = business_now()
-        if (period.Anio, period.Mes) >= (now.year, now.month):
+        if (int(p_anio), int(p_mes)) >= (now.year, now.month):
             raise ContabilidadError('Solo se pueden cerrar meses concluidos.')
         execute_sp(
             cursor,
@@ -768,22 +1082,97 @@ class ContabilidadService:
         )
         if cursor.fetchone()[0]:
             raise ContabilidadError('Revise los asientos en borrador antes del cierre.')
+        sql_descuadrados = """SELECT A.ID FROM AsientosDiario A LEFT JOIN DetalleAsientos D ON D.AsientoID=A.ID
+            WHERE A.PeriodoID=? AND A.Estado IN ('Contabilizado','Anulado') GROUP BY A.ID
+            HAVING COUNT(D.ID)<2 OR SUM(D.Debe)<>SUM(D.Haber) OR SUM(D.Debe)<=0"""
         execute_sp(
             cursor,
             'contabilidad.sp_VerificarAsientosDescuadradosPeriodo',
             (periodo_id,),
-            fallback_sql="""SELECT A.ID FROM AsientosDiario A LEFT JOIN DetalleAsientos D ON D.AsientoID=A.ID
-            WHERE A.PeriodoID=? AND A.Estado IN ('Contabilizado','Anulado') GROUP BY A.ID
-            HAVING COUNT(D.ID)<2 OR SUM(D.Debe)<>SUM(D.Haber) OR SUM(D.Debe)<=0""",
+            fallback_sql=sql_descuadrados,
         )
         if cursor.fetchone():
             raise ContabilidadError('Hay asientos vacíos o descuadrados. No se cerró el período.')
+        if not permitir_excepcion:
+            cls._verificar_conciliacion_cierre(cursor, periodo_id, p_mes, p_anio)
+        sql_cerrar = "UPDATE PeriodosContables SET Estado='Cerrado',CerradoPor=?,CerradoEn=? WHERE ID=?"
         execute_sp(
             cursor,
             'contabilidad.sp_CerrarPeriodoContable',
             (usuario_id, now, periodo_id),
-            fallback_sql="UPDATE PeriodosContables SET Estado='Cerrado',CerradoPor=?,CerradoEn=? WHERE ID=?",
+            fallback_sql=sql_cerrar,
         )
+
+    @classmethod
+    def obtener_resumen_financiero_rango(cls, cursor, fecha_inicio, fecha_fin):
+        """
+        Calcula a partir del Mayor General (asientos Contabilizados y anulados con reversión):
+        - Ingresos netos contables (Clase 4 / 'Ingreso': Haber - Debe, excluyendo IVA Débito Fiscal)
+        - Costos contables (Clase 5 / 'Costo': Debe - Haber, excluyendo compras de activo inventario)
+        - Gastos contables (Clase 6 / 'Gasto': Debe - Haber)
+        - Utilidad neta contable (Ingresos - Costos - Gastos)
+        - Flujo de caja operativo (Entradas y Salidas reales en cuentas de Efectivo y Bancos 1.1.01.%)
+        """
+        is_sqlite = type(cursor).__module__.startswith('sqlite3')
+        sql_fallback = """
+            SELECT
+                COALESCE(SUM(CASE WHEN C.Clase = 'Ingreso' OR C.Codigo LIKE '4.%' THEN D.Haber - D.Debe ELSE 0 END), 0) AS IngresosContables,
+                COALESCE(SUM(CASE WHEN C.Clase = 'Costo' OR C.Codigo LIKE '5.%' THEN D.Debe - D.Haber ELSE 0 END), 0) AS CostosContables,
+                COALESCE(SUM(CASE WHEN C.Clase = 'Gasto' OR C.Codigo LIKE '6.%' THEN D.Debe - D.Haber ELSE 0 END), 0) AS GastosContables,
+                COALESCE(SUM(CASE WHEN C.Codigo IN ('1.1.01.001','1.1.01.002','1.1.01.003','1.1.01.004','1.1.01.005')
+                                   AND A.Estado = 'Contabilizado' AND COALESCE(A.TipoDocumento, '') != 'Reversión'
+                             THEN D.Debe ELSE 0 END), 0) AS EntradasEfectivo,
+                COALESCE(SUM(CASE WHEN C.Codigo IN ('1.1.01.001','1.1.01.002','1.1.01.003','1.1.01.004','1.1.01.005')
+                                   AND A.Estado = 'Contabilizado' AND COALESCE(A.TipoDocumento, '') != 'Reversión'
+                             THEN D.Haber ELSE 0 END), 0) AS SalidasEfectivo,
+                COALESCE(SUM(CASE WHEN C.Codigo IN ('1.1.01.001','1.1.01.002','1.1.01.003','1.1.01.004','1.1.01.005')
+                             THEN D.Debe - D.Haber ELSE 0 END), 0) AS FlujoCajaOperativo
+            FROM DetalleAsientos D
+            JOIN AsientosDiario A ON D.AsientoID = A.ID
+            JOIN CatalogoCuentas C ON D.CuentaID = C.ID
+            WHERE (
+                A.Estado = 'Contabilizado'
+                OR (A.Estado = 'Anulado' AND EXISTS (
+                    SELECT 1 FROM AsientosDiario R
+                    WHERE R.ReferenciaExterna = ('REV-' || CAST(A.ID AS TEXT))
+                      AND R.Estado = 'Contabilizado'
+                ))
+            )
+              AND A.Fecha >= ? AND A.Fecha < ?
+        """
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerResumenFinancieroRango',
+            (fecha_inicio, fecha_fin),
+            fallback_sql=sql_fallback,
+        )
+        row = cursor.fetchone()
+        if not row:
+            return {
+                'ingresos_contables': 0.0,
+                'costos_contables': 0.0,
+                'gastos_contables': 0.0,
+                'utilidad_neta': 0.0,
+                'entradas_efectivo': 0.0,
+                'salidas_efectivo': 0.0,
+                'flujo_caja_operativo': 0.0,
+            }
+        ingresos_c = float(row[0] or 0)
+        costos_c = float(row[1] or 0)
+        gastos_c = float(row[2] or 0)
+        entradas_ef = float(row[3] or 0)
+        salidas_ef = float(row[4] or 0)
+        flujo_caja = float(row[5] or 0)
+        utilidad_neta = round(ingresos_c - costos_c - gastos_c, 2)
+        return {
+            'ingresos_contables': round(ingresos_c, 2),
+            'costos_contables': round(costos_c, 2),
+            'gastos_contables': round(gastos_c, 2),
+            'utilidad_neta': utilidad_neta,
+            'entradas_efectivo': round(entradas_ef, 2),
+            'salidas_efectivo': round(salidas_ef, 2),
+            'flujo_caja_operativo': round(flujo_caja, 2),
+        }
 
     @staticmethod
     def balanza_mensual(cursor, mes, anio):

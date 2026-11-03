@@ -14,6 +14,7 @@ from app.pos import pos_bp
 from app.db import get_db_connection, execute_sp, is_sqlserver_cursor, as_db_role
 from app.services.business_time import business_now
 from app.services.reference_images import validate_reference_image
+from app.services.marketing_repository import load_marketing_catalog, store_recommendations
 from app.extensions import csrf
 from app.utils.qr import generar_qr_base64
 from app.auth.decorators import roles_required
@@ -82,14 +83,17 @@ def tienda_publica():
         if not current_user.is_authenticated and is_sqlserver_cursor(cursor):
             with as_db_role(cursor, 'db_rol_portal_cliente'):
                 categorias, productos, ingredientes, configuracion = _cargar_datos_catalogo_publico(cursor)
+                recomendaciones = store_recommendations(cursor, productos, current_user)
         else:
             categorias, productos, ingredientes, configuracion = _cargar_datos_catalogo_publico(cursor)
+            recomendaciones = store_recommendations(cursor, productos, current_user)
     finally:
         conn.close()
 
     return render_template(
         'tienda.html',
         productos=productos,
+        recomendaciones=recomendaciones,
         ingredientes=ingredientes,
         categorias=categorias,
         configuracion=configuracion,
@@ -97,6 +101,35 @@ def tienda_publica():
         turno_activo=None,
         mes_actual=business_now().month,
     )
+
+
+@pos_bp.route('/api/mercadotecnia/recomendaciones')
+def recomendaciones_tienda():
+    """Reordena sugerencias al cambiar el carrito sin rastrear invitados."""
+    raw = request.args.get('carrito', '')
+    parts = raw.split(',') if raw else []
+    if len(parts) > 10 or any(not part.isascii() or not part.isdigit() or int(part) <= 0 for part in parts):
+        return jsonify(error='Carrito inválido.'), 400
+    cart = {int(part) for part in parts}
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        if not current_user.is_authenticated and is_sqlserver_cursor(cursor):
+            with as_db_role(cursor, 'db_rol_portal_cliente'):
+                products = load_marketing_catalog(cursor)
+                results = store_recommendations(cursor, products, current_user, cart=cart, limit=4)
+        else:
+            products = load_marketing_catalog(cursor)
+            results = store_recommendations(cursor, products, current_user, cart=cart, limit=4)
+    except Exception:
+        current_app.logger.exception('No se pudieron calcular recomendaciones')
+        return jsonify(error='Las sugerencias no están disponibles.'), 503
+    finally:
+        conn.close()
+    public_fields = ('id', 'nombre', 'categoria', 'precio', 'descuento', 'imagen_url', 'motivo')
+    response = jsonify(productos=[{key: item.get(key) for key in public_fields} for item in results])
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 
 @pos_bp.route('/pos')
@@ -110,6 +143,7 @@ def index():
     categorias, productos, ingredientes, configuracion = _cargar_datos_catalogo_publico(cursor)
 
     es_cliente = getattr(current_user, 'rol_nombre', '') in ['Cliente', 'Invitado']
+    recomendaciones = store_recommendations(cursor, productos, current_user) if es_cliente else []
     turno = None
     if not es_cliente:
         execute_sp(
@@ -126,6 +160,7 @@ def index():
 
     return render_template(template,
                            productos=productos,
+                           recomendaciones=recomendaciones,
                            ingredientes=ingredientes,
                            categorias=categorias,
                            configuracion=configuracion,
@@ -232,7 +267,7 @@ def registrar_factura():
     """Factura atómica: precio de catálogo, pagos conciliados y copia inmutable."""
     import hashlib
     from app.services.fiscal_service import configuration, calculate_sale, normalize_payments, next_invoice, audit
-    from app.services.validation import amount, required_text
+    from app.services.validation import amount, required_text, validate_telefono_nicaragua
     from app.services.contabilidad_service import ContabilidadService, ContabilidadError
     datos = request.get_json()
     key = required_text(datos.get('clave_solicitud'), 'Identificador de operación', 64)
@@ -285,34 +320,58 @@ def registrar_factura():
             }
         if es_encargo and not isinstance(encargo, dict):
             raise ValueError('Complete los datos del encargo.')
+        from decimal import Decimal
+        exchange = Decimal(str(config.get('tipo_cambio_usd', '0')))
+        if not exchange.is_finite() or exchange <= 0:
+            raise ValueError('Configure un tipo de cambio positivo en ajustes.')
         delivery = None
         if es_encargo:
             encargo['ruta_imagen_referencia'] = validate_reference_image(encargo.get('ruta_imagen_referencia'))
             required_text(encargo.get('nombre_cliente'), 'Cliente', 100)
-            required_text(encargo.get('telefono'), 'Teléfono', 20)
+            encargo['telefono'] = validate_telefono_nicaragua(encargo.get('telefono'), 'Teléfono', optional=False)
             delivery = datetime.fromisoformat(encargo.get('fecha_entrega', ''))
             if delivery.date() < business_now().date():
                 raise ValueError('La entrega no puede ser anterior a hoy.')
             advance = amount(encargo.get('adelanto', 0))
             metodo_adelanto = encargo.get('metodo_adelanto', 'Efectivo')
-            monto_pago = advance
-            if metodo_adelanto == 'Efectivo' and encargo.get('monto_recibido') not in (None, ''):
-                recibido = amount(encargo.get('monto_recibido'))
-                if recibido >= advance:
-                    monto_pago = recibido
+            raw_recibido = encargo.get('monto_recibido')
+            if raw_recibido in (None, ''):
+                raw_recibido = datos.get('monto_recibido')
+            if raw_recibido not in (None, ''):
+                recibido = amount(raw_recibido, 'Monto recibido')
+                recibido_nio = amount(recibido * exchange) if metodo_adelanto == 'Efectivo USD' else recibido
+                if recibido_nio < advance:
+                    raise ValueError('El monto recibido no puede ser menor al adelanto requerido.')
+                monto_pago = recibido_nio
+            else:
+                monto_pago = advance
             payments = [{'metodo': metodo_adelanto, 'monto': monto_pago,
                          'referencia': datos.get('nombre_transferente') or encargo.get('referencia', '')}]
             encargo = {**encargo, 'adelanto': float(advance), 'saldo': float(total - advance)}
         else:
             advance = None
-            payments = datos.get('pagos_multiples') or [{'metodo': datos.get('metodo_pago', 'Efectivo'),
-                          'monto': total, 'referencia': datos.get('nombre_transferente', '')}]
+            raw_recibido = datos.get('monto_recibido')
+            metodo_pago_directo = datos.get('metodo_pago', 'Efectivo')
+            if datos.get('pagos_multiples'):
+                payments = datos.get('pagos_multiples')
+                if raw_recibido not in (None, ''):
+                    recibido = amount(raw_recibido, 'Monto recibido')
+                    recibido_nio = amount(recibido * exchange) if metodo_pago_directo == 'Efectivo USD' else recibido
+                    if recibido_nio < total:
+                        raise ValueError('El monto recibido no puede ser menor al total a cobrar.')
+            else:
+                if raw_recibido not in (None, ''):
+                    recibido = amount(raw_recibido, 'Monto recibido')
+                    recibido_nio = amount(recibido * exchange) if metodo_pago_directo == 'Efectivo USD' else recibido
+                    if recibido_nio < total:
+                        raise ValueError('El monto recibido no puede ser menor al total a cobrar.')
+                    monto_efectivo = recibido if metodo_pago_directo == 'Efectivo USD' else recibido_nio
+                else:
+                    monto_efectivo = total
+                payments = [{'metodo': metodo_pago_directo,
+                              'monto': monto_efectivo, 'referencia': datos.get('nombre_transferente', '')}]
         if not isinstance(payments, list) or any(not isinstance(p, dict) for p in payments):
             raise ValueError('Pagos inválidos.')
-        from decimal import Decimal
-        exchange = Decimal(str(config.get('tipo_cambio_usd', '0')))
-        if not exchange.is_finite() or exchange <= 0:
-            raise ValueError('Configure un tipo de cambio positivo en ajustes.')
         if not es_encargo:
             payments = [{**p, 'monto': amount(p.get('monto'), 'Pago USD') * exchange} if p.get('metodo') == 'Efectivo USD' else p for p in payments]
         payments, change = normalize_payments(payments, total, advance)
@@ -438,8 +497,10 @@ def registrar_factura():
                         cursor,
                         'crm.sp_MarcarCotizacionAceptadaEnVenta',
                         (item['cotizacion_id'],),
-                        fallback_sql="UPDATE Cotizaciones SET Estado='Aceptada' WHERE ID=? AND Estado IN ('Cotizada','Aceptada')",
+                        fallback_sql="UPDATE Cotizaciones SET Estado='Facturada' WHERE ID=? AND Estado IN ('Cotizada','Aceptada') AND PrecioCotizado IS NOT NULL",
                     )
+                    if getattr(cursor, 'rowcount', 1) == 0:
+                        raise ValueError('La cotización personalizada ya fue facturada en otra venta.')
             for payment in payments:
                 execute_sp(
                     cursor,
@@ -492,8 +553,10 @@ def registrar_factura():
     except (ValueError, ContabilidadError) as error:
         conn.rollback()
         return jsonify(error=str(error)), 400
-    except Exception:
+    except Exception as error:
         conn.rollback()
+        if '51036' in str(error):
+            return jsonify(error='La cotización personalizada ya fue facturada en otra venta.'), 409
         current_app.logger.exception('Error registrando factura')
         return jsonify(error='No se registró la venta. Intente de nuevo con el mismo carrito.'), 500
     finally:
@@ -531,6 +594,12 @@ def crear_cotizacion():
     cliente_id = current_user.id if es_cliente_registrado else None
     
     telefono = telefono or getattr(current_user, 'telefono', None)
+    if telefono:
+        from app.services.validation import validate_telefono_nicaragua
+        try:
+            telefono = validate_telefono_nicaragua(telefono, 'Teléfono de contacto', optional=True)
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
     nombre_contacto = nombre_contacto or getattr(current_user, 'nombre', None)
     
     # Para invitados, usamos un Session ID

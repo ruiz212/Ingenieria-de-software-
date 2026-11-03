@@ -94,6 +94,7 @@
     </script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="{{ url_for('static', filename='js/common.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/nicaragua_masks.js', v='1') }}" defer></script>
     <script>window.tasasProductos = Object.fromEntries({{ productos|tojson }}.map(p=>[p.id,p.tasa_iva]));</script>
     <link rel="stylesheet" href="{{ css_url('theme') }}">
     <link rel="stylesheet" href="{{ css_url('pages/customer/store') }}">
@@ -157,6 +158,7 @@
                 <span class="header-search-icon" aria-hidden="true">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                 </span>
+                <label class="sr-only" for="tienda-search-input">Buscar productos</label>
                 <input type="search" id="tienda-search-input" class="header-search-input" placeholder="Buscar concha, bolillo, tres leches, café..." autocomplete="off">
                 <button type="button" id="tienda-search-clear" class="header-search-clear" aria-label="Limpiar búsqueda">×</button>
             </div>
@@ -171,7 +173,7 @@
 
                 <button type="button" class="cart-toggle" id="btn-abrir-carrito-nav" aria-label="Abrir bolsa de compra">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-                    <span>Pedido</span>
+                    <span>Bolsa</span>
                     <span class="cart-badge" id="badge-carrito-tienda">0</span>
                     <span class="cart-toggle-total" id="nav-cart-total">C$0.00</span>
                 </button>
@@ -207,6 +209,42 @@
 
     <main class="pos-layout" id="catalogo-tienda">
         <div class="catalog-panel pos-main tienda-catalog-panel">
+
+            {% if recomendaciones %}
+            <section class="store-recs" aria-labelledby="store-recs-title">
+                <div class="store-recs-heading">
+                    <div>
+                        <h2 id="store-recs-title">Para acompañar tu pedido</h2>
+                        <p>Ideas de la vitrina basadas en compras recientes. Los descuentos los define la tienda.</p>
+                    </div>
+                    <span class="store-recs-count">{{ recomendaciones|length }} sugerencias</span>
+                </div>
+                <div class="store-recs-grid">
+                    {% for producto in recomendaciones %}
+                    {% set precio_final = producto.precio - (producto.precio * producto.descuento / 100) if producto.descuento > 0 else producto.precio %}
+                    <article class="product-card store-recs-card"
+                             data-id="{{ producto.id }}"
+                             data-nombre="{{ producto.nombre }}"
+                             data-precio="{{ producto.precio }}"
+                             data-categoria="{{ producto.categoria }}"
+                             data-descuento="{{ producto.descuento }}">
+                        <span class="store-recs-reason">{{ producto.motivo }}</span>
+                        <div class="store-recs-card-main">
+                            <div>
+                                <p class="store-recs-category">{{ producto.categoria }}</p>
+                                <h3>{{ producto.nombre }}</h3>
+                            </div>
+                            {% if producto.imagen_url %}<img src="{{ producto.imagen_url }}" alt="" loading="lazy" class="store-recs-image">{% endif %}
+                        </div>
+                        <div class="store-recs-card-footer">
+                            <span>C${{ '%.2f'|format(precio_final) }}{% if producto.descuento > 0 %} <small>−{{ '%.0f'|format(producto.descuento) }}%</small>{% endif %}</span>
+                            <button type="button" class="store-recs-add" aria-label="{{ 'Personalizar' if producto.categoria == 'Reposteria' else 'Agregar' }} {{ producto.nombre }} al pedido">{{ 'Personalizar' if producto.categoria == 'Reposteria' else 'Agregar' }}</button>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
 
             <!-- 4. Barra de Departamentos y Orden -->
             <div class="department-bar-wrap">
@@ -340,16 +378,16 @@
             <strong id="floating-cart-total" class="tienda-floating-cart-total">C$0.00</strong>
         </div>
         <button type="button" class="floating-cart-btn" id="btn-floating-ver-pedido">
-            Revisar Pedido →
+            Revisar bolsa →
         </button>
     </div>
 
     <!-- Bolsa de Compra Lateral -->
     <div id="cartOverlay" class="cart-drawer-overlay"></div>
-    <aside id="cartDrawer" class="cart-drawer invoice-panel" aria-label="Tu Pedido">
+    <aside id="cartDrawer" class="cart-drawer invoice-panel" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title" aria-hidden="true" tabindex="-1">
         <div class="cart-header invoice-header">
             <div class="cart-header-title">
-                <h2>Tu Bolsa de Compra</h2>
+                <h2 id="cart-drawer-title">Tu bolsa</h2>
                 <button type="button" id="btn-vaciar-carrito-tienda" class="btn-clear-cart hidden">Vaciar</button>
             </div>
             <button type="button" class="btn-close-cart" id="btn-cerrar-drawer-carrito" aria-label="Cerrar">×</button>
@@ -359,6 +397,7 @@
             <div class="empty-cart-msg empty-cart">
                 <strong>Tu bolsa está vacía</strong><br>
                 <span class="tienda-span-text">Selecciona piezas recién horneadas o pasteles de la vitrina para comenzar.</span>
+                <button type="button" class="empty-cart-browse" data-browse-products>Seguir viendo productos</button>
             </div>
         </div>
 
@@ -410,7 +449,7 @@
 
             <div class="form-group tienda-form-group">
                 <span class="tienda-span-text-2">Importe de la pieza:</span>
-                <input type="text" id="modal-ingredientes-total" readonly value="C$0.00" class="tienda-modal-ingredientes-total">
+                <output id="modal-ingredientes-total" class="tienda-modal-ingredientes-total" aria-live="polite">C$0.00</output>
             </div>
 
             <div class="modal-actions">
@@ -455,7 +494,7 @@
                     </div>
                     <div>
                         <label for="pastel-telefono">Teléfono / WhatsApp:</label>
-                        <input type="tel" id="pastel-telefono" class="form-control" required value="{{ user.telefono or '' }}" placeholder="Ej: 8888-1234">
+                        <input type="tel" id="pastel-telefono" class="form-control" required value="{{ user.telefono or '' }}" placeholder="8888-8888" data-mask="telefono" maxlength="9">
                     </div>
                 </div>
                 {% endif %}
@@ -503,7 +542,7 @@
     </div>
 
     <!-- Modal Encargo / Finalizar Pedido Cliente -->
-    <div id="encargo-modal" class="modal-overlay hidden">
+    <div id="encargo-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="encargo-modal-title" tabindex="-1">
         <div class="modal-content">
             <h2 id="encargo-modal-title">Confirmar Datos del Pedido</h2>
             <p class="tienda-p-text-4">
@@ -517,7 +556,7 @@
                 </div>
                 <div>
                     <label for="modal-telefono-cliente">Teléfono / WhatsApp:</label>
-                    <input type="tel" id="modal-telefono-cliente" class="form-control" required value="{{ '' if (not user.telefono or user.telefono == '00000000') else user.telefono }}" placeholder="Ej: 8888-5555">
+                    <input type="tel" id="modal-telefono-cliente" class="form-control" required value="{{ '' if (not user.telefono or user.telefono == '00000000') else user.telefono }}" placeholder="8888-8888" data-mask="telefono" maxlength="9">
                 </div>
             </div>
 
@@ -677,6 +716,7 @@
     </script>
     <script src="{{ url_for('static', filename='js/api_services.js', v=8) }}"></script>
     <script src="{{ url_for('static', filename='js/pos.js', v=9) }}"></script>
+    <script src="{{ url_for('static', filename='js/marketing_recommendations.js', v=1) }}"></script>
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -689,16 +729,25 @@
         const btnVaciarTienda = document.getElementById('btn-vaciar-carrito-tienda');
 
         let lastDrawerTrigger = btnAbrirCarritoNav;
+        let inertBeforeDrawer = [];
         function abrirDrawerCarrito(ev) {
             if (ev && ev.currentTarget) lastDrawerTrigger = ev.currentTarget;
+            if (cartDrawer.classList.contains('open')) return;
             cartDrawer.classList.add('open');
             cartOverlay.classList.add('active');
             cartDrawer.setAttribute('aria-hidden', 'false');
+            inertBeforeDrawer = Array.from(document.body.children)
+                .filter(node => node !== cartDrawer && node !== cartOverlay && node.tagName !== 'SCRIPT')
+                .map(node => [node, node.inert]);
+            inertBeforeDrawer.forEach(([node]) => { node.inert = true; });
+            btnCerrarDrawer.focus();
         }
         function cerrarDrawerCarrito(restoreFocus = false) {
             cartDrawer.classList.remove('open');
             cartOverlay.classList.remove('active');
             cartDrawer.setAttribute('aria-hidden', 'true');
+            inertBeforeDrawer.forEach(([node, wasInert]) => { node.inert = wasInert; });
+            inertBeforeDrawer = [];
             if (restoreFocus === true && (lastDrawerTrigger || btnAbrirCarritoNav)) {
                 (lastDrawerTrigger || btnAbrirCarritoNav).focus();
             }
@@ -706,13 +755,28 @@
 
         if (btnAbrirCarritoNav) btnAbrirCarritoNav.addEventListener('click', abrirDrawerCarrito);
         if (btnCerrarDrawer) btnCerrarDrawer.addEventListener('click', () => cerrarDrawerCarrito(true));
-        if (cartOverlay) cartOverlay.addEventListener('click', () => cerrarDrawerCarrito(false));
+        if (cartOverlay) cartOverlay.addEventListener('click', () => cerrarDrawerCarrito(true));
         if (btnFloatingVerPedido) btnFloatingVerPedido.addEventListener('click', abrirDrawerCarrito);
+        window.addEventListener('abrirBolsaTienda', abrirDrawerCarrito);
+        document.getElementById('cart-items')?.addEventListener('click', event => {
+            if (!event.target.closest('[data-browse-products]')) return;
+            cerrarDrawerCarrito(false);
+            document.getElementById('catalogo-tienda')?.scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('tienda-search-input')?.focus();
+        });
 
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && cartDrawer && cartDrawer.classList.contains('open')) {
+            if (!cartDrawer?.classList.contains('open')) return;
+            if (e.key === 'Escape') {
                 e.preventDefault();
                 cerrarDrawerCarrito(true);
+            } else if (e.key === 'Tab') {
+                const focusable = Array.from(cartDrawer.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter(el => !el.hidden && el.getClientRects().length);
+                if (!focusable.length) { e.preventDefault(); cartDrawer.focus(); return; }
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && (document.activeElement === first || document.activeElement === cartDrawer)) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
             }
         });
 
@@ -748,7 +812,9 @@
 
         const btnRealizarPedido = document.getElementById('btn-realizar-pedido');
         if (btnRealizarPedido) {
-            btnRealizarPedido.addEventListener('click', cerrarDrawerCarrito);
+            btnRealizarPedido.addEventListener('click', () => {
+                cerrarDrawerCarrito(false);
+            }, true);
         }
 
         const inputPastelFecha = document.getElementById('pastel-fecha');
