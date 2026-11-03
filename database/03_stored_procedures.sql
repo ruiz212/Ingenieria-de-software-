@@ -1209,7 +1209,7 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerPerfilPuestoPorCargo]
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT Cargo FROM [rrhh].[PerfilesPuesto] WHERE Cargo=@Cargo;
+    SELECT Cargo FROM [rrhh].[PerfilesPuesto] WHERE Cargo=@Cargo AND (Activo=1 OR Activo IS NULL);
 END
 GO
 
@@ -1262,7 +1262,8 @@ BEGIN
     BEGIN
         SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
         FROM [rrhh].[escala_salarial]
-        WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta');
+        WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta', 'cajero/dependienta')
+           OR LOWER(cargo) LIKE '%cajero%';
         RETURN;
     END
 
@@ -1270,7 +1271,8 @@ BEGIN
     BEGIN
         SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
         FROM [rrhh].[escala_salarial]
-        WHERE LOWER(cargo) IN ('cocina', 'cocinero');
+        WHERE LOWER(cargo) IN ('cocina', 'cocinero')
+           OR LOWER(cargo) LIKE '%coci%';
         RETURN;
     END
 
@@ -1278,7 +1280,24 @@ BEGIN
     BEGIN
         SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
         FROM [rrhh].[escala_salarial]
-        WHERE LOWER(cargo) IN ('gerente', 'gerente general');
+        WHERE LOWER(cargo) IN ('gerente', 'gerente general')
+           OR LOWER(cargo) LIKE '%gerente%';
+        RETURN;
+    END
+
+    IF LOWER(@CargoClean) = 'panadero junior' OR LOWER(@CargoClean) LIKE '%panadero junior%'
+    BEGIN
+        SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+        FROM [rrhh].[escala_salarial]
+        WHERE LOWER(cargo) LIKE '%panadero junior%';
+        RETURN;
+    END
+
+    IF LOWER(@CargoClean) = 'jefe de inventario' OR LOWER(@CargoClean) LIKE '%inventario%'
+    BEGIN
+        SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+        FROM [rrhh].[escala_salarial]
+        WHERE LOWER(cargo) LIKE '%inventario%';
         RETURN;
     END
 
@@ -5587,7 +5606,8 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta');
+                WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta', 'cajero/dependienta')
+                   OR LOWER(cargo) LIKE '%cajero%';
                 RETURN;
             END
 
@@ -5595,7 +5615,8 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('cocina', 'cocinero');
+                WHERE LOWER(cargo) IN ('cocina', 'cocinero')
+                   OR LOWER(cargo) LIKE '%coci%';
                 RETURN;
             END
 
@@ -5603,7 +5624,24 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('gerente', 'gerente general');
+                WHERE LOWER(cargo) IN ('gerente', 'gerente general')
+                   OR LOWER(cargo) LIKE '%gerente%';
+                RETURN;
+            END
+
+            IF LOWER(@CargoClean) = 'panadero junior' OR LOWER(@CargoClean) LIKE '%panadero junior%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) LIKE '%panadero junior%';
+                RETURN;
+            END
+
+            IF LOWER(@CargoClean) = 'jefe de inventario' OR LOWER(@CargoClean) LIKE '%inventario%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) LIKE '%inventario%';
                 RETURN;
             END
 

@@ -3580,7 +3580,7 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerPerfilPuestoPorCargo]
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT Cargo FROM [rrhh].[PerfilesPuesto] WHERE Cargo=@Cargo;
+    SELECT Cargo FROM [rrhh].[PerfilesPuesto] WHERE Cargo=@Cargo AND (Activo=1 OR Activo IS NULL);
 END
 GO
 
@@ -7901,7 +7901,8 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta');
+                WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta', 'cajero/dependienta')
+                   OR LOWER(cargo) LIKE '%cajero%';
                 RETURN;
             END
 
@@ -7909,7 +7910,8 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('cocina', 'cocinero');
+                WHERE LOWER(cargo) IN ('cocina', 'cocinero')
+                   OR LOWER(cargo) LIKE '%coci%';
                 RETURN;
             END
 
@@ -7917,7 +7919,24 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('gerente', 'gerente general');
+                WHERE LOWER(cargo) IN ('gerente', 'gerente general')
+                   OR LOWER(cargo) LIKE '%gerente%';
+                RETURN;
+            END
+
+            IF LOWER(@CargoClean) = 'panadero junior' OR LOWER(@CargoClean) LIKE '%panadero junior%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) LIKE '%panadero junior%';
+                RETURN;
+            END
+
+            IF LOWER(@CargoClean) = 'jefe de inventario' OR LOWER(@CargoClean) LIKE '%inventario%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) LIKE '%inventario%';
                 RETURN;
             END
 
@@ -8159,7 +8178,8 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta');
+                WHERE LOWER(cargo) IN ('cajero', 'cajero/depedienta', 'cajero/dependienta')
+                   OR LOWER(cargo) LIKE '%cajero%';
                 RETURN;
             END
 
@@ -8167,7 +8187,8 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('cocina', 'cocinero');
+                WHERE LOWER(cargo) IN ('cocina', 'cocinero')
+                   OR LOWER(cargo) LIKE '%coci%';
                 RETURN;
             END
 
@@ -8175,7 +8196,24 @@ CREATE OR ALTER PROCEDURE [rrhh].[sp_ObtenerEscalaSalarialPorCargo]
             BEGIN
                 SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
                 FROM [rrhh].[escala_salarial]
-                WHERE LOWER(cargo) IN ('gerente', 'gerente general');
+                WHERE LOWER(cargo) IN ('gerente', 'gerente general')
+                   OR LOWER(cargo) LIKE '%gerente%';
+                RETURN;
+            END
+
+            IF LOWER(@CargoClean) = 'panadero junior' OR LOWER(@CargoClean) LIKE '%panadero junior%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) LIKE '%panadero junior%';
+                RETURN;
+            END
+
+            IF LOWER(@CargoClean) = 'jefe de inventario' OR LOWER(@CargoClean) LIKE '%inventario%'
+            BEGIN
+                SELECT TOP 1 id, nivel, cargo, limite_inferior, limite_superior, salario_base
+                FROM [rrhh].[escala_salarial]
+                WHERE LOWER(cargo) LIKE '%inventario%';
                 RETURN;
             END
 
@@ -8457,26 +8495,21 @@ END
 GO
 
 -- ============================================================================
--- Semilla para [rrhh].[escala_salarial] (15 registros)
+-- Semilla para [rrhh].[escala_salarial] (10 registros)
 -- ============================================================================
 IF NOT EXISTS (SELECT 1 FROM [rrhh].[escala_salarial])
 BEGIN
     SET IDENTITY_INSERT [rrhh].[escala_salarial] ON;
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (1, N'I', N'Limpieza', NULL, 100, 6519.58);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (2, N'II', N'Panadero Aprendiz', 101, 126, 8572.96);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (3, N'III', N'Cajero/Depedienta', 127, 159, 10626.34);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (4, N'III', N'Cajero', 127, 159, 10626.34);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (5, N'IV', N'Cocinero', 160, 200, 12679.72);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (6, N'IV', N'Cocina', 160, 200, 12679.72);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (7, N'V', N'Panadero Junior', 201, 252, 14733.10);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (8, N'VI', N'Jefe de Inventario', 253, 317, 16786.48);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (9, N'VII', N'Panadero Senior', 318, 400, 18839.86);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (10, N'VIII', N'Contador', 401, 504, 20893.24);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (11, N'IX', N'Maestro Panadero', 505, 635, 22946.62);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (12, N'X', N'Gerente General', 636, 800, 25000.00);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (13, N'X', N'Gerente', 636, 800, 25000.00);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (14, N'VIII', N'Ingeniero electronico', 401, 504, 20893.24);
-    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (15, N'II', N'Panadero', 101, 126, 8572.96);
+    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (1, N'I', N'Sin Puesto', 100, 140, 6519.58);
+    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (2, N'II', N'Limpieza', 141, 180, 8572.96);
+    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (3, N'III', N'Panadero Aprendiz', 181, 220, 10626.34);
+    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (4, N'IV', N'Cajero/Dependienta', 221, 260, 12679.72);
+    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (5, N'V', N'Cocinero', 261, 300, 14733.10);
+    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (6, N'VI', N'Jefe De Inventario/Panadero Junior', 301, 340, 16786.48);
+    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (7, N'VII', N'Contador', 341, 380, 18839.86);
+    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (8, N'VIII', N'Panadero Senior', 381, 420, 20893.24);
+    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (9, N'IX', N'Maestro Panadero', 421, 460, 22946.62);
+    INSERT INTO [rrhh].[escala_salarial] ([id], [nivel], [cargo], [limite_inferior], [limite_superior], [salario_base]) VALUES (10, N'X', N'Gerente General', 461, 500, 25000.00);
     SET IDENTITY_INSERT [rrhh].[escala_salarial] OFF;
 END
 GO
