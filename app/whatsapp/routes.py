@@ -1,0 +1,82 @@
+"""Management-only WhatsApp inbox. Forms use the application's CSRF extension."""
+import os
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+import pyodbc
+from flask import flash, redirect, render_template, request, url_for
+from flask_login import login_required, current_user
+from app.admin import admin_bp
+from app.auth.decorators import roles_required
+from app.services.validation import required_text
+from app.whatsapp.repository import connection, rows, Store
+
+
+def snapshot(sid=None):
+    with connection() as (_, cur):
+        cur.execute('EXEC crm.sp_WhatsAppLeerControl')
+        state = rows(cur)[0]
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if not state['Heartbeat'] or state['Heartbeat'] < now - timedelta(seconds=30):
+            state['Estado'], state['QR'] = 'Worker desconectado', None
+        if not state['QRExpira'] or state['QRExpira'] < now:
+            state['QR'] = None
+        cur.execute('EXEC crm.sp_WhatsAppListarSesiones')
+        sessions = rows(cur)
+        messages = []
+        if sid:
+            cur.execute('EXEC crm.sp_WhatsAppHistorialAdmin ?,?', sid, sid)
+            messages = list(reversed(rows(cur)))
+        return state, sessions, messages
+
+
+@admin_bp.route('/whatsapp', methods=['GET', 'POST'])
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def whatsapp():
+    sid = request.args.get('chat', type=int)
+    installed = os.environ.get('WHATSAPP_ENABLED', '0') == '1'
+    state, sessions, messages = {'Activo': False, 'Estado': 'Pendiente de instalación'}, [], []
+    if not installed:
+        return render_template('admin/whatsapp.html', state=state, sessions=sessions, messages=messages, sid=sid, installed=False)
+    try:
+        if request.method == 'POST':
+            action = request.form.get('action')
+            with connection() as (_, cur):
+                if action == 'global':
+                    cur.execute('EXEC crm.sp_WhatsAppActivar ?', request.form.get('enabled') == '1')
+                elif action in ('mode', 'reply'):
+                    sid = request.form.get('sid', type=int)
+                    revision = request.form.get('revision', type=int)
+                    cur.execute('EXEC crm.sp_WhatsAppRevision ?', sid)
+                    row = cur.fetchone()
+                    if not row or row[0] != revision:
+                        raise ValueError('La conversación cambió. Actualice la página antes de continuar.')
+                    if action == 'mode':
+                        mode = request.form.get('mode')
+                        if mode not in ('IA', 'HUMANO'):
+                            raise ValueError('Modo de atención no válido.')
+                        cur.execute('EXEC crm.sp_WhatsAppModo ?,?', mode, sid)
+                        if mode == 'IA':
+                            # Human-period messages remain visible but are never replayed to AI.
+                            cur.execute('EXEC crm.sp_WhatsAppCerrarMensajes ?', sid)
+                    else:
+                        if row[1] != 'HUMANO':
+                            raise ValueError('Tome control de la conversación antes de responder.')
+                        text = required_text(request.form.get('text'), 'Respuesta', 3500)
+                        Store.enqueue(cur, sid, f'human:{current_user.id}:{uuid4().hex}', text, 'Humano', row[0])
+                else:
+                    raise ValueError('Acción no válida.')
+            flash('Cambios guardados.', 'success')
+            return redirect(url_for('admin.whatsapp', chat=sid))
+        state, sessions, messages = snapshot(sid)
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('admin.whatsapp', chat=sid))
+    except pyodbc.Error:
+        flash('No se pudo cargar WhatsApp. Verifique la migración y la conexión SQL.', 'error')
+    response = render_template('admin/whatsapp.html', state=state, sessions=sessions,
+                               messages=messages, sid=sid, installed=installed)
+    from flask import make_response
+    response = make_response(response)
+    response.headers['Cache-Control'] = 'no-store'
+    return response

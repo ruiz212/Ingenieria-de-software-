@@ -175,6 +175,10 @@
     "file": "dist/pages/auth/totp.css",
     "version": "f0e0c7bc4527"
   },
+  "pages/admin/whatsapp": {
+    "file": "dist/pages/admin/whatsapp.css",
+    "version": "accb51080e0c"
+  },
   "motion": {
     "file": "dist/motion.css",
     "version": "8c6cd1fe0f71"

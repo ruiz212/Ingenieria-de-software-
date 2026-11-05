@@ -1,0 +1,2 @@
+# Optional worker dependencies. Install after the application's requirements.lock.
+neonize==0.10.0

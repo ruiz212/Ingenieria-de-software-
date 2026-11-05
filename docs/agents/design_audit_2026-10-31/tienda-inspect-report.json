@@ -1,0 +1,1842 @@
+{
+ "url": "__design_audit_tienda.html",
+ "at": "2026-10-31T22:08:02.675Z",
+ "allow": [],
+ "viewports": [
+  {
+   "width": 1440,
+   "height": 900,
+   "load": "load",
+   "screens": 2,
+   "filled": [
+    0.79,
+    0.79
+   ],
+   "motion": {
+    "elements": 2,
+    "css": 2,
+    "transitions": 0,
+    "scripted": 0,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "page": {
+     "height": 1550,
+     "screens": 1.7,
+     "words": 311,
+     "img": 2,
+     "video": 0,
+     "canvas": 0,
+     "svg": 7,
+     "sections": 2,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 1,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [
+      "🍞",
+      "🎂",
+      "☕",
+      "🍪"
+     ]
+    },
+    "hero": {
+     "text": "🍞",
+     "words": 1,
+     "chars": 2,
+     "lines": 1,
+     "size": 54.4,
+     "vw": 3.8,
+     "font": "Plus Jakarta Sans",
+     "weight": 400,
+     "tracking": 0,
+     "leading": 1.2,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "left",
+     "widthRatio": 0.2,
+     "top": 622,
+     "tag": "div",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Panadería Amada",
+     "words": 2,
+     "lines": 1,
+     "size": 29.6,
+     "font": "Cormorant Garamond"
+    },
+    "headings": [
+     {
+      "text": "Panadería Amada",
+      "words": 2,
+      "chars": 15,
+      "lines": 1,
+      "size": 29.6,
+      "vw": 2.1,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": -0.01,
+      "leading": 1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.2,
+      "top": 48,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Pan de corteza dorada y pastelería hecha a mano.",
+      "words": 9,
+      "chars": 48,
+      "lines": 2,
+      "size": 46.1,
+      "vw": 3.2,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.08,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.45,
+      "top": 205,
+      "mixedFonts": [
+       "Cormorant Garamond",
+       "Cormorant Garamond italic"
+      ],
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "🍞",
+      "words": 1,
+      "chars": 2,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 3.8,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.2,
+      "top": 622,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "🎂",
+      "words": 1,
+      "chars": 2,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 3.8,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.2,
+      "top": 622,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "☕",
+      "words": 1,
+      "chars": 1,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 3.8,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.2,
+      "top": 622,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "🍪",
+      "words": 1,
+      "chars": 2,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 3.8,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.2,
+      "top": 622,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "¿Celebras un evento, boda o cumpleaños especial?",
+      "words": 7,
+      "chars": 48,
+      "lines": 1,
+      "size": 29.6,
+      "vw": 2.1,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.65,
+      "top": 1105,
+      "tag": "h3",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 7,
+     "maxLines": 2,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": 7,
+     "mixedFontHeadings": 1
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Plus Jakarta Sans",
+       "share": 0.82,
+       "mono": false
+      },
+      {
+       "family": "Cormorant Garamond",
+       "share": 0.16,
+       "mono": false
+      },
+      {
+       "family": "JetBrains Mono",
+       "share": 0.03,
+       "mono": true
+      }
+     ],
+     "familyCount": 3,
+     "sizes": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      18,
+      20,
+      22,
+      30,
+      46,
+      54
+     ],
+     "sizeCount": 12,
+     "notLoaded": [],
+     "body": {
+      "font": "Plus Jakarta Sans",
+      "size": 14.4,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 7.4
+     },
+     "measureChars": 78,
+     "max": {
+      "size": 54.4,
+      "vw": 3.8,
+      "font": "Plus Jakarta Sans",
+      "text": "🍞"
+     },
+     "monoShare": 0.03,
+     "monoProseShare": 0.03,
+     "monoFamilies": [
+      "JetBrains Mono"
+     ],
+     "monoSamples": [
+      "C$0.00",
+      "4",
+      "1",
+      "1",
+      "1",
+      "1"
+     ],
+     "microLabels": 7,
+     "microLabelShare": 0.064,
+     "microSamples": [
+      "Vitrina del Día & Encargos Especiales",
+      "Pan dulce",
+      "Personalizable",
+      "Reposteria",
+      "Bebidas",
+      "Galletas"
+     ],
+     "upperShare": 0.09,
+     "centerShare": 0.12,
+     "smallText": 16
+    },
+    "eyebrows": [
+     {
+      "text": "Vitrina del Día & Encargos Especiales",
+      "above": "Pan de corteza dorada y pastelería hecha",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.2,
+      "top": 179
+     },
+     {
+      "text": "4 piezas",
+      "above": "🍪",
+      "upper": false,
+      "tracked": false,
+      "mono": false,
+      "pill": false,
+      "size": 12.8,
+      "top": 546
+     },
+     {
+      "text": "Servicio de Pastelería a Medida",
+      "above": "¿Celebras un evento, boda o cumpleaños e",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 10.9,
+      "top": 1087
+     }
+    ],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#faf5ee",
+     "bodyBgHsl": {
+      "h": 35,
+      "s": 0.55,
+      "l": 0.96
+     },
+     "dark": false,
+     "sectionBgs": [
+      {
+       "color": "#2b1810",
+       "top": 134,
+       "hsl": {
+        "h": 18,
+        "s": 0.46,
+        "l": 0.12
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#d9cabc",
+       "share": 0.23
+      },
+      {
+       "color": "#5c4338",
+       "share": 0.22
+      },
+      {
+       "color": "#22140e",
+       "share": 0.13
+      },
+      {
+       "color": "#f6e6c8",
+       "share": 0.09
+      },
+      {
+       "color": "#9e8c7e",
+       "share": 0.07
+      }
+     ],
+     "button": {
+      "bg": "#fffdf9",
+      "hsl": {
+       "h": 40,
+       "s": 1,
+       "l": 0.99
+      },
+      "fg": "#22140e"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 10,
+     "inHero": 4,
+     "radius": "pill",
+     "height": 44,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Pedido 0 C$0.00",
+      "Cotizar Pastel a Medida",
+      "Explorar la Vitrina"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 6,
+     "shadowOverlay": 1,
+     "shadowSamples": [
+      "div.showcase-grid → rgba(34, 20, 14, 0.1) 0px 16px 36px 0px",
+      "div.showcase-stamp-card → rgba(0, 0, 0, 0.2) 0px 10px 24px 0px",
+      "article.store-product-card.filterable-product → rgba(78, 42, 30, 0.043) 0px 6px 24px 0px",
+      "article.store-product-card.filterable-product → rgba(78, 42, 30, 0.043) 0px 6px 24px 0px"
+     ],
+     "gradients": 5,
+     "scrims": 0,
+     "gradientSamples": [
+      "div.showcase-copy → radial-gradient(circle at 0% 0%, rgba(198, 134, 40, 0.15), rgba(0, 0, 0, 0) 55%), none",
+      "div.product-visual.cat-pan-dulce → linear-gradient(145deg, rgb(243, 223, 193), rgb(230, 195, 142))",
+      "div.product-visual.cat-reposteria → linear-gradient(145deg, rgb(242, 215, 213), rgb(221, 164, 158))",
+      "div.product-visual.cat-bebidas → linear-gradient(145deg, rgb(220, 231, 235), rgb(169, 196, 206))"
+     ],
+     "gradientText": 0,
+     "hairlines": 8,
+     "hairlineSamples": [
+      "div.utility-bar 1440px",
+      "nav.tienda-nav.app-header 1440px",
+      "div.department-bar 1296px",
+      "div.card-price-add 302px",
+      "div.card-price-add 302px"
+     ],
+     "outlinedBoxes": 7,
+     "dashed": 0,
+     "blurred": 1,
+     "roundedBoxes": 7,
+     "boxRadius": 24,
+     "squareMedia": 0,
+     "roundedMedia": 1,
+     "mediaRadius": 32,
+     "textShadow": 0,
+     "cardRows": [
+      {
+       "count": 4,
+       "iconTopped": false,
+       "rounded": true,
+       "top": 611
+      }
+     ]
+    },
+    "heroMedia": [
+     {
+      "type": "bg-image",
+      "ratio": 0.16
+     }
+    ],
+    "nav": {
+     "links": 1,
+     "fixed": true,
+     "height": 77,
+     "floatingPill": false,
+     "blur": true
+    },
+    "fontsLoaded": [
+     "cormorant garamond",
+     "jetbrains mono",
+     "plus jakarta sans"
+    ]
+   },
+   "consoleErrors": []
+  },
+  {
+   "width": 768,
+   "height": 1024,
+   "load": "load",
+   "screens": 3,
+   "filled": [
+    0.69,
+    0.86,
+    0.85
+   ],
+   "motion": {
+    "elements": 2,
+    "css": 2,
+    "transitions": 0,
+    "scripted": 0,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "page": {
+     "height": 2630,
+     "screens": 2.6,
+     "words": 311,
+     "img": 2,
+     "video": 0,
+     "canvas": 0,
+     "svg": 7,
+     "sections": 2,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 1,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [
+      "🍞",
+      "🎂",
+      "☕",
+      "🍪"
+     ]
+    },
+    "hero": {
+     "text": "🍞",
+     "words": 1,
+     "chars": 2,
+     "lines": 1,
+     "size": 54.4,
+     "vw": 7.1,
+     "font": "Plus Jakarta Sans",
+     "weight": 400,
+     "tracking": 0,
+     "leading": 1.2,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "left",
+     "widthRatio": 0.41,
+     "top": 942,
+     "tag": "div",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Panadería Amada",
+     "words": 2,
+     "lines": 1,
+     "size": 29.6,
+     "font": "Cormorant Garamond"
+    },
+    "headings": [
+     {
+      "text": "Panadería Amada",
+      "words": 2,
+      "chars": 15,
+      "lines": 1,
+      "size": 29.6,
+      "vw": 3.9,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": -0.01,
+      "leading": 1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.38,
+      "top": 80,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Pan de corteza dorada y pastelería hecha a mano.",
+      "words": 9,
+      "chars": 48,
+      "lines": 1,
+      "size": 32,
+      "vw": 4.2,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.08,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.77,
+      "top": 311,
+      "mixedFonts": [
+       "Cormorant Garamond",
+       "Cormorant Garamond italic"
+      ],
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "🍞",
+      "words": 1,
+      "chars": 2,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 7.1,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.41,
+      "top": 942,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "🎂",
+      "words": 1,
+      "chars": 2,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 7.1,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.41,
+      "top": 942,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "☕",
+      "words": 1,
+      "chars": 1,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 7.1,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.41,
+      "top": 1363,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "🍪",
+      "words": 1,
+      "chars": 2,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 7.1,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.41,
+      "top": 1363,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "¿Celebras un evento, boda o cumpleaños especial?",
+      "words": 7,
+      "chars": 48,
+      "lines": 1,
+      "size": 29.6,
+      "vw": 3.9,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.82,
+      "top": 1847,
+      "tag": "h3",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 7,
+     "maxLines": 1,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": 2,
+     "mixedFontHeadings": 1
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Plus Jakarta Sans",
+       "share": 0.82,
+       "mono": false
+      },
+      {
+       "family": "Cormorant Garamond",
+       "share": 0.16,
+       "mono": false
+      },
+      {
+       "family": "JetBrains Mono",
+       "share": 0.03,
+       "mono": true
+      }
+     ],
+     "familyCount": 3,
+     "sizes": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      18,
+      20,
+      22,
+      30,
+      32,
+      54
+     ],
+     "sizeCount": 12,
+     "notLoaded": [],
+     "body": {
+      "font": "Plus Jakarta Sans",
+      "size": 14.4,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 7.4
+     },
+     "measureChars": 104,
+     "max": {
+      "size": 54.4,
+      "vw": 7.1,
+      "font": "Plus Jakarta Sans",
+      "text": "🍞"
+     },
+     "monoShare": 0.03,
+     "monoProseShare": 0.03,
+     "monoFamilies": [
+      "JetBrains Mono"
+     ],
+     "monoSamples": [
+      "C$0.00",
+      "4",
+      "1",
+      "1",
+      "1",
+      "1"
+     ],
+     "microLabels": 7,
+     "microLabelShare": 0.064,
+     "microSamples": [
+      "Vitrina del Día & Encargos Especiales",
+      "Pan dulce",
+      "Personalizable",
+      "Reposteria",
+      "Bebidas",
+      "Galletas"
+     ],
+     "upperShare": 0.09,
+     "centerShare": 0.12,
+     "smallText": 16
+    },
+    "eyebrows": [
+     {
+      "text": "Vitrina del Día & Encargos Especiales",
+      "above": "Pan de corteza dorada y pastelería hecha",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.2,
+      "top": 285
+     },
+     {
+      "text": "4 piezas",
+      "above": "🍞",
+      "upper": false,
+      "tracked": false,
+      "mono": false,
+      "pill": false,
+      "size": 12.8,
+      "top": 867
+     },
+     {
+      "text": "C$35.00",
+      "above": "☕",
+      "upper": false,
+      "tracked": false,
+      "mono": true,
+      "pill": false,
+      "size": 17.6,
+      "top": 1274
+     },
+     {
+      "text": "C$450.00",
+      "above": "🍪",
+      "upper": false,
+      "tracked": false,
+      "mono": true,
+      "pill": false,
+      "size": 17.6,
+      "top": 1274
+     },
+     {
+      "text": "Servicio de Pastelería a Medida",
+      "above": "¿Celebras un evento, boda o cumpleaños e",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 10.9,
+      "top": 1829
+     }
+    ],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#faf5ee",
+     "bodyBgHsl": {
+      "h": 35,
+      "s": 0.55,
+      "l": 0.96
+     },
+     "dark": false,
+     "sectionBgs": [
+      {
+       "color": "#2b1810",
+       "top": 240,
+       "hsl": {
+        "h": 18,
+        "s": 0.46,
+        "l": 0.12
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#d9cabc",
+       "share": 0.23
+      },
+      {
+       "color": "#5c4338",
+       "share": 0.22
+      },
+      {
+       "color": "#22140e",
+       "share": 0.13
+      },
+      {
+       "color": "#f6e6c8",
+       "share": 0.09
+      },
+      {
+       "color": "#9e8c7e",
+       "share": 0.07
+      }
+     ],
+     "button": {
+      "bg": "#fffdf9",
+      "hsl": {
+       "h": 40,
+       "s": 1,
+       "l": 0.99
+      },
+      "fg": "#22140e"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 10,
+     "inHero": 4,
+     "radius": "pill",
+     "height": 44,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Pedido 0 C$0.00",
+      "Cotizar Pastel a Medida",
+      "Explorar la Vitrina"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 6,
+     "shadowOverlay": 1,
+     "shadowSamples": [
+      "div.showcase-grid → rgba(34, 20, 14, 0.1) 0px 16px 36px 0px",
+      "div.showcase-stamp-card → rgba(0, 0, 0, 0.2) 0px 10px 24px 0px",
+      "article.store-product-card.filterable-product → rgba(78, 42, 30, 0.043) 0px 6px 24px 0px",
+      "article.store-product-card.filterable-product → rgba(78, 42, 30, 0.043) 0px 6px 24px 0px"
+     ],
+     "gradients": 5,
+     "scrims": 0,
+     "gradientSamples": [
+      "div.showcase-copy → radial-gradient(circle at 0% 0%, rgba(198, 134, 40, 0.15), rgba(0, 0, 0, 0) 55%), none",
+      "div.product-visual.cat-pan-dulce → linear-gradient(145deg, rgb(243, 223, 193), rgb(230, 195, 142))",
+      "div.product-visual.cat-reposteria → linear-gradient(145deg, rgb(242, 215, 213), rgb(221, 164, 158))",
+      "div.product-visual.cat-bebidas → linear-gradient(145deg, rgb(220, 231, 235), rgb(169, 196, 206))"
+     ],
+     "gradientText": 0,
+     "hairlines": 8,
+     "hairlineSamples": [
+      "div.utility-bar 768px",
+      "nav.tienda-nav.app-header 768px",
+      "div.department-bar 704px",
+      "div.card-price-add 337px",
+      "div.card-price-add 337px"
+     ],
+     "outlinedBoxes": 7,
+     "dashed": 0,
+     "blurred": 1,
+     "roundedBoxes": 7,
+     "boxRadius": 24,
+     "squareMedia": 0,
+     "roundedMedia": 1,
+     "mediaRadius": 32,
+     "textShadow": 0,
+     "cardRows": [
+      {
+       "count": 4,
+       "iconTopped": false,
+       "rounded": true,
+       "top": 931
+      }
+     ]
+    },
+    "heroMedia": [
+     {
+      "type": "bg-image",
+      "ratio": 0.19
+     }
+    ],
+    "nav": {
+     "links": 1,
+     "fixed": true,
+     "height": 151,
+     "floatingPill": false,
+     "blur": true
+    },
+    "fontsLoaded": [
+     "cormorant garamond",
+     "jetbrains mono",
+     "plus jakarta sans"
+    ]
+   },
+   "consoleErrors": []
+  },
+  {
+   "width": 390,
+   "height": 844,
+   "load": "load",
+   "screens": 4,
+   "filled": [
+    0.94,
+    0.85,
+    0.88,
+    0.93
+   ],
+   "motion": {
+    "elements": 2,
+    "css": 2,
+    "transitions": 0,
+    "scripted": 0,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "page": {
+     "height": 2988,
+     "screens": 3.5,
+     "words": 311,
+     "img": 2,
+     "video": 0,
+     "canvas": 0,
+     "svg": 7,
+     "sections": 2,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 1,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 1,
+     "brokenImages": [],
+     "emoji": [
+      "🍞",
+      "🎂",
+      "☕",
+      "🍪"
+     ]
+    },
+    "hero": {
+     "text": "Pan de corteza dorada y pastelería hecha a mano.",
+     "words": 9,
+     "chars": 48,
+     "lines": 2,
+     "size": 32,
+     "vw": 8.2,
+     "font": "Cormorant Garamond",
+     "weight": 700,
+     "tracking": 0,
+     "leading": 1.08,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "center",
+     "widthRatio": 0.79,
+     "top": 367,
+     "mixedFonts": [
+      "Cormorant Garamond",
+      "Cormorant Garamond italic"
+     ],
+     "tag": "h2",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Panadería Amada",
+     "words": 2,
+     "lines": 1,
+     "size": 27.2,
+     "font": "Cormorant Garamond"
+    },
+    "headings": [
+     {
+      "text": "Panadería Amada",
+      "words": 2,
+      "chars": 15,
+      "lines": 1,
+      "size": 27.2,
+      "vw": 7,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": -0.01,
+      "leading": 1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.62,
+      "top": 113,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Pan de corteza dorada y pastelería hecha a mano.",
+      "words": 9,
+      "chars": 48,
+      "lines": 2,
+      "size": 32,
+      "vw": 8.2,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.08,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.79,
+      "top": 367,
+      "mixedFonts": [
+       "Cormorant Garamond",
+       "Cormorant Garamond italic"
+      ],
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "🍞",
+      "words": 1,
+      "chars": 2,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 13.9,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.38,
+      "top": 1103,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "🎂",
+      "words": 1,
+      "chars": 2,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 13.9,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.38,
+      "top": 1103,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "Pan de mantequilla",
+      "words": 3,
+      "chars": 18,
+      "lines": 2,
+      "size": 22.4,
+      "vw": 5.7,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.18,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.37,
+      "top": 1279,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "Pastel de chocolate",
+      "words": 3,
+      "chars": 19,
+      "lines": 2,
+      "size": 22.4,
+      "vw": 5.7,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.18,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.37,
+      "top": 1279,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "☕",
+      "words": 1,
+      "chars": 1,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 13.9,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.38,
+      "top": 1512,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "🍪",
+      "words": 1,
+      "chars": 2,
+      "lines": 1,
+      "size": 54.4,
+      "vw": 13.9,
+      "font": "Plus Jakarta Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.38,
+      "top": 1512,
+      "tag": "div",
+      "kind": "heading"
+     },
+     {
+      "text": "Café de la casa",
+      "words": 4,
+      "chars": 15,
+      "lines": 1,
+      "size": 22.4,
+      "vw": 5.7,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.18,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.37,
+      "top": 1687,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "Galletas artesanales",
+      "words": 2,
+      "chars": 20,
+      "lines": 2,
+      "size": 22.4,
+      "vw": 5.7,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.18,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.37,
+      "top": 1687,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "¿Celebras un evento, boda o cumpleaños especial?",
+      "words": 7,
+      "chars": 48,
+      "lines": 3,
+      "size": 29.6,
+      "vw": 7.6,
+      "font": "Cormorant Garamond",
+      "weight": 700,
+      "tracking": 0,
+      "leading": 1.2,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.73,
+      "top": 1994,
+      "tag": "h3",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 11,
+     "maxLines": 3,
+     "over2Lines": 1,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": 2,
+     "mixedFontHeadings": 1
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Plus Jakarta Sans",
+       "share": 0.82,
+       "mono": false
+      },
+      {
+       "family": "Cormorant Garamond",
+       "share": 0.16,
+       "mono": false
+      },
+      {
+       "family": "JetBrains Mono",
+       "share": 0.03,
+       "mono": true
+      }
+     ],
+     "familyCount": 3,
+     "sizes": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      18,
+      20,
+      22,
+      27,
+      30,
+      32,
+      54
+     ],
+     "sizeCount": 14,
+     "notLoaded": [],
+     "body": {
+      "font": "Plus Jakarta Sans",
+      "size": 14.4,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 7.4
+     },
+     "measureChars": 48,
+     "max": {
+      "size": 54.4,
+      "vw": 13.9,
+      "font": "Plus Jakarta Sans",
+      "text": "🍞"
+     },
+     "monoShare": 0.03,
+     "monoProseShare": 0.03,
+     "monoFamilies": [
+      "JetBrains Mono"
+     ],
+     "monoSamples": [
+      "C$0.00",
+      "4",
+      "1",
+      "1",
+      "1",
+      "1"
+     ],
+     "microLabels": 7,
+     "microLabelShare": 0.064,
+     "microSamples": [
+      "Vitrina del Día & Encargos Especiales",
+      "Pan dulce",
+      "Personalizable",
+      "Reposteria",
+      "Bebidas",
+      "Galletas"
+     ],
+     "upperShare": 0.09,
+     "centerShare": 0.12,
+     "smallText": 16
+    },
+    "eyebrows": [
+     {
+      "text": "Vitrina del Día & Encargos Especiales",
+      "above": "Pan de corteza dorada y pastelería hecha",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 11.2,
+      "top": 341
+     },
+     {
+      "text": "4 piezas",
+      "above": "🍞",
+      "upper": false,
+      "tracked": false,
+      "mono": false,
+      "pill": false,
+      "size": 12.8,
+      "top": 1028
+     },
+     {
+      "text": "Pan dulce",
+      "above": "Pan de mantequilla",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 10.6,
+      "top": 1262
+     },
+     {
+      "text": "Reposteria",
+      "above": "Pastel de chocolate",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 10.6,
+      "top": 1262
+     },
+     {
+      "text": "Bebidas",
+      "above": "Café de la casa",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 10.6,
+      "top": 1670
+     },
+     {
+      "text": "Galletas",
+      "above": "Galletas artesanales",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 10.6,
+      "top": 1670
+     },
+     {
+      "text": "Servicio de Pastelería a Medida",
+      "above": "¿Celebras un evento, boda o cumpleaños e",
+      "upper": true,
+      "tracked": true,
+      "mono": false,
+      "pill": false,
+      "size": 10.9,
+      "top": 1976
+     }
+    ],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#faf5ee",
+     "bodyBgHsl": {
+      "h": 35,
+      "s": 0.55,
+      "l": 0.96
+     },
+     "dark": false,
+     "sectionBgs": [
+      {
+       "color": "#2b1810",
+       "top": 308,
+       "hsl": {
+        "h": 18,
+        "s": 0.46,
+        "l": 0.12
+       }
+      },
+      {
+       "color": "#f1e7d8",
+       "top": 1943,
+       "hsl": {
+        "h": 36,
+        "s": 0.47,
+        "l": 0.9
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#d9cabc",
+       "share": 0.23
+      },
+      {
+       "color": "#5c4338",
+       "share": 0.22
+      },
+      {
+       "color": "#22140e",
+       "share": 0.13
+      },
+      {
+       "color": "#f6e6c8",
+       "share": 0.09
+      },
+      {
+       "color": "#9e8c7e",
+       "share": 0.07
+      }
+     ],
+     "button": {
+      "bg": "#fffdf9",
+      "hsl": {
+       "h": 40,
+       "s": 1,
+       "l": 0.99
+      },
+      "fg": "#22140e"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 10,
+     "inHero": 4,
+     "radius": "pill",
+     "height": 44,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Pedido 0 C$0.00",
+      "Cotizar Pastel a Medida",
+      "Explorar la Vitrina"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 6,
+     "shadowOverlay": 1,
+     "shadowSamples": [
+      "div.showcase-grid → rgba(34, 20, 14, 0.1) 0px 16px 36px 0px",
+      "div.showcase-stamp-card → rgba(0, 0, 0, 0.2) 0px 10px 24px 0px",
+      "article.store-product-card.filterable-product → rgba(78, 42, 30, 0.043) 0px 6px 24px 0px",
+      "article.store-product-card.filterable-product → rgba(78, 42, 30, 0.043) 0px 6px 24px 0px"
+     ],
+     "gradients": 5,
+     "scrims": 0,
+     "gradientSamples": [
+      "div.showcase-copy → radial-gradient(circle at 0% 0%, rgba(198, 134, 40, 0.15), rgba(0, 0, 0, 0) 55%), none",
+      "div.product-visual.cat-pan-dulce → linear-gradient(145deg, rgb(243, 223, 193), rgb(230, 195, 142))",
+      "div.product-visual.cat-reposteria → linear-gradient(145deg, rgb(242, 215, 213), rgb(221, 164, 158))",
+      "div.product-visual.cat-bebidas → linear-gradient(145deg, rgb(220, 231, 235), rgb(169, 196, 206))"
+     ],
+     "gradientText": 0,
+     "hairlines": 4,
+     "hairlineSamples": [
+      "div.utility-bar 390px",
+      "nav.tienda-nav.app-header 390px",
+      "div.department-bar 358px",
+      "div.tienda-footer-grid 326px"
+     ],
+     "outlinedBoxes": 8,
+     "dashed": 0,
+     "blurred": 1,
+     "roundedBoxes": 8,
+     "boxRadius": 20,
+     "squareMedia": 0,
+     "roundedMedia": 1,
+     "mediaRadius": 32,
+     "textShadow": 0,
+     "cardRows": [
+      {
+       "count": 4,
+       "iconTopped": false,
+       "rounded": true,
+       "top": 1092
+      }
+     ]
+    },
+    "heroMedia": [
+     {
+      "type": "bg-image",
+      "ratio": 0.15
+     }
+    ],
+    "nav": {
+     "links": 1,
+     "fixed": true,
+     "height": 187,
+     "floatingPill": false,
+     "blur": true
+    },
+    "fontsLoaded": [
+     "cormorant garamond",
+     "jetbrains mono",
+     "plus jakarta sans"
+    ]
+   },
+   "consoleErrors": []
+  }
+ ],
+ "findings": [
+  {
+   "level": "WARN",
+   "id": "mixed-font-headline",
+   "width": 1440,
+   "message": "1 headline(s) switch typeface or to italic mid-line (the \"one italic serif word\" move).",
+   "fix": "Set the whole headline in one face. Emphasis comes from the words.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "eyebrow",
+   "width": 1440,
+   "message": "3 eyebrow/kicker label(s) above headings: \"Vitrina del Día & Encargos Especiales\" above \"Pan de corteza dorada y pastelería hecha\"; \"4 piezas\" above \"🍪\"; \"Servicio de Pastelería a Medida\" above \"¿Celebras un evento, boda o cumpleaños e\"",
+   "fix": "Delete them. If the label carried real information, fold it into the headline or the supporting sentence.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "mono",
+   "width": 1440,
+   "message": "Monospace type outside code: JetBrains Mono — e.g. \"C$0.00\", \"4\", \"1\", \"1\"",
+   "fix": "Set it in the text face. Monospace is for literal code inside <pre>/<code> only.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "micro-label",
+   "width": 1440,
+   "message": "7 tiny uppercase letter-spaced labels (e.g. \"Vitrina del Día & Encargos Especiales\", \"Pan dulce\", \"Personalizable\", \"Reposteria\").",
+   "fix": "Use sentence-case text at a readable size, or delete the label.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "emoji",
+   "width": 1440,
+   "message": "Emoji in the page: 🍞 🎂 ☕ 🍪",
+   "fix": "Remove. Use words or real imagery.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "gradient",
+   "width": 1440,
+   "message": "5 gradient fill(s): div.showcase-copy → radial-gradient(circle at 0% 0%, rgba(198, 134, 40, 0.15), rgba(0, 0, 0, 0) 55%), none | div.product-visual.cat-pan-dulce → linear-gradient(145deg, rgb(243, 223, 193), rgb(230, 195, 142)) | div.product-visual.cat-reposteria → linear-gradient(145deg, rgb(242, 215, 213), rgb(221, 164, 158))",
+   "fix": "Use a flat colour or a real image. The only gradient allowed by default is a neutral scrim over a photo for legibility.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "shadow",
+   "width": 1440,
+   "message": "6 box-shadow(s) on elements at rest: div.showcase-grid → rgba(34, 20, 14, 0.1) 0px 16px 36px 0px | div.showcase-stamp-card → rgba(0, 0, 0, 0.2) 0px 10px 24px 0px | article.store-product-card.filterable-product → rgba(78, 42, 30, 0.043) 0px 6px 24px 0px",
+   "fix": "Remove. Separate surfaces with a tone step or space. Shadows are for things that really float (menus, dialogs, sticky bars).",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "hairline",
+   "width": 1440,
+   "message": "8 thin rule(s)/divider line(s): div.utility-bar 1440px | nav.tienda-nav.app-header 1440px | div.department-bar 1296px | div.card-price-add 302px",
+   "fix": "Delete. Separate with space, a tone change, or scale. Lines are only for real tables and form fields.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "outlined-box",
+   "width": 1440,
+   "message": "7 boxes drawn with a 1px outline.",
+   "fix": "Define a surface by its fill (one tone step from the page) or leave the content unboxed.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "palette-cream",
+   "width": 1440,
+   "message": "Yellow-cream background (page background #faf5ee, button #fffdf9).",
+   "fix": "Use the drawn palette. If you want warmth, take a low-chroma stone or bone, not a yellow cream.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "font-count",
+   "width": 1440,
+   "message": "3 typefaces in use (Plus Jakarta Sans, Cormorant Garamond, JetBrains Mono).",
+   "fix": "Two at most.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "size-count",
+   "width": 1440,
+   "message": "12 different font sizes (10, 11, 12, 13, 14, 15, 18, 20, 22, 30, 46, 54).",
+   "fix": "A page needs about five: display, heading, lead, body, small.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "body-size",
+   "width": 1440,
+   "message": "Body text is 14.4px (the size most of the running text is set in).",
+   "fix": "Body copy 16–20px. Map small sizes from blueprints onto your body step.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "few-pictures",
+   "width": 1440,
+   "message": "Only 1 picture(s) on the page (1 photographs, footage or raster images, 0 interface fragments). Drawings in SVG do not count.",
+   "fix": "Find real pictures of the subject's world with scripts/assets.mjs (photographs, archival images, maps, engravings, footage), download them to assets/ and give them room: a hero picture, one per section that has a subject, a full-width band. At least four, usually six to twelve."
+  },
+  {
+   "level": "WARN",
+   "id": "no-footage",
+   "width": 1440,
+   "message": "No video anywhere on the page.",
+   "fix": "Look for one honest clip with scripts/assets.mjs --video (the place, the material, the process) and use it as a muted loop with a poster frame. Defend its absence only if no clip fits the subject."
+  },
+  {
+   "level": "FAIL",
+   "id": "small-text",
+   "width": 1440,
+   "message": "16 text blocks under 13px.",
+   "fix": "Nothing meant to be read goes below 13px.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "FAIL",
+   "id": "focal-point",
+   "width": 1440,
+   "message": "The first screen has no dominant element: the largest type is 54.4px (3.8vw) and no single picture holds a third of the viewport.",
+   "fix": "Make one thing lead: the headline at display size, or one large picture. A grid of many small pictures is not one thing; in blind tests jurors marked a first screen without a headline down every time. On the strongest studied sites the largest type has a median of 8.4vw."
+  },
+  {
+   "level": "FAIL",
+   "id": "still-page",
+   "width": 1440,
+   "message": "Only 2 element(s) moved while the page loaded and scrolled.",
+   "fix": "Build the motion layer (SKILL.md step 9, references/motion.md): the signature move, an entrance for the parts of every section, feedback on every control, and one moving picture. Transform and opacity only, with a reduced-motion fallback."
+  },
+  {
+   "level": "WARN",
+   "id": "measure",
+   "width": 768,
+   "message": "Longest paragraph runs about 104 characters per line.",
+   "fix": "Cap paragraphs at 45–75 characters (max-width: 60ch)."
+  },
+  {
+   "level": "FAIL",
+   "id": "headline-lines",
+   "width": 390,
+   "message": "1 headline(s) wrap past two lines at 390px: \"¿Celebras un evento, boda o cumpleaños especial?\" → 3 lines (7 words, 29.6px)",
+   "fix": "Cut words first (a headline is a title, not a sentence). Then give it a wider measure. Lower the size only as a last resort and never below the scale you chose. A real statement paragraph belongs in a <p> or <blockquote> at 24px or less."
+  },
+  {
+   "level": "WARN",
+   "id": "side-scroll",
+   "width": 390,
+   "message": "1 row(s) scroll sideways with content past their edge.",
+   "fix": "Jurors and most visitors read a row cut at the edge as clipped, not as scrollable. Wrap it onto more lines, or end it inside the grid."
+  }
+ ],
+ "images": [
+  {
+   "viewport": "desktop",
+   "width": 1440,
+   "fold": "C:\\Ingenieria de software\\panaderia_amada\\.taste-skill\\inspect\\desktop-fold.jpg",
+   "pages": [
+    "C:\\Ingenieria de software\\panaderia_amada\\.taste-skill\\inspect\\desktop-page-01.jpg"
+   ]
+  },
+  {
+   "viewport": "tablet",
+   "width": 768,
+   "fold": "C:\\Ingenieria de software\\panaderia_amada\\.taste-skill\\inspect\\tablet-fold.jpg",
+   "pages": [
+    "C:\\Ingenieria de software\\panaderia_amada\\.taste-skill\\inspect\\tablet-page-01.jpg"
+   ]
+  },
+  {
+   "viewport": "mobile",
+   "width": 390,
+   "fold": "C:\\Ingenieria de software\\panaderia_amada\\.taste-skill\\inspect\\mobile-fold.jpg",
+   "pages": [
+    "C:\\Ingenieria de software\\panaderia_amada\\.taste-skill\\inspect\\mobile-page-01.jpg"
+   ]
+  }
+ ]
+}

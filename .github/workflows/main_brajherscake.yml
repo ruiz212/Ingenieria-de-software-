@@ -31,36 +31,46 @@ jobs:
           python -m venv antenv
           source antenv/bin/activate
           pip install -r requirements.txt
-                
-      # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size. 
+
+      - name: Verify application and build deployment package
+        env:
+          PYTHON_DOTENV_DISABLED: '1'
+          TEST_DB_CONNECTION_STRING: ''
+        run: |
+          source antenv/bin/activate
+          pip install -r requirements-dev.txt
+          python scripts/build_css.py --check
+          python -m pytest -q
+          python scripts/build_deployment.py --output deployment.zip
+
+      # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size.
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: |
-            .
-            !antenv/
+          path: deployment.zip
 
       # 🚫 Opting Out of Oryx Build
       # If you prefer to disable the Oryx build process during deployment, follow these steps:
       # 1. Remove the SCM_DO_BUILD_DURING_DEPLOYMENT app setting from your Azure App Service Environment variables.
       # 2. Refer to sample workflows for alternative deployment strategies: https://github.com/Azure/actions-workflow-samples/tree/master/AppService
-      
+
 
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    
+
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: python-app
-      
+
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
           app-name: 'BrajhersCake'
           slot-name: 'Production'
+          package: deployment.zip
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_3B5DD3310F66485EA1C13490E7A426FB }}

@@ -762,6 +762,8 @@ def cotizar_pedido(id):
         )
         if cursor.rowcount != 1:
             return jsonify(error='Cotización inexistente o ya procesada.'), 409
+        from app.whatsapp.repository import notify
+        notify(cursor, 'cotizacion', id)
         conn.commit()
         return jsonify({'mensaje': 'Cotización enviada'}), 200
     except Exception as e:

@@ -19,3 +19,5 @@ from app.admin import (
     routes_dgi,
     manual_admi
 )  # noqa: E402, F401
+
+from app.whatsapp import routes as whatsapp_routes  # noqa: E402, F401
