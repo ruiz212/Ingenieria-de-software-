@@ -156,6 +156,9 @@
   "pages/auth/totp": [
     "pages/auth/totp.css"
   ],
+  "pages/admin/whatsapp": [
+    "pages/admin/whatsapp.css"
+  ],
   "motion": [
     "base/_motion-tokens.css",
     "components/_motion.css"

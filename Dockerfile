@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     libxcb1 \
     libgl1 \
     libglib2.0-0 \
+    libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar Microsoft ODBC Driver 18 for SQL Server
@@ -25,7 +26,7 @@ RUN curl -fsSLo /tmp/packages-microsoft-prod.deb https://packages.microsoft.com/
 WORKDIR /app
 
 # Copiar el archivo de requerimientos e instalarlos
-COPY requirements.txt requirements.lock ./
+COPY requirements.txt requirements.lock requirements-whatsapp.txt ./
 RUN pip install --no-cache-dir -r requirements.lock && pip check
 
 # Copiar el resto del código

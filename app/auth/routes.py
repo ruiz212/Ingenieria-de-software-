@@ -307,16 +307,25 @@ def _clear_totp_session():
 
 def _totp_page(kind, cookie_key, authenticated=False):
     token = session.get(cookie_key)
+    if not token:
+        current_app.logger.warning(
+            'TOTP redirect: partial session missing; session_cookie_present=%s',
+            bool(request.cookies.get(current_app.config.get('SESSION_COOKIE_NAME', 'session'))),
+        )
     pending = auth_challenges.pending_totp(token, kind)
     if not pending:
+        if token:
+            current_app.logger.warning('TOTP redirect: pending challenge unavailable or invalid')
         _clear_totp_session()
         flash('La verificación expiró. Inicia sesión de nuevo.', 'error')
         return redirect(url_for('auth.setup_totp' if authenticated else 'auth.login'))
     user = User.get_by_id(int(pending['Subject']))
     if not user or (authenticated and user.id != current_user.id):
+        current_app.logger.warning('TOTP redirect: challenge user unavailable or session identity changed')
         _clear_totp_session()
         return redirect(url_for('auth.login'))
     if auth_challenges.user_binding(user.totp_secret, user.totp_enabled) != pending['Binding']:
+        current_app.logger.warning('TOTP redirect: authenticator binding changed')
         auth_challenges.revoke(token)
         _clear_totp_session()
         flash('La configuración cambió. Inicia sesión de nuevo.', 'error')

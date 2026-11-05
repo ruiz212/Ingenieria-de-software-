@@ -40,6 +40,24 @@ def registration(**extra):
                 password='a-good-test-password', **extra)
 
 
+def test_customer_login_context_and_next_survive_form_submit(auth_app):
+    page = auth_app.test_client().get('/login?source=cliente&next=/pos')
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert 'Entra a tu cuenta de cliente' in html
+    assert 'action="/login?next=/pos&amp;source=cliente"' in html
+
+
+def test_customer_registration_names_each_step(auth_app):
+    page = auth_app.test_client().get('/cliente/registro')
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert 'aria-label="Pasos del registro"' in html
+    assert 'aria-current="step"' in html
+    assert 'Datos personales' in html
+    assert 'Seguridad</span>' in html
+
+
 def test_registration_rejects_missing_server_sms_verification(auth_app, monkeypatch):
     from app.auth import routes
     writes = []
@@ -400,6 +418,32 @@ def test_totp_existing_authenticator_login_consumes_partial_grant(auth_app, sql_
     assert clone.post('/login/totp', data={'totp_code': pyotp.TOTP(secret).now()}).location.endswith('/login')
     with clone.session_transaction() as cookie:
         assert '_user_id' not in cookie
+
+
+def test_totp_survives_another_local_flask_apps_session_cookie(auth_app, sql_state, monkeypatch):
+    """Applications on localhost share cookie scope even when ports differ."""
+    import pyotp
+    from flask import Flask, session
+    from config import Config
+
+    auth_app.config['SESSION_COOKIE_NAME'] = getattr(Config, 'SESSION_COOKIE_NAME', 'session')
+    sql_state.query('UPDATE Usuarios SET TOTPSecret = ?, TOTPEnabled = 1', pyotp.random_base32())
+    client = auth_app.test_client()
+    assert begin_totp(client, monkeypatch, sql_state).location.endswith('/login/totp')
+
+    other = Flask('unrelated-local-app')
+    other.secret_key = 'independent-test-key'
+
+    @other.get('/')
+    def home():
+        session['other'] = True
+        return 'ok'
+
+    other_client = other.test_client()
+    other_client.get('/')
+    client.set_cookie('session', other_client.get_cookie('session').value)
+
+    assert client.get('/login/totp').status_code == 200
 
 
 def test_existing_local_customer_phone_prevents_duplicate_registration(auth_app, sql_state):

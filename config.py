@@ -14,6 +14,8 @@ class Config:
     # Seguridad de Sesión
     SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
     MAX_CONTENT_LENGTH = 6 * 1024 * 1024
+    # Cookies ignore port numbers; isolate this app from other Flask servers on localhost.
+    SESSION_COOKIE_NAME = 'brajhers_session'
     SESSION_COOKIE_HTTPONLY = True
     # En desarrollo local (HTTP) SECURE debe ser False, pero en prod (HTTPS) debe ser True.
     # Usamos una variable de entorno para que Azure lo fuerce a True.

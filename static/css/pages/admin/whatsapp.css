@@ -1,0 +1,92 @@
+.whatsapp-workspace {
+    max-width: 1200px;
+    margin-inline: auto;
+}
+.whatsapp-workspace header {
+    margin-bottom: 2.5rem;
+}
+.whatsapp-workspace header p {
+    max-width: 70ch;
+    margin-block: .75rem 1.25rem;
+}
+.whatsapp-workspace header .btn {
+    margin-block: .25rem;
+}
+.whatsapp-workspace .row {
+    display: grid;
+    grid-template-columns: minmax(230px, 1fr) minmax(0, 2fr);
+    gap: 2rem;
+    align-items: start;
+}
+.whatsapp-workspace .row > section {
+    width: 100%;
+    min-width: 0;
+}
+.whatsapp-workspace h3 {
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+}
+.whatsapp-workspace .list-group {
+    list-style: none;
+    margin: 0 0 1.5rem;
+    padding: 0;
+}
+.whatsapp-workspace .list-group-item {
+    padding: 1rem;
+    overflow-wrap: anywhere;
+    border: 1px solid var(--border-color, #d8cbc0);
+    border-radius: 10px;
+    margin-bottom: .75rem;
+    background: var(--card-bg, #fffaf5);
+}
+.whatsapp-workspace .list-group-item p {
+    margin-block: .5rem 0;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+.whatsapp-workspace .list-group-item a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: .2em;
+    font-weight: 600;
+}
+.whatsapp-workspace small {
+    display: block;
+    margin-top: .25rem;
+}
+.whatsapp-workspace form {
+    margin-bottom: 1.5rem;
+}
+.whatsapp-workspace label {
+    display: block;
+    margin-bottom: .5rem;
+    font-weight: 600;
+}
+.whatsapp-workspace textarea {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 130px;
+    padding: .875rem;
+    font: inherit;
+    border: 1px solid var(--border-color, #d8cbc0);
+    border-radius: 10px;
+    background: var(--card-bg, #fffaf5);
+    color: inherit;
+    resize: vertical;
+}
+.whatsapp-workspace :focus-visible {
+    outline: 3px solid var(--text-primary, #4d2818);
+    outline-offset: 3px;
+}
+.whatsapp-workspace [aria-current="page"] {
+    text-decoration-thickness: 3px;
+}
+@media (max-width: 800px) {
+    .whatsapp-workspace .row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .whatsapp-workspace header .btn {
+        width: 100%;
+    }
+}

@@ -373,6 +373,8 @@ def actualizar_estado(codigo):
         except Exception as audit_err:
             current_app.logger.warning(f"Auditoría BitacoraFiscal omitida para encargo {codigo}: {audit_err}")
 
+        from app.whatsapp.repository import notify
+        notify(cursor, 'pedido', factura_id)
         conn.commit()
         return jsonify({
             'status': 'success',
