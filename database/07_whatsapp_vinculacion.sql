@@ -12,6 +12,8 @@ IF OBJECT_ID('crm.WhatsAppVinculosAudit') IS NULL
   ID BIGINT IDENTITY PRIMARY KEY, SolicitudID VARCHAR(32) NULL, ActorID INT NULL,
   Accion VARCHAR(20) NOT NULL, Resultado VARCHAR(12) NOT NULL,
   Creado DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());
+IF COL_LENGTH('crm.WhatsAppVinculosAudit','DatosSesion') IS NULL
+ ALTER TABLE crm.WhatsAppVinculosAudit ADD DatosSesion NVARCHAR(MAX) NULL;
 IF OBJECT_ID('crm.WhatsAppAuthIntentos') IS NULL
  CREATE TABLE crm.WhatsAppAuthIntentos(ActorID INT PRIMARY KEY, Inicio DATETIME2 NOT NULL, Intentos INT NOT NULL);
 GO
@@ -55,21 +57,41 @@ BEGIN
  IF @Accion NOT IN ('VINCULAR','DESVINCULAR') OR @Accion IS NULL OR @Revision IS NULL OR @Solicitud IS NULL OR LEN(@Solicitud)<>32
   THROW 52027,'Solicitud de cuenta no válida.',1;
  BEGIN TRANSACTION;
- DECLARE @Actual INT,@Pendiente VARCHAR(12),@Estado VARCHAR(12),@TieneQRValido BIT=0;
+ DECLARE @Actual INT,@Pendiente VARCHAR(12),@Estado VARCHAR(12),@TieneQRValido BIT=0,@WorkerVivo BIT=0,@DesvincularExpirado BIT=0;
  SELECT @Actual=ConnectionRevision,@Pendiente=SolicitudAccion,@Estado=SolicitudEstado,
-  @TieneQRValido=CASE WHEN @Accion='VINCULAR' AND SolicitudEstado='Pendiente' AND SolicitudAccion='VINCULAR'
+  @WorkerVivo=CASE WHEN Heartbeat>DATEADD(second,-30,SYSUTCDATETIME()) THEN 1 ELSE 0 END,
+  @DesvincularExpirado=CASE WHEN SolicitudEnCurso=1 AND (Heartbeat IS NULL OR Heartbeat<DATEADD(second,-25,SYSUTCDATETIME()) OR SolicitadoEn<DATEADD(second,-20,SYSUTCDATETIME())) THEN 1 ELSE 0 END,
+  @TieneQRValido=CASE WHEN @Accion='VINCULAR' AND Vinculado=0
    AND QR IS NOT NULL AND QRExpira>DATEADD(second,15,SYSUTCDATETIME())
    AND Heartbeat>DATEADD(second,-30,SYSUTCDATETIME()) THEN 1 ELSE 0 END
-  FROM crm.WhatsAppControl WITH(UPDLOCK,HOLDLOCK) WHERE ID=1;
+  FROM (
+   SELECT *, CASE WHEN SolicitudEstado='Pendiente' AND SolicitudAccion='DESVINCULAR' THEN 1 ELSE 0 END AS SolicitudEnCurso
+   FROM crm.WhatsAppControl WITH(UPDLOCK,HOLDLOCK) WHERE ID=1
+  ) c;
  IF @Revision<>@Actual THROW 52027,'La conexión cambió. Actualice el panel.',1;
- IF @Estado='Pendiente' AND @Pendiente='DESVINCULAR' AND @Accion='DESVINCULAR'
+ IF @Estado='Pendiente' AND @Pendiente='DESVINCULAR' AND @Accion='DESVINCULAR' AND @DesvincularExpirado=0
  BEGIN
   COMMIT; SELECT * FROM crm.WhatsAppControl WHERE ID=1; RETURN;
+ END;
+ IF @Estado='Pendiente' AND @Pendiente='DESVINCULAR' AND @DesvincularExpirado=1
+ BEGIN
+  DELETE FROM crm.WhatsAppVinculosAudit WHERE Accion='SESION_BACKUP';
+  UPDATE crm.WhatsAppControl SET Vinculado=0,CuentaTelefono=NULL,QR=NULL,QRExpira=NULL,
+   Estado=N'Sin vincular',Activo=0,SolicitudEstado='Completada',SolicitudError=NULL WHERE ID=1;
+  UPDATE crm.WhatsAppSesiones SET Revision=Revision+1,Pendiente=NULL,Avisos=0,Imagen=NULL;
+  UPDATE crm.WhatsAppInbox SET Estado='Procesado' WHERE Estado='Pendiente';
+  UPDATE crm.WhatsAppOutbox SET Estado='Cancelado' WHERE Estado='Pendiente';
+  IF @Accion='DESVINCULAR'
+  BEGIN
+   COMMIT; SELECT * FROM crm.WhatsAppControl WHERE ID=1; RETURN;
+  END;
+  SET @Estado='Completada';
  END;
  IF @Estado='Pendiente' AND @Pendiente='DESVINCULAR'
   THROW 52027,'Espere a que termine la desvinculación antes de vincular otra cuenta.',1;
  IF @TieneQRValido=1
   UPDATE crm.WhatsAppControl SET ConnectionRevision=ConnectionRevision+1,
+   SolicitudID=COALESCE(SolicitudID,@Solicitud),SolicitudAccion='VINCULAR',SolicitudEstado='Pendiente',
    SolicitudError=NULL,SolicitadoPor=@Actor,SolicitadoEn=SYSUTCDATETIME(),Activo=0 WHERE ID=1;
  ELSE
   UPDATE crm.WhatsAppControl SET ConnectionRevision=ConnectionRevision+1, SolicitudID=@Solicitud,
@@ -98,6 +120,7 @@ BEGIN
  BEGIN COMMIT; RETURN; END;
  IF @Exitoso=1 AND @Accion='DESVINCULAR'
  BEGIN
+  DELETE FROM crm.WhatsAppVinculosAudit WHERE Accion='SESION_BACKUP';
   UPDATE crm.WhatsAppControl SET Vinculado=0,CuentaTelefono=NULL,QR=NULL,QRExpira=NULL,
    Estado=N'Sin vincular',Activo=0 WHERE ID=1;
   -- Retain orders/history; never carry drafts, queued sends or consent to another account.
@@ -119,6 +142,7 @@ BEGIN
  BEGIN TRANSACTION;
  IF @Vinculado=0
  BEGIN
+  DELETE FROM crm.WhatsAppVinculosAudit WHERE Accion='SESION_BACKUP';
   UPDATE crm.WhatsAppControl WITH(UPDLOCK,HOLDLOCK) SET Activo=0,ConnectionRevision=ConnectionRevision+1 WHERE ID=1;
   UPDATE crm.WhatsAppSesiones SET Revision=Revision+1,Pendiente=NULL,Avisos=0,Imagen=NULL;
   UPDATE crm.WhatsAppInbox SET Estado='Procesado' WHERE Estado='Pendiente';
@@ -126,6 +150,24 @@ BEGIN
  END;
  UPDATE crm.WhatsAppControl SET CuentaTelefono=@Telefono,Vinculado=@Vinculado,QR=NULL,QRExpira=NULL WHERE ID=1;
  COMMIT;
+END;
+GO
+CREATE OR ALTER PROCEDURE crm.sp_WhatsAppGuardarSesion @Datos NVARCHAR(MAX)
+AS
+BEGIN
+ SET NOCOUNT ON; SET XACT_ABORT ON;
+ BEGIN TRANSACTION;
+ DELETE FROM crm.WhatsAppVinculosAudit WHERE Accion='SESION_BACKUP';
+ IF @Datos IS NOT NULL AND LEN(@Datos)>0
+  INSERT crm.WhatsAppVinculosAudit(Accion,Resultado,DatosSesion) VALUES('SESION_BACKUP','Activa',@Datos);
+ COMMIT;
+END;
+GO
+CREATE OR ALTER PROCEDURE crm.sp_WhatsAppLeerSesion
+AS
+BEGIN
+ SET NOCOUNT ON;
+ SELECT TOP 1 DatosSesion FROM crm.WhatsAppVinculosAudit WHERE Accion='SESION_BACKUP' AND DatosSesion IS NOT NULL ORDER BY ID DESC;
 END;
 GO
 CREATE OR ALTER PROCEDURE crm.sp_ObtenerCotizacionesPendientesAdmin
@@ -155,11 +197,16 @@ GO
 GRANT EXECUTE ON crm.sp_WhatsAppIntentoAdmin TO db_rol_gerencia,db_rol_superadmin;
 GRANT EXECUTE ON crm.sp_WhatsAppResultadoAuth TO db_rol_gerencia,db_rol_superadmin;
 GRANT EXECUTE ON crm.sp_WhatsAppSolicitarVinculo TO db_rol_gerencia,db_rol_superadmin;
-GRANT EXECUTE ON crm.sp_WhatsAppCompletarVinculo TO usr_bd_whatsapp;
+GRANT EXECUTE ON crm.sp_WhatsAppCompletarVinculo TO usr_bd_whatsapp,db_rol_gerencia,db_rol_superadmin;
 GRANT EXECUTE ON crm.sp_WhatsAppCuenta TO usr_bd_whatsapp;
+GRANT EXECUTE ON crm.sp_WhatsAppGuardarSesion TO usr_bd_whatsapp;
+GRANT EXECUTE ON crm.sp_WhatsAppLeerSesion TO usr_bd_whatsapp;
+GRANT EXECUTE ON crm.sp_WhatsAppActivar TO usr_bd_whatsapp,db_rol_gerencia,db_rol_superadmin;
 DENY EXECUTE ON crm.sp_WhatsAppIntentoAdmin TO usr_bd_whatsapp,db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
 DENY EXECUTE ON crm.sp_WhatsAppResultadoAuth TO usr_bd_whatsapp,db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
 DENY EXECUTE ON crm.sp_WhatsAppSolicitarVinculo TO usr_bd_whatsapp,db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
 DENY EXECUTE ON crm.sp_WhatsAppCompletarVinculo TO db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
 DENY EXECUTE ON crm.sp_WhatsAppCuenta TO db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
+DENY EXECUTE ON crm.sp_WhatsAppGuardarSesion TO db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
+DENY EXECUTE ON crm.sp_WhatsAppLeerSesion TO db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
 GO

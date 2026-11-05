@@ -1,8 +1,19 @@
+import hashlib
 import os
 import secrets
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _resolve_secret_key() -> str:
+    explicit = os.environ.get('SECRET_KEY')
+    if explicit:
+        return explicit
+    seed = os.environ.get('DB_CONNECTION_STRING') or os.environ.get('WEBSITE_SITE_NAME')
+    if seed:
+        return hashlib.sha256(f'brajhers-session-key:{seed}'.encode('utf-8')).hexdigest()
+    return secrets.token_hex(32)
 
 
 class Config:
@@ -11,8 +22,8 @@ class Config:
         r'DATABASE=PanaderiaDB;Trusted_Connection=yes;Encrypt=yes;TrustServerCertificate=yes;'
     )
 
-    # Seguridad de Sesión
-    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+    # Seguridad de Sesión (estable entre workers Gunicorn en Azure)
+    SECRET_KEY = _resolve_secret_key()
     MAX_CONTENT_LENGTH = 6 * 1024 * 1024
     # Cookies ignore port numbers; isolate this app from other Flask servers on localhost.
     SESSION_COOKIE_NAME = 'brajhers_session'

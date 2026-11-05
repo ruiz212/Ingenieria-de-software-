@@ -8,10 +8,36 @@ from concurrent.futures import ThreadPoolExecutor
 import pyodbc
 from app.db import get_db_connection
 from app.whatsapp.agent import Agent, Gemini
-from app.whatsapp.client import Transport
+from app.whatsapp.client import Transport, has_local_device
 from app.whatsapp.repository import Store, WAKE_EVENT
 from app.whatsapp.tools import Tools
 from app.whatsapp.linking import apply_unlink
+
+_RealTransport = Transport
+
+
+def _resolve_session_path(app) -> Path:
+    explicit = os.environ.get('WHATSAPP_SESSION_PATH')
+    if explicit:
+        return Path(explicit).resolve()
+    if os.environ.get('WEBSITE_SITE_NAME') and Path('/home').is_dir():
+        azure_dir = Path('/home/data')
+        try:
+            azure_dir.mkdir(parents=True, exist_ok=True)
+            return (azure_dir / 'whatsapp_session.sqlite3').resolve()
+        except OSError:
+            pass
+    return (Path(app.instance_path) / 'whatsapp_session.sqlite3').resolve()
+
+
+def _clear_session_files(path: Path) -> None:
+    for suffix in ('', '-wal', '-shm', '-journal'):
+        candidate = Path(str(path) + suffix)
+        try:
+            if candidate.exists():
+                candidate.unlink()
+        except OSError:
+            pass
 
 
 class LazyAgent:
@@ -64,14 +90,33 @@ def run(app):
                 raise RuntimeError('Ya existe un worker WhatsApp activo.')
             lock.commit()
             owned = True
-            path = Path(os.environ.get('WHATSAPP_SESSION_PATH', str(Path(app.instance_path) / 'whatsapp_session.sqlite3'))).resolve()
+            path = _resolve_session_path(app)
             path.parent.mkdir(parents=True, exist_ok=True)
+            is_real_transport = Transport is _RealTransport
+            if is_real_transport:
+                initial_state = store.state()
+                if (
+                    initial_state.get('SolicitudEstado') == 'Pendiente'
+                    and initial_state.get('SolicitudAccion') == 'DESVINCULAR'
+                    and not has_local_device(path)
+                ):
+                    _clear_session_files(path)
+                    store.account(None, False)
+                    store.complete_link(initial_state['SolicitudID'], True)
+                elif initial_state.get('Vinculado') and not has_local_device(path):
+                    if hasattr(store, 'restore_session_blob'):
+                        store.restore_session_blob(path)
+                    if not has_local_device(path):
+                        _clear_session_files(path)
+                        store.account(None, False)
+                elif not initial_state.get('Vinculado') and not has_local_device(path):
+                    _clear_session_files(path)
             transport = Transport(app, store, path)
             connector = threading.Thread(target=transport.connect, daemon=True)
             connector.start()
             executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='whatsapp-inference')
             pending = None
-            last_send, last_heartbeat = 0.0, 0.0
+            last_send, last_heartbeat, last_backup = 0.0, 0.0, time.monotonic()
             waiting_unlink = None
             state = store.state(transport.status, transport.qr)
             active_link_request = state.get('SolicitudID')
@@ -90,17 +135,30 @@ def run(app):
                 if now - last_heartbeat >= 2:
                     state = store.state(transport.status if transport else 'Sin vincular', transport.qr if transport else None)
                     last_heartbeat = now
+                if is_real_transport and transport is not None and transport.status == 'Conectado' and now - last_backup >= 120:
+                    if hasattr(store, 'save_session_blob'):
+                        store.save_session_blob(path)
+                    last_backup = now
                 if transport is None:
                     if state.get('SolicitudEstado') == 'Pendiente' and state.get('SolicitudAccion') == 'VINCULAR':
+                        if is_real_transport and not state.get('Vinculado'):
+                            _clear_session_files(path)
                         transport = Transport(app, store, path)
                         connector = threading.Thread(target=transport.connect, daemon=True)
                         connector.start()
                         active_link_request = state.get('SolicitudID')
                     elif state.get('SolicitudEstado') == 'Pendiente' and state.get('SolicitudAccion') == 'DESVINCULAR':
-                        # This process already revoked the previous native session.
+                        if is_real_transport:
+                            _clear_session_files(path)
                         store.complete_link(state['SolicitudID'], True)
                         state = store.state('Sin vincular')
                         continue
+                    elif is_real_transport and not state.get('Vinculado'):
+                        # Immediately prepare a new QR session after unlinking so QR is always ready
+                        _clear_session_files(path)
+                        transport = Transport(app, store, path)
+                        connector = threading.Thread(target=transport.connect, daemon=True)
+                        connector.start()
                     else:
                         WAKE_EVENT.wait(0.2)
                         continue
@@ -110,10 +168,22 @@ def run(app):
                         # Finish in-flight SQL work before revoking this account.
                         if pending is None or pending.done():
                             removed = apply_unlink(store, transport, state)
+                            if removed is None and is_real_transport and (
+                                not has_local_device(path)
+                                or transport.status == 'Esperando QR'
+                                or time.monotonic() - waiting_unlink > 10
+                            ):
+                                transport.stop()
+                                _clear_session_files(path)
+                                store.account(None, False)
+                                store.complete_link(state['SolicitudID'], True)
+                                removed = True
                             if removed is True:
                                 connector.join(timeout=10)
                                 if connector.is_alive():
                                     raise RuntimeError('La conexión anterior no terminó; reinicie el servicio antes de vincular otra cuenta.')
+                                if is_real_transport:
+                                    _clear_session_files(path)
                                 # Retain the singleton process, ready for an explicit new pairing.
                                 transport = connector = None
                                 state = store.state('Sin vincular')
@@ -132,15 +202,28 @@ def run(app):
                             store.complete_link(state['SolicitudID'], True)
                             active_link_request = state.get('SolicitudID')
                         elif not state.get('Vinculado'):
+                            has_fresh_qr = (
+                                is_real_transport
+                                and transport.status == 'Esperando QR'
+                                and bool(transport.qr)
+                                and getattr(transport, 'qr_updated_at', 0) > 0
+                                and (now - transport.qr_updated_at) < 45
+                            )
                             stale_unlinked = (
                                 transport.status in ('Desconectado', 'Requiere vinculación')
                                 and getattr(transport, 'started_at', 0)
                                 and time.monotonic() - transport.started_at > 20
                             )
-                            if state.get('SolicitudID') != active_link_request or stale_unlinked:
+                            if has_fresh_qr and state.get('SolicitudID') != active_link_request:
+                                active_link_request = state.get('SolicitudID')
+                                state = store.state(transport.status, transport.qr)
+                                last_heartbeat = now
+                            elif state.get('SolicitudID') != active_link_request or stale_unlinked:
                                 transport.stop()
                                 if connector is not None:
                                     connector.join(timeout=5)
+                                if is_real_transport:
+                                    _clear_session_files(path)
                                 transport = Transport(app, store, path)
                                 connector = threading.Thread(target=transport.connect, daemon=True)
                                 connector.start()

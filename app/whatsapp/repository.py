@@ -63,9 +63,23 @@ def _clean_command_text(raw):
 
 class Store:
     def request_link(self, action, revision):
-        with connection() as (_, cur):
-            cur.execute('EXEC crm.sp_WhatsAppSolicitarVinculo ?,?,?', action, revision, uuid4().hex)
-            result = rows(cur)[0]
+        try:
+            with connection() as (_, cur):
+                cur.execute('EXEC crm.sp_WhatsAppSolicitarVinculo ?,?,?', action, revision, uuid4().hex)
+                result = rows(cur)[0]
+        except Exception as exc:
+            if '52027' not in str(exc):
+                raise
+            with connection(True) as (_, cur):
+                cur.execute('EXEC crm.sp_WhatsAppLeerControl')
+                ctrl = rows(cur)[0]
+                if ctrl.get('SolicitudEstado') == 'Pendiente' and ctrl.get('SolicitudAccion') == 'DESVINCULAR':
+                    cur.execute('EXEC crm.sp_WhatsAppCompletarVinculo ?,?,?', ctrl.get('SolicitudID'), True, None)
+                    cur.execute('EXEC crm.sp_WhatsAppLeerControl')
+                    ctrl = rows(cur)[0]
+            with connection() as (_, cur):
+                cur.execute('EXEC crm.sp_WhatsAppSolicitarVinculo ?,?,?', action, ctrl.get('ConnectionRevision', revision), uuid4().hex)
+                result = rows(cur)[0]
         WAKE_EVENT.set()
         return result
 
@@ -76,6 +90,67 @@ class Store:
     def account(self, phone, linked):
         with connection(True) as (_, cur):
             cur.execute('EXEC crm.sp_WhatsAppCuenta ?,?', phone, linked)
+
+    def set_active(self, enabled):
+        with connection(True) as (_, cur):
+            cur.execute('EXEC crm.sp_WhatsAppActivar ?', bool(enabled))
+
+    def save_session_blob(self, session_path):
+        import base64
+        import sqlite3
+        import tempfile
+        import zlib
+        from pathlib import Path
+        from app.whatsapp.client import has_local_device
+        p = Path(session_path) if session_path else None
+        if not p or not has_local_device(p):
+            return False
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.sqlite3', delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+            with sqlite3.connect(f'file:{p.as_posix()}?mode=ro', uri=True, timeout=3.0) as src:
+                with sqlite3.connect(str(tmp_path)) as dst:
+                    src.backup(dst)
+            raw = tmp_path.read_bytes()
+            encoded = base64.b64encode(zlib.compress(raw, level=6)).decode('ascii')
+            with connection(True) as (_, cur):
+                cur.execute('EXEC crm.sp_WhatsAppGuardarSesion ?', encoded)
+            return True
+        except Exception:
+            logging.getLogger(__name__).debug('No se pudo respaldar sesion WhatsApp en SQL', exc_info=True)
+            return False
+        finally:
+            if tmp_path and tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+
+    def restore_session_blob(self, session_path):
+        import base64
+        import zlib
+        from pathlib import Path
+        p = Path(session_path) if session_path else None
+        if not p:
+            return False
+        try:
+            with connection(True) as (_, cur):
+                cur.execute('EXEC crm.sp_WhatsAppLeerSesion')
+                row = cur.fetchone()
+            if not row or not row[0]:
+                return False
+            raw = zlib.decompress(base64.b64decode(row[0].encode('ascii')))
+            p.parent.mkdir(parents=True, exist_ok=True)
+            for suffix in ('', '-wal', '-shm', '-journal'):
+                candidate = Path(str(p) + suffix)
+                if candidate.exists():
+                    candidate.unlink()
+            p.write_bytes(raw)
+            return True
+        except Exception:
+            logging.getLogger(__name__).debug('No se pudo restaurar sesion WhatsApp desde SQL', exc_info=True)
+            return False
 
     def state(self, status=None, qr=None):
         with connection(True) as (_, cur):

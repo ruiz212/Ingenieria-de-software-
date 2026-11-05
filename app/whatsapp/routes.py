@@ -29,6 +29,11 @@ def snapshot(sid=None, *, only_state=False):
         state['worker_alive'] = bool(state['Heartbeat'] and state['Heartbeat'] >= now - timedelta(seconds=30))
         if not state['worker_alive']:
             state['Estado'], state['QR'] = 'Worker desconectado', None
+            if os.environ.get('PYTHON_DOTENV_DISABLED') != '1':
+                try:
+                    start_local_worker()
+                except Exception:
+                    pass
         if not state['QRExpira'] or state['QRExpira'] < now:
             state['QR'] = None
         if only_state:
@@ -109,7 +114,11 @@ def whatsapp():
                 state = Store().request_link('VINCULAR' if action == 'link' else 'DESVINCULAR', revision)
                 session.pop('wa_pairing', None)
                 if action == 'link':
-                    session['wa_pairing'] = {'until': time.time() + 300, 'revision': state['ConnectionRevision']}
+                    session['wa_pairing'] = {
+                        'until': time.time() + 900,
+                        'revision': state['ConnectionRevision'],
+                        'solicitud_id': state.get('SolicitudID'),
+                    }
                 # No network connection or native client runs in a Flask request.
                 if not state.get('Heartbeat') or state['Heartbeat'] < datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=30):
                     try:

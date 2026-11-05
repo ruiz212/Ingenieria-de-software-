@@ -46,7 +46,7 @@
         <img id="wa-qr" {% if state.QR %}src="{{ state.QR }}"{% else %}hidden{% endif %} alt="Código QR para vincular el WhatsApp de la empresa" width="260" height="260">
         <div id="wa-qr-placeholder" {% if state.QR %}hidden{% endif %}>
           <svg aria-hidden="true" viewBox="0 0 48 48" width="64" height="64" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6H6v12M30 6h12v12M42 30v12H30M18 42H6V30"/><rect x="13" y="13" width="7" height="7"/><rect x="28" y="13" width="7" height="7"/><rect x="13" y="28" width="7" height="7"/><path d="M28 28h7v7h-7v-3h4M24 24h3M24 35v3"/></svg>
-          <p id="wa-qr-help">{{ 'Teléfono vinculado. Puedes atender a tus clientes.' if state.Vinculado else 'Verifica tu identidad para mostrar el código QR.' }}</p>
+          <p id="wa-qr-help">{{ 'Teléfono vinculado. Puedes atender a tus clientes.' if state.Vinculado and state.Estado == 'Conectado' else ('Reconectando con el teléfono vinculado...' if state.Vinculado else 'Verifica tu identidad para mostrar el código QR.') }}</p>
         </div>
       </div>
       <p id="wa-qr-note" class="wa-help">En WhatsApp, abre <strong>Dispositivos vinculados → Vincular un dispositivo</strong>. El QR se actualiza automáticamente.</p>
@@ -64,7 +64,7 @@
         <li>En <strong>Dispositivos vinculados</strong>, elige <strong>Vincular un dispositivo</strong> y escanea el QR.</li>
       </ol></details>
       <p id="wa-operation" class="wa-notice" role="status">{% if state.SolicitudEstado == 'Error' %}{{ state.SolicitudError }}{% elif state.SolicitudEstado == 'Pendiente' %}{{ 'Desvinculando la cuenta. Espera antes de agregar otra.' if state.SolicitudAccion == 'DESVINCULAR' else 'Preparando la vinculación. El QR aparecerá aquí.' }}{% endif %}</p>
-      <details class="wa-security" id="wa-link-details" {% if not state.Vinculado and state.needs_auth %}open{% endif %}>
+      <details class="wa-security" id="wa-link-details" {% if (not state.Vinculado or state.Estado != 'Conectado') and state.needs_auth %}open{% endif %}>
         <summary>Verificar identidad y conectar</summary>
         <form method="post" class="wa-account-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

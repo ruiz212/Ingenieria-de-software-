@@ -62,4 +62,12 @@ def create_app(config_class=Config):
     app.register_blueprint(admin_bp)
     app.register_blueprint(kiosco_bp)
 
+    # Iniciar supervisor automático de WhatsApp en Azure / servidor activo (nunca en pruebas)
+    if os.environ.get('WHATSAPP_ENABLED') == '1' and os.environ.get('PYTHON_DOTENV_DISABLED') != '1' and not app.config.get('TESTING'):
+        try:
+            from app.whatsapp.linking import ensure_worker_supervisor
+            ensure_worker_supervisor(app)
+        except Exception:
+            pass
+
     return app

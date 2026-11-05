@@ -8,8 +8,10 @@ import base64
 
 def generar_qr_base64(data_url):
     """Genera un código QR y lo devuelve como imagen base64 para embeber en HTML."""
+    if isinstance(data_url, (bytes, bytearray)):
+        data_url = data_url.decode('utf-8', errors='ignore')
     qr = qrcode.QRCode(version=1, box_size=6, border=2)
-    qr.add_data(data_url)
+    qr.add_data(str(data_url or ''))
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
     buffer = io.BytesIO()

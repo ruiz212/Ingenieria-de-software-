@@ -153,9 +153,9 @@
     if (!hasQR) qr.removeAttribute('src');
     qr.hidden = !hasQR;
     placeholder.hidden = hasQR;
-    text('wa-qr-help', state.Vinculado ? 'Teléfono vinculado. Puedes atender a tus clientes.' :
+    text('wa-qr-help', state.Vinculado && state.Estado === 'Conectado' ? 'Teléfono vinculado. Puedes atender a tus clientes.' :
       state.needs_auth ? 'Verifica tu identidad para mostrar el código QR.' :
-      state.Estado === 'Worker desconectado' ? 'La conexión aún no se ha iniciado. Vuelve a conectar para reintentar.' :
+      state.Estado === 'Worker desconectado' ? 'Iniciando servicio de conexión... El código QR aparecerá en unos segundos.' :
       'Preparando un nuevo QR. Aparecerá aquí cuando esté disponible.');
     text('wa-operation', state.SolicitudEstado === 'Error' ? state.SolicitudError || 'La operación no se completó. Vuelve a intentarlo.' :
       state.SolicitudEstado === 'Pendiente' ? (state.SolicitudAccion === 'DESVINCULAR' ?
@@ -173,9 +173,14 @@
       renderMessages(state.messages);
     }
     if (String(state.ConnectionRevision) !== root.dataset.revision) {
-      root.querySelectorAll('[data-account-submit]').forEach(button => { button.disabled = true; });
-      error.hidden = false;
-      error.textContent = 'La cuenta cambió desde que abriste esta página. Actualiza el panel antes de modificarla.';
+      if (!state.Vinculado && !state.needs_auth) {
+        root.dataset.revision = String(state.ConnectionRevision);
+        root.querySelectorAll('input[name="revision"]').forEach(inp => { inp.value = String(state.ConnectionRevision); });
+      } else {
+        root.querySelectorAll('[data-account-submit]').forEach(button => { button.disabled = true; });
+        error.hidden = false;
+        error.textContent = 'La cuenta cambió desde que abriste esta página. Actualiza el panel antes de modificarla.';
+      }
     }
   }
 
