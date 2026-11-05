@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
 from contextlib import nullcontext
-from app.whatsapp.client import Transport
+from app.whatsapp.client import Transport, _complete_connection_in_sql, _resolve_own_phone
 from app.whatsapp import worker
 
 
@@ -13,6 +13,38 @@ def test_transport_stop_cancels_native_context():
     transport.client = SimpleNamespace(stop=Mock(), disconnect=Mock())
     transport.stop()
     transport.client.stop.assert_called_once()
+
+
+def test_post_qr_scan_completion_always_marks_account_linked_and_active(tmp_path):
+    events = []
+    class FakeStore:
+        def account(self, phone, linked):
+            events.append(('account', phone, linked))
+        def state(self, status, qr=None):
+            events.append(('state', status))
+            return {
+                'Activo': False,
+                'Vinculado': True,
+                'SolicitudEstado': 'Pendiente',
+                'SolicitudAccion': 'VINCULAR',
+                'SolicitudID': 'req-pair-1',
+            }
+        def complete_link(self, sid, ok, err=None):
+            events.append(('complete_link', sid, ok))
+        def set_active(self, active):
+            events.append(('set_active', active))
+        def save_session_blob(self, path):
+            events.append(('save_session_blob', str(path)))
+
+    fake_client = SimpleNamespace(get_me=lambda: SimpleNamespace(JID=SimpleNamespace(User='', Server='')))
+    session_file = tmp_path / 'whatsapp_session.sqlite3'
+    phone = _resolve_own_phone(fake_client, session_file, paired_phone='+50588887777')
+    assert phone == '+50588887777'
+    _complete_connection_in_sql(FakeStore(), session_file, phone)
+    assert ('account', '+50588887777', True) in events
+    assert ('complete_link', 'req-pair-1', True) in events
+    assert ('set_active', True) in events
+    assert ('save_session_blob', str(session_file)) in events
 
 
 def test_slow_inference_does_not_stop_heartbeat_or_human_delivery(monkeypatch, tmp_path):

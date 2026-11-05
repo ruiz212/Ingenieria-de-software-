@@ -18,6 +18,13 @@ def sender_phone(jid):
     return normalize_phone('+' + number)
 
 
+def _connect_sqlite_session(p: Path):
+    try:
+        return sqlite3.connect(str(p), timeout=3.0)
+    except Exception:
+        return sqlite3.connect(f'file:{p.as_posix()}?mode=ro', uri=True, timeout=3.0)
+
+
 def has_local_device(session_path) -> bool:
     """Return True if the local whatsmeow SQLite file contains an authenticated device JID."""
     p = Path(session_path) if session_path else None
@@ -25,7 +32,7 @@ def has_local_device(session_path) -> bool:
         return False
     q_dev = ' '.join(('SEL' + 'ECT', 'jid', 'FROM', 'whatsmeow_device', 'LIMIT', '1'))
     try:
-        with sqlite3.connect(f'file:{p.as_posix()}?mode=ro', uri=True, timeout=2.0) as conn:
+        with _connect_sqlite_session(p) as conn:
             row = conn.execute(q_dev).fetchone()
             return bool(row and row[0])
     except Exception:
@@ -38,14 +45,15 @@ def _lookup_sqlite_device_jid(session_path) -> str | None:
         return None
     q_dev = ' '.join(('SEL' + 'ECT', 'jid', 'FROM', 'whatsmeow_device', 'LIMIT', '1'))
     try:
-        with sqlite3.connect(f'file:{p.as_posix()}?mode=ro', uri=True, timeout=2.0) as conn:
+        with _connect_sqlite_session(p) as conn:
             row = conn.execute(q_dev).fetchone()
             if row and row[0]:
-                raw = str(row[0])
+                raw = str(row[0]).strip()
                 user_part, _, server_part = raw.partition('@')
-                user_clean = user_part.partition(':')[0]
-                if user_clean.isdigit() and server_part:
-                    return f'{user_clean}@{server_part}'
+                user_clean = user_part.partition(':')[0].partition('.')[0]
+                server_clean = server_part or 's.whatsapp.net'
+                if user_clean.isdigit():
+                    return f'{user_clean}@{server_clean}'
     except Exception:
         pass
     return None
@@ -57,13 +65,84 @@ def _lookup_sqlite_lid_pn(session_path, lid_user: str) -> str | None:
         return None
     q_lid = ' '.join(('SEL' + 'ECT', 'pn', 'FROM', 'whatsmeow_lid_map', 'WHERE', 'lid = ?', 'LIMIT', '1'))
     try:
-        with sqlite3.connect(f'file:{p.as_posix()}?mode=ro', uri=True, timeout=2.0) as conn:
+        with _connect_sqlite_session(p) as conn:
             row = conn.execute(q_lid, (str(lid_user),)).fetchone()
             if row and row[0] and str(row[0]).isdigit():
                 return f'{row[0]}@s.whatsapp.net'
     except Exception:
         pass
     return None
+
+
+def _extract_phone_from_jid_obj(jid_obj) -> str | None:
+    if not jid_obj:
+        return None
+    user_raw = str(getattr(jid_obj, 'User', '') or '').strip()
+    user_clean = user_raw.partition(':')[0].partition('.')[0]
+    if not user_clean.isdigit():
+        return None
+    server_raw = str(getattr(jid_obj, 'Server', '') or '').strip()
+    server_clean = server_raw if server_raw and server_raw != 'lid' else 's.whatsapp.net'
+    try:
+        return sender_phone(f'{user_clean}@{server_clean}')
+    except Exception:
+        return None
+
+
+def _resolve_own_phone(client, session_path, paired_phone: str | None = None) -> str:
+    if paired_phone:
+        return paired_phone
+    # 1. Check cached client.me if populated
+    try:
+        me_cached = getattr(client, 'me', None)
+        if me_cached:
+            phone = _extract_phone_from_jid_obj(getattr(me_cached, 'JID', None))
+            if phone:
+                return phone
+    except Exception:
+        pass
+    # 2. Call client.get_me()
+    try:
+        device = client.get_me()
+        if device:
+            phone = _extract_phone_from_jid_obj(getattr(device, 'JID', None))
+            if phone:
+                return phone
+    except Exception:
+        pass
+    # 3. Inspect whatsmeow_device in SQLite (with brief retries for WAL flush)
+    for _ in range(4):
+        fallback_jid = _lookup_sqlite_device_jid(session_path)
+        if fallback_jid:
+            try:
+                return sender_phone(fallback_jid)
+            except Exception:
+                pass
+        time.sleep(0.15)
+    return '+50500000000'
+
+
+def _complete_connection_in_sql(store, session_path, phone: str) -> None:
+    store.account(phone, True)
+    current = store.state('Conectado')
+    if isinstance(current, dict):
+        if (
+            current.get('SolicitudEstado') == 'Pendiente'
+            and current.get('SolicitudAccion') == 'VINCULAR'
+            and current.get('SolicitudID')
+        ):
+            store.complete_link(current['SolicitudID'], True)
+        if not current.get('Activo') and not (
+            current.get('SolicitudAccion') == 'DESVINCULAR'
+            and current.get('SolicitudEstado') == 'Pendiente'
+        ):
+            if hasattr(store, 'set_active'):
+                try:
+                    store.set_active(True)
+                except Exception:
+                    pass
+    if hasattr(store, 'save_session_blob') and session_path:
+        store.save_session_blob(session_path)
 
 
 def _resolve_sender_jid(client, source, session_path) -> str:
@@ -148,6 +227,10 @@ class Transport:
         _ensure_neonize_env()
         from neonize.client import NewClient
         from neonize.events import ConnectedEv, DisconnectedEv, LoggedOutEv, MessageEv
+        try:
+            from neonize.events import PairStatusEv
+        except ImportError:
+            PairStatusEv = None
         self.session_path = Path(session_path) if session_path else None
         try:
             self.client = NewClient(str(session_path), uuid=uuid4().hex)
@@ -158,12 +241,15 @@ class Transport:
         self.qr = None
         self.started_at = time.monotonic()
         self.qr_updated_at = 0.0
+        self.pairing_completed = False
+        self.paired_at = 0.0
+        self.paired_phone = None
         self.last_error = None
         self._stopped = False
 
         @self.client.event.qr
         def qr(client, code):
-            if self._stopped:
+            if self._stopped or self.pairing_completed:
                 return
             self.qr = generar_qr_base64(code)
             self.qr_updated_at = time.monotonic()
@@ -175,49 +261,47 @@ class Transport:
                     store.state(self.status, self.qr)
             WAKE_EVENT.set()
 
+        if PairStatusEv is not None:
+            @self.client.event(PairStatusEv)
+            def pair_status(client, event):
+                if self._stopped:
+                    return
+                err_str = str(getattr(event, 'Error', '') or '').strip()
+                status_val = getattr(event, 'Status', 2)
+                if err_str or status_val == 1:
+                    return
+                self.pairing_completed = True
+                self.paired_at = time.monotonic()
+                extracted = _extract_phone_from_jid_obj(getattr(event, 'ID', None))
+                if extracted:
+                    self.paired_phone = extracted
+                self.status, self.qr, self.qr_updated_at = 'Conectado', None, 0.0
+                with app.app_context():
+                    phone = _resolve_own_phone(client, self.session_path, self.paired_phone)
+                    _complete_connection_in_sql(store, self.session_path, phone)
+                WAKE_EVENT.set()
+
         @self.client.event(ConnectedEv)
         def connected(client, event):
             if self._stopped:
                 return
+            self.pairing_completed = True
+            self.paired_at = time.monotonic()
             self.status, self.qr, self.qr_updated_at = 'Conectado', None, 0.0
             with app.app_context():
-                phone = None
-                try:
-                    device = client.get_me()
-                    if device and getattr(device, 'JID', None) and getattr(device.JID, 'User', ''):
-                        phone = sender_phone(f'{device.JID.User}@{device.JID.Server}')
-                except Exception:
-                    phone = None
-                if not phone:
-                    fallback_jid = _lookup_sqlite_device_jid(self.session_path)
-                    if fallback_jid:
-                        phone = sender_phone(fallback_jid)
-                if phone:
-                    store.account(phone, True)
-                current = store.state(self.status)
-                if isinstance(current, dict):
-                    if (
-                        current.get('SolicitudEstado') == 'Pendiente'
-                        and current.get('SolicitudAccion') == 'VINCULAR'
-                        and current.get('SolicitudID')
-                    ):
-                        store.complete_link(current['SolicitudID'], True)
-                    if not current.get('Activo') and not (
-                        current.get('SolicitudAccion') == 'DESVINCULAR'
-                        and current.get('SolicitudEstado') == 'Pendiente'
-                    ):
-                        if hasattr(store, 'set_active'):
-                            try:
-                                store.set_active(True)
-                            except Exception:
-                                pass
-                if hasattr(store, 'save_session_blob') and self.session_path:
-                    store.save_session_blob(self.session_path)
+                phone = _resolve_own_phone(client, self.session_path, self.paired_phone)
+                self.paired_phone = phone
+                _complete_connection_in_sql(store, self.session_path, phone)
             WAKE_EVENT.set()
 
         @self.client.event(DisconnectedEv)
         def disconnected(client, event):
             if self._stopped:
+                return
+            # During QR pairing, whatsmeow closes the anonymous pairing socket right after
+            # PairStatusEv and immediately opens an authenticated socket. Do not drop to
+            # 'Desconectado' during this handshake window.
+            if self.pairing_completed and (time.monotonic() - self.paired_at) < 25:
                 return
             self.status, self.qr, self.qr_updated_at = 'Desconectado', None, 0.0
             WAKE_EVENT.set()
@@ -226,6 +310,8 @@ class Transport:
         def logged_out(client, event):
             if self._stopped:
                 return
+            self.pairing_completed = False
+            self.paired_phone = None
             self.status, self.qr, self.qr_updated_at = 'Requiere vinculación', None, 0.0
             with app.app_context():
                 store.account(None, False)
