@@ -1,15 +1,147 @@
-/* QR and connection state only; never reload while the administrator is typing. */
+/* QR, connection state, live message bubbles, search filters, and quick replies; never reload while typing. */
 (() => {
   const root = document.querySelector('[data-wa-panel]');
-  if (!root || root.dataset.ready !== '1') return;
+  if (!root) return;
+
+  const messageList = document.getElementById('wa-message-list');
+  if (messageList) {
+    messageList.scrollTop = messageList.scrollHeight;
+  }
+
+  const searchInput = document.getElementById('wa-chat-search');
+  const filterBtns = root.querySelectorAll('[data-wa-filter]');
+  let activeFilter = 'all';
+
+  function applyChatFilter() {
+    const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+    const items = root.querySelectorAll('.wa-chat-item');
+    items.forEach(item => {
+      const phone = (item.dataset.chatPhone || '').toLowerCase();
+      const mode = item.dataset.chatMode || '';
+      const matchesQuery = !query || phone.includes(query);
+      const matchesMode = activeFilter === 'all' || mode === activeFilter;
+      item.hidden = !(matchesQuery && matchesMode);
+    });
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', applyChatFilter);
+  }
+  filterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterBtns.forEach(b => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      activeFilter = btn.dataset.waFilter || 'all';
+      applyChatFilter();
+    });
+  });
+
+  const responseBox = document.getElementById('wa-response');
+  const charCount = document.getElementById('wa-char-count');
+  const replyForm = document.getElementById('wa-reply-form');
+
+  function updateCharCount() {
+    if (responseBox && charCount) {
+      charCount.textContent = `${responseBox.value.length} / 3500`;
+    }
+  }
+  if (responseBox) {
+    responseBox.addEventListener('input', updateCharCount);
+    responseBox.addEventListener('keydown', ev => {
+      if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter' && replyForm && responseBox.value.trim()) {
+        ev.preventDefault();
+        replyForm.requestSubmit();
+      }
+    });
+    updateCharCount();
+  }
+
+  root.querySelectorAll('[data-quick-text]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      if (!responseBox) return;
+      responseBox.value = chip.dataset.quickText || '';
+      updateCharCount();
+      responseBox.focus();
+    });
+  });
+
+  if (root.dataset.ready !== '1') return;
+
   const qr = document.getElementById('wa-qr');
   const placeholder = document.getElementById('wa-qr-placeholder');
   const error = document.getElementById('wa-poll-error');
   let stopped = false;
+  let lastMessagesSignature = '';
+
   const text = (id, value) => {
     const element = document.getElementById(id);
     if (element && element.textContent !== value) element.textContent = value;
   };
+
+  function senderLabel(kind) {
+    if (kind === 'Cliente') return 'Cliente';
+    if (kind === 'IA') return 'Asistente IA';
+    if (kind === 'Humano') return 'Atención Humana';
+    if (kind === 'Aviso') return 'Aviso Automático (Cotización / Pedido)';
+    return kind || 'Mensaje';
+  }
+
+  function renderMessages(messages) {
+    if (!messageList || !Array.isArray(messages)) return;
+    const signature = JSON.stringify(messages.map(m => [m.Tipo, m.Estado, m.Creado, m.Texto, m.Imagen]));
+    if (!lastMessagesSignature) {
+      lastMessagesSignature = signature;
+      return;
+    }
+    if (signature === lastMessagesSignature) return;
+    lastMessagesSignature = signature;
+    const nearBottom = messageList.scrollHeight - messageList.scrollTop - messageList.clientHeight < 80;
+    messageList.replaceChildren();
+    if (!messages.length) {
+      const empty = document.createElement('li');
+      empty.className = 'list-group-item wa-empty-thread';
+      empty.textContent = 'No hay mensajes para mostrar.';
+      messageList.appendChild(empty);
+      return;
+    }
+    messages.forEach(msg => {
+      const li = document.createElement('li');
+      const kind = String(msg.Tipo || 'Cliente').toLowerCase();
+      li.className = `list-group-item text-break wa-msg wa-msg--${kind}`;
+      li.dataset.msgKind = msg.Tipo || 'Cliente';
+
+      const header = document.createElement('div');
+      header.className = 'wa-msg-header';
+
+      const strong = document.createElement('strong');
+      strong.className = 'wa-msg-sender';
+      strong.textContent = senderLabel(msg.Tipo);
+
+      const small = document.createElement('small');
+      small.className = 'wa-msg-meta';
+      const stateSpan = document.createElement('span');
+      stateSpan.className = 'wa-msg-state';
+      stateSpan.dataset.state = msg.Estado || '';
+      stateSpan.textContent = msg.Estado || '';
+      small.appendChild(stateSpan);
+      small.appendChild(document.createTextNode(` · ${msg.Creado || ''}`));
+
+      header.appendChild(strong);
+      header.appendChild(small);
+
+      const body = document.createElement('p');
+      body.className = 'mb-0 wa-msg-body';
+      body.textContent = msg.Texto || '';
+
+      li.appendChild(header);
+      li.appendChild(body);
+      messageList.appendChild(li);
+    });
+    if (nearBottom) {
+      messageList.scrollTop = messageList.scrollHeight;
+    }
+  }
+
   function update(state) {
     const status = state.Estado === 'Worker desconectado' ? 'Conexión no iniciada' : state.Estado;
     text('wa-status', status || 'Sin conexión');
@@ -37,17 +169,24 @@
       button.disabled = !state.Activo && (state.Estado !== 'Conectado' || !state.Vinculado ||
         (state.SolicitudAccion === 'DESVINCULAR' && state.SolicitudEstado === 'Pendiente'));
     }
+    if (Array.isArray(state.messages)) {
+      renderMessages(state.messages);
+    }
     if (String(state.ConnectionRevision) !== root.dataset.revision) {
       root.querySelectorAll('[data-account-submit]').forEach(button => { button.disabled = true; });
       error.hidden = false;
       error.textContent = 'La cuenta cambió desde que abriste esta página. Actualiza el panel antes de modificarla.';
     }
   }
+
   async function poll() {
     if (stopped) return;
     if (!document.hidden) {
       try {
-        const response = await fetch(root.dataset.statusUrl, { cache: 'no-store', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+        const chatId = root.dataset.chatId || '';
+        const headers = { Accept: 'application/json' };
+        if (chatId) headers['X-WA-Chat'] = String(chatId);
+        const response = await fetch(root.dataset.statusUrl, { cache: 'no-store', headers, signal: AbortSignal.timeout(10000) });
         if (response.status === 401 || response.status === 403 || response.redirected) stopped = true;
         if (!response.ok || response.redirected) throw new Error('status');
         const state = await response.json();
@@ -64,7 +203,7 @@
           'No se pudo actualizar la conexión. Se volverá a intentar automáticamente.';
       }
     }
-    if (!stopped) window.setTimeout(poll, 2500);
+    if (!stopped) window.setTimeout(poll, 2000);
   }
   poll();
 })();

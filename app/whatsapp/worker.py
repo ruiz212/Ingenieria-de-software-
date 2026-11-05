@@ -9,7 +9,7 @@ import pyodbc
 from app.db import get_db_connection
 from app.whatsapp.agent import Agent, Gemini
 from app.whatsapp.client import Transport
-from app.whatsapp.repository import Store
+from app.whatsapp.repository import Store, WAKE_EVENT
 from app.whatsapp.tools import Tools
 from app.whatsapp.linking import apply_unlink
 
@@ -71,11 +71,12 @@ def run(app):
             connector.start()
             executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='whatsapp-inference')
             pending = None
-            last_send, last_heartbeat = 0, 0
+            last_send, last_heartbeat = 0.0, 0.0
             waiting_unlink = None
             state = store.state(transport.status, transport.qr)
             active_link_request = state.get('SolicitudID')
             while True:
+                WAKE_EVENT.clear()
                 if connector is not None and not connector.is_alive() and transport.status != 'Requiere vinculación':
                     if state.get('SolicitudEstado') == 'Pendiente' and state.get('SolicitudAccion') == 'VINCULAR' and not state.get('Vinculado'):
                         transport = None
@@ -101,7 +102,7 @@ def run(app):
                         state = store.state('Sin vincular')
                         continue
                     else:
-                        time.sleep(0.5)
+                        WAKE_EVENT.wait(0.2)
                         continue
                 if state.get('SolicitudEstado') == 'Pendiente':
                     if state.get('SolicitudAccion') == 'DESVINCULAR':
@@ -124,7 +125,7 @@ def run(app):
                                         'La cuenta no pudo reconectarse para desvincular. Revise la conexión y reintente.')
                                 state = store.state(transport.status, transport.qr)
                                 waiting_unlink = None
-                        time.sleep(0.5)
+                        WAKE_EVENT.wait(0.2)
                         continue
                     if state.get('SolicitudAccion') == 'VINCULAR':
                         if transport.status == 'Conectado':
@@ -155,12 +156,14 @@ def run(app):
                         item = store.next_message()
                         if item:
                             pending = executor.submit(_process_in_context, app, store, agent, item)
-                    if transport.status == 'Conectado' and time.monotonic() - last_send >= 2:
+                            pending.add_done_callback(lambda _: WAKE_EVENT.set())
+                    if transport.status == 'Conectado' and time.monotonic() - last_send >= 0.35:
                         outgoing = store.outgoing()
                         if outgoing:
                             store.deliver(outgoing, transport.send)
                             last_send = time.monotonic()
-                time.sleep(0.5)
+                            WAKE_EVENT.set()
+                WAKE_EVENT.wait(0.15)
         finally:
             try:
                 if transport is not None:

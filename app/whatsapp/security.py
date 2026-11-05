@@ -1,8 +1,139 @@
-"""Reauthentication for account changes, with a shared SQL attempt budget."""
+"""Reauthentication for account changes, input/output security guardrails, and phone validation."""
+import re
 import pyotp
 from werkzeug.security import check_password_hash
 from app.models import User
 from app.whatsapp.repository import connection
+
+_CONTROL_CHARS_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]')
+_MULTI_NEWLINE_RE = re.compile(r'\n{4,}')
+
+_INJECTION_PATTERNS = (
+    (
+        'prompt_injection',
+        re.compile(
+            r'(?:ignora|olvida|descarta|omite|ignore|forget|disregard|override)\s+'
+            r'(?:todas\s+|all\s+)?(?:las\s+|tus\s+|previous\s+|prior\s+|anteriores\s+)?'
+            r'(?:instrucciones|reglas|ordenes|órdenes|instructions|rules|prompts?|restricciones)',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'system_override',
+        re.compile(
+            r'(?:system\s*prompt|instrucciones\s+del\s+sistema|developer\s+mode|modo\s+desarrollador|'
+            r'jailbreak|act[uú]a\s+como\s+(?:administrador|superadmin|root|dba|sistema))',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'sql_injection',
+        re.compile(
+            r'(?:\b(?:drop\s+table|truncate\s+table|xp_cmdshell|sp_executesql|'
+            r'union\s+(?:all\s+)?select|exec\s+(?:crm|ventas|seguridad|contabilidad|rrhh|fiscal)\.)\b|'
+            r';\s*(?:drop|delete|update|insert|alter|exec|execute)\b)',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'cross_tenant_probe',
+        re.compile(
+            r'(?:muestra|muéstrame|dame|lista|listar|consulta|ver|extrae)\s+'
+            r'(?:todos\s+los\s+|todas\s+las\s+|los\s+|las\s+)?'
+            r'(?:pedidos|cotizaciones|tel[eé]fonos|clientes|facturas|correos)\s+'
+            r'de\s+(?:otros?\s+clientes?|todas?\s+las?\s+personas?|todos|otra\s+persona|otro\s+n[uú]mero)',
+            re.IGNORECASE,
+        ),
+    ),
+)
+
+_SENSITIVE_LEAK_RE = re.compile(
+    r'(?:AIza[0-9A-Za-z_\-]{20,}|GEMINI_API_KEY|sp_WhatsApp\w+|usr_bd_\w+|db_rol_\w+|'
+    r'SESSION_CONTEXT|Traceback\s*\(most\s+recent\s+call\s+last\))',
+    re.IGNORECASE,
+)
+
+_PAYMENT_HARVEST_RE = re.compile(
+    r'(?:n[uú]mero\s+de\s+tarjeta|c[oó]digo\s+cvv|cvc\s+de\s+tu\s+tarjeta|pin\s+bancario|contrase[ñn]a\s+bancaria)',
+    re.IGNORECASE,
+)
+
+SECURITY_BLOCK_REPLY = (
+    'Por seguridad, solo puedo ayudarte con consultas del catálogo, tus propias cotizaciones '
+    'y el estado de los pedidos asociados a tu número. Escribe HUMANO si necesitas atención personalizada.'
+)
+
+SECURITY_PROTOCOLS = (
+    {
+        'id': 'reauth_2fa',
+        'titulo': 'Reautenticación 2FA',
+        'detalle': 'Cambios de cuenta y visualización de QR protegidos con contraseña + TOTP y bloqueo en SQL.',
+    },
+    {
+        'id': 'anti_injection',
+        'titulo': 'Escudo Anti-Inyección',
+        'detalle': 'Filtrado de caracteres de control, bloqueo de prompt injection, SQL y consultas cruzadas.',
+    },
+    {
+        'id': 'phone_isolation',
+        'titulo': 'Aislamiento por Teléfono',
+        'detalle': 'Cotizaciones y avisos de pedidos vinculados estrictamente al teléfono verificado del cliente.',
+    },
+    {
+        'id': 'two_step_confirm',
+        'titulo': 'Confirmación en 2 Pasos',
+        'detalle': 'Toda creación o decisión de cotización exige borrador previo y confirmación explícita.',
+    },
+    {
+        'id': 'rate_limit',
+        'titulo': 'Control Anti-Flood',
+        'detalle': 'Límite de 6 mensajes/minuto por sesión y bloqueo exclusivo por revisión de conversación.',
+    },
+)
+
+
+def sanitize_incoming_text(text):
+    if not isinstance(text, str):
+        return ''
+    cleaned = _CONTROL_CHARS_RE.sub('', text)
+    cleaned = cleaned.replace('\r\n', '\n').replace('\r', '\n')
+    cleaned = _MULTI_NEWLINE_RE.sub('\n\n\n', cleaned)
+    return cleaned.strip()[:4000]
+
+
+def detect_security_violation(text):
+    cleaned = sanitize_incoming_text(text)
+    if not cleaned:
+        return False, None, None
+    for code, pattern in _INJECTION_PATTERNS:
+        if pattern.search(cleaned):
+            return True, code, SECURITY_BLOCK_REPLY
+    return False, None, None
+
+
+def sanitize_bot_response(text, fallback):
+    if not isinstance(text, str):
+        return fallback
+    cleaned = _CONTROL_CHARS_RE.sub('', text).strip()
+    if not cleaned:
+        return fallback
+    if _SENSITIVE_LEAK_RE.search(cleaned) or _PAYMENT_HARVEST_RE.search(cleaned):
+        return fallback
+    return cleaned[:3500]
+
+
+def normalize_nicaragua_phone(raw):
+    """Return ('+505XXXXXXXX', '505XXXXXXXX@s.whatsapp.net', 'XXXXXXXX') or (None, None, None)."""
+    if not raw or not isinstance(raw, str):
+        return None, None, None
+    digits = re.sub(r'\D', '', raw)
+    if len(digits) == 11 and digits.startswith('505'):
+        digits = digits[3:]
+    if len(digits) != 8 or digits[0] not in '2578':
+        return None, None, None
+    phone = f'+505{digits}'
+    jid = f'505{digits}@s.whatsapp.net'
+    return phone, jid, digits
 
 
 def reserve_attempt():

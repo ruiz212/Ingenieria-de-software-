@@ -374,7 +374,7 @@ def actualizar_estado(codigo):
             current_app.logger.warning(f"Auditoría BitacoraFiscal omitida para encargo {codigo}: {audit_err}")
 
         from app.whatsapp.repository import notify
-        notify(cursor, 'pedido', factura_id)
+        notify(cursor, 'pedido', factura_id, estado=nuevo_estado, numero_factura=numero_factura, codigo_seguimiento=codigo)
         conn.commit()
         return jsonify({
             'status': 'success',
