@@ -10,8 +10,15 @@ from app.admin import admin_bp
 from app.auth.decorators import roles_required
 from app.services.validation import required_text
 from app.whatsapp.repository import connection, rows, Store
-from app.whatsapp.security import verify_admin
+from app.whatsapp.security import verify_admin, SECURITY_PROTOCOLS
 from app.whatsapp.linking import public_state, start_local_worker
+
+
+def _apply_security_headers(response):
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 
 def snapshot(sid=None, *, only_state=False):
@@ -44,13 +51,39 @@ def whatsapp_status():
         response.status_code = 503
     else:
         try:
-            state, _, _ = snapshot(only_state=True)
-            response = jsonify(public_state(state))
+            chat_id = request.args.get('chat', type=int) or request.headers.get('X-WA-Chat', type=int)
+            if chat_id:
+                state, sessions, messages = snapshot(chat_id, only_state=False)
+                payload = public_state(state)
+                payload['sessions'] = [
+                    {
+                        'ID': s.get('ID'),
+                        'Telefono': s.get('Telefono'),
+                        'Modo': s.get('Modo'),
+                        'Avisos': bool(s.get('Avisos')),
+                        'Revision': s.get('Revision'),
+                        'UltimaInteraccion': str(s.get('UltimaInteraccion') or '')[:19],
+                    }
+                    for s in sessions
+                ]
+                payload['messages'] = [
+                    {
+                        'Tipo': m.get('Tipo'),
+                        'Estado': m.get('Estado'),
+                        'Creado': str(m.get('Creado') or '')[:19],
+                        'Texto': m.get('Texto') or '',
+                        'Imagen': m.get('Imagen') or '',
+                    }
+                    for m in messages
+                ]
+            else:
+                state, _, _ = snapshot(only_state=True)
+                payload = public_state(state)
+            response = jsonify(payload)
         except pyodbc.Error:
             response = jsonify(error='No se pudo actualizar la conexión. Vuelva a intentarlo.')
             response.status_code = 503
-    response.headers['Cache-Control'] = 'no-store'
-    return response
+    return _apply_security_headers(response)
 
 
 @admin_bp.route('/whatsapp', methods=['GET', 'POST'])
@@ -62,9 +95,9 @@ def whatsapp():
     state, sessions, messages = {'Activo': False, 'Estado': 'Pendiente de instalación'}, [], []
     if not installed:
         response = make_response(render_template('admin/whatsapp.html', state=public_state(state),
-                                                sessions=sessions, messages=messages, sid=sid, installed=False))
-        response.headers['Cache-Control'] = 'no-store'
-        return response
+                                                sessions=sessions, messages=messages, sid=sid,
+                                                installed=False, protocols=SECURITY_PROTOCOLS))
+        return _apply_security_headers(response)
     try:
         if request.method == 'POST':
             action = request.form.get('action')
@@ -123,7 +156,6 @@ def whatsapp():
         flash('La conexión cambió o hay una operación pendiente. Actualice el panel antes de continuar.'
               if '52027' in str(exc) else 'No se pudo cargar WhatsApp. Verifique la migración y la conexión SQL.', 'error')
     response = render_template('admin/whatsapp.html', state=public_state(state), sessions=sessions,
-                               messages=messages, sid=sid, installed=installed)
+                               messages=messages, sid=sid, installed=installed, protocols=SECURITY_PROTOCOLS)
     response = make_response(response)
-    response.headers['Cache-Control'] = 'no-store'
-    return response
+    return _apply_security_headers(response)

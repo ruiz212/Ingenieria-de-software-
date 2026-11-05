@@ -21,7 +21,7 @@ def store(monkeypatch):
     CREATE TABLE crm.WhatsAppControl(ID INTEGER PRIMARY KEY,Activo INTEGER);
     INSERT INTO crm.WhatsAppControl VALUES(1,1);
     CREATE TABLE crm.WhatsAppSesiones(ID INTEGER PRIMARY KEY,JID TEXT UNIQUE,Telefono TEXT,Token TEXT,
-       Modo TEXT DEFAULT 'IA',Revision INTEGER DEFAULT 0,Avisos INTEGER DEFAULT 0,Imagen TEXT,
+       Modo TEXT DEFAULT 'IA',Revision INTEGER DEFAULT 0,Avisos INTEGER DEFAULT 1,Imagen TEXT,
        UltimaInteraccion TEXT DEFAULT CURRENT_TIMESTAMP,Pendiente TEXT);
     CREATE TABLE crm.WhatsAppInbox(ID INTEGER PRIMARY KEY,SesionID INTEGER,MessageID TEXT,Texto TEXT,Imagen TEXT,
        Estado TEXT DEFAULT 'Pendiente',Intentos INTEGER DEFAULT 0,Creado TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -177,3 +177,39 @@ def test_confirmed_whatsapp_quote_appears_in_the_shared_pos_inbox_once(store, mo
         'especificaciones': 'Pastel para 20 personas', 'fecha_entrega': (datetime.now()+timedelta(days=3)).strftime('%Y-%m-%d'),
         'ruta_imagen': 'uploads/referencias/synthetic.jpg', 'estado': 'Pendiente', 'precio_cotizado': None,
         'fecha_solicitud': '', 'canal': 'WhatsApp'}
+
+
+def test_quote_and_order_notifications_work_with_associated_phone_number(store, monkeypatch):
+    channel, db = store
+    monkeypatch.setenv('WHATSAPP_ENABLED', '1')
+    dummy_cursor = SimpleNamespace(execute=lambda *a, **kw: None, fetchone=lambda: None)
+    # 1. Quote priced notification to a phone number that hasn't even chatted before
+    repository.notify(
+        dummy_cursor, 'cotizacion', 15,
+        phone='8765-4321', estado='Cotizada', precio=680.0, fecha_entrega='12/11/2026',
+    )
+    session_row = db.execute("SELECT ID, Telefono, Avisos FROM crm.WhatsAppSesiones WHERE Telefono='+50587654321'").fetchone()
+    assert session_row is not None and session_row[2] == 1
+    outbox = db.execute("SELECT Clave, Texto, Tipo FROM crm.WhatsAppOutbox WHERE SesionID=?", (session_row[0],)).fetchall()
+    assert len(outbox) == 1
+    assert 'COT-0015' in outbox[0][1] and '680' in outbox[0][1] and outbox[0][2] == 'Aviso'
+
+    # 2. Order status changes (Pendiente -> En Proceso -> Listo -> Entregado) on associated phone
+    for state in ('Pendiente', 'En Proceso', 'Listo', 'Entregado'):
+        repository.notify(
+            dummy_cursor, 'pedido', 99,
+            phone='+505 8765 4321', estado=state,
+            numero_factura='FAC-0099', codigo_seguimiento='SEG99XYZ',
+            fecha_entrega='15/11/2026', saldo=250.0,
+        )
+    order_msgs = db.execute(
+        "SELECT Clave, Texto FROM crm.WhatsAppOutbox WHERE SesionID=? AND Clave LIKE 'order:99:%' ORDER BY ID",
+        (session_row[0],),
+    ).fetchall()
+    assert [m[0] for m in order_msgs] == [
+        'order:99:Pendiente',
+        'order:99:En Proceso',
+        'order:99:Listo',
+        'order:99:Entregado',
+    ]
+    assert all('FAC-0099' in m[1] for m in order_msgs)

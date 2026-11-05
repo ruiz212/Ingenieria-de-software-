@@ -177,7 +177,7 @@
   },
   "pages/admin/whatsapp": {
     "file": "dist/pages/admin/whatsapp.css",
-    "version": "6ee507ab95a6"
+    "version": "b3ce6382a73c"
   },
   "motion": {
     "file": "dist/motion.css",

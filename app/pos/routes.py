@@ -548,6 +548,9 @@ def registrar_factura():
             fallback_sql='UPDATE Facturas SET DocumentoJSON=? WHERE ID=?',
         )
         audit(cursor, current_user.id, 'EMISION', 'Factura', factura_id, {'numero': number, 'total': total}, request.remote_addr)
+        if es_encargo:
+            from app.whatsapp.repository import notify
+            notify(cursor, 'pedido', factura_id, phone=encargo.get('telefono'), estado='Pendiente', numero_factura=number, codigo_seguimiento=code, fecha_entrega=delivery.strftime('%d/%m/%Y') if delivery else None, saldo=float(total - (advance or 0)))
         conn.commit()
         return jsonify(status='success', mensaje='Factura registrada', factura=document)
     except (ValueError, ContabilidadError) as error:
@@ -764,7 +767,7 @@ def cotizar_pedido(id):
         if cursor.rowcount != 1:
             return jsonify(error='Cotización inexistente o ya procesada.'), 409
         from app.whatsapp.repository import notify
-        notify(cursor, 'cotizacion', id)
+        notify(cursor, 'cotizacion', id, estado='Cotizada', precio=precio)
         conn.commit()
         return jsonify({'mensaje': 'Cotización enviada'}), 200
     except Exception as e:
@@ -803,6 +806,8 @@ def rechazar_cotizacion(id):
             fallback_sql="UPDATE Cotizaciones SET Estado='Rechazada' WHERE ID=?",
         )
         conn.commit()
+        from app.whatsapp.repository import notify
+        notify(cursor, 'cotizacion', id, phone=getattr(row, 'TelefonoContacto', None), estado='Rechazada')
         return jsonify({'mensaje': 'Cotización rechazada'}), 200
     except Exception as e:
         conn.rollback()
@@ -858,6 +863,8 @@ def aceptar_cotizacion(id):
             return jsonify(error='La cotización cambió. Actualice la pantalla.'), 409
 
         conn.commit()
+        from app.whatsapp.repository import notify
+        notify(cursor, 'cotizacion', id, phone=getattr(row, 'TelefonoContacto', None), estado='Aceptada', precio=float(row.PrecioCotizado))
         return jsonify(mensaje='Cotización aceptada', id=id, precio_cotizado=float(row.PrecioCotizado)), 200
     except Exception as error:
         conn.rollback()

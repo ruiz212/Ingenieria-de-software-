@@ -89,7 +89,13 @@ class Gemini:
         self.models = tuple(dict.fromkeys(m.strip() for m in models if m.strip()))
         if not self.models or any(not re.fullmatch(r'gemini-[a-zA-Z0-9_.-]+', m) for m in self.models):
             raise ValueError('Lista de modelos Gemini no válida.')
-        self.post, self.clock = post or requests.post, clock or time.monotonic
+        if post is None:
+            self._http = requests.Session()
+            self.post = self._http.post
+        else:
+            self._http = None
+            self.post = post
+        self.clock = clock or time.monotonic
         self.cooldowns = {}
         self.last_model = None
 
@@ -113,18 +119,22 @@ class Gemini:
             attempts += 1
             payload = {'systemInstruction': {'parts': [{'text': PROMPT}]},
                        'contents': contents_for(messages, model),
-                       'generationConfig': {'temperature': 0.2, 'maxOutputTokens': 2048}}
+                       'generationConfig': {'temperature': 0.2, 'maxOutputTokens': 1024}}
             if model in ('gemini-3.8-flash', 'gemini-4-argon', 'gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools'):
                 payload['generationConfig']['thinkingConfig'] = {'thinkingLevel': 'LOW'}
-            elif model in ('gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3-flash-preview'):
+            elif model in ('gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3-flash-preview',
+                           'gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview',
+                           'gemini-3.5-flash', 'gemini-3.7-flash'):
                 payload['generationConfig']['thinkingConfig'] = {'thinkingLevel': 'MINIMAL'}
+            elif model in ('gemini-2.5-flash', 'gemini-2.5-flash-lite'):
+                payload['generationConfig']['thinkingConfig'] = {'thinkingBudget': 0}
             if schemas:
                 payload['tools'] = [{'functionDeclarations': schemas}]
             try:
                 response = self.post(
                     f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
                     headers={'x-goog-api-key': self.key}, json=payload,
-                    timeout=(5, min(30, remaining - 5)))
+                    timeout=(3.5, min(20, remaining - 3)))
             except (requests.Timeout, requests.ConnectionError):
                 self.cooldowns[model] = self.clock() + 30
                 logging.getLogger(__name__).warning('Gemini %s: conexión temporalmente no disponible', model)

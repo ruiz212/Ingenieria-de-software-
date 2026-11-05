@@ -14,7 +14,7 @@ IF OBJECT_ID('crm.WhatsAppSesiones') IS NULL
   ID INT IDENTITY PRIMARY KEY, JID VARCHAR(100) NOT NULL UNIQUE,
   Telefono VARCHAR(20) NOT NULL, Token VARCHAR(100) NOT NULL UNIQUE,
   Modo VARCHAR(6) NOT NULL DEFAULT 'IA' CHECK(Modo IN ('IA','HUMANO')),
-  Revision INT NOT NULL DEFAULT 0, Avisos BIT NOT NULL DEFAULT 0,
+  Revision INT NOT NULL DEFAULT 0, Avisos BIT NOT NULL DEFAULT 1,
   Pendiente NVARCHAR(MAX) NULL, Imagen VARCHAR(255) NULL,
   UltimaInteraccion DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME());
 IF OBJECT_ID('crm.WhatsAppInbox') IS NULL
@@ -51,13 +51,18 @@ BEGIN
  SET NOCOUNT ON;
  SET XACT_ABORT ON;
  -- Ownership chaining permits narrowly scoped channel operations, no direct table grants.
- DECLARE @Token VARCHAR(100), @Telefono VARCHAR(20), @Imagen VARCHAR(255);
- SELECT @Token=Token,@Telefono=Telefono,@Imagen=Imagen FROM crm.WhatsAppSesiones WHERE ID=@Sesion;
+ DECLARE @Token VARCHAR(100), @Telefono VARCHAR(20), @Imagen VARCHAR(255), @Tel8 VARCHAR(20);
+ SELECT @Token=Token,@Telefono=Telefono,@Imagen=Imagen,
+  @Tel8=RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(Telefono,''),'+',''),'-',''),' ',''),'.',''),8)
+  FROM crm.WhatsAppSesiones WHERE ID=@Sesion;
  IF @Token IS NULL THROW 52026,'Sesión WhatsApp inexistente.',1;
  IF @Operacion='listar'
  BEGIN
-  SELECT TOP 20 ID,Especificaciones,FechaEntrega,Estado,PrecioCotizado FROM crm.Cotizaciones
-   WHERE ClienteID IS NULL AND SessionID=@Token ORDER BY ID DESC;
+  SELECT TOP 20 c.ID,c.Especificaciones,c.FechaEntrega,c.Estado,c.PrecioCotizado
+   FROM crm.Cotizaciones c LEFT JOIN crm.Clientes cl ON cl.ID=c.ClienteID
+   WHERE (c.ClienteID IS NULL AND c.SessionID=@Token)
+    OR (LEN(@Tel8)=8 AND RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(LTRIM(RTRIM(c.TelefonoContacto)),''),cl.Telefono,''),'+',''),'-',''),' ',''),'.',''),8)=@Tel8)
+   ORDER BY c.ID DESC;
   RETURN;
  END;
  IF NOT EXISTS(SELECT 1 FROM crm.WhatsAppControl WHERE ID=1 AND Activo=1)
@@ -75,10 +80,12 @@ BEGIN
   RETURN;
  END;
  IF @Operacion NOT IN ('aceptar','rechazar') THROW 52026,'Operación no permitida.',1;
- UPDATE crm.Cotizaciones WITH(UPDLOCK,HOLDLOCK)
+ UPDATE c WITH(UPDLOCK,HOLDLOCK)
   SET Estado=CASE WHEN @Operacion='aceptar' THEN 'Aceptada' ELSE 'Rechazada' END
-  WHERE ID=@Cotizacion AND ClienteID IS NULL AND SessionID=@Token AND Estado='Cotizada'
-   AND PrecioCotizado=@PrecioEsperado;
+  FROM crm.Cotizaciones c LEFT JOIN crm.Clientes cl ON cl.ID=c.ClienteID
+  WHERE c.ID=@Cotizacion AND c.Estado='Cotizada' AND c.PrecioCotizado=@PrecioEsperado
+   AND ((c.ClienteID IS NULL AND c.SessionID=@Token)
+    OR (LEN(@Tel8)=8 AND RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(LTRIM(RTRIM(c.TelefonoContacto)),''),cl.Telefono,''),'+',''),'-',''),' ',''),'.',''),8)=@Tel8));
  IF @@ROWCOUNT<>1 THROW 52026,'Cotización ajena, inexistente o ya procesada.',1;
  SELECT @Cotizacion AS ID;
 END;
@@ -92,27 +99,52 @@ AS
 BEGIN
  SET NOCOUNT ON;
  IF NOT EXISTS(SELECT 1 FROM crm.WhatsAppControl WHERE Activo=1) RETURN;
- DECLARE @Texto NVARCHAR(4000), @Clave VARCHAR(200), @Sesion INT;
+ DECLARE @Texto NVARCHAR(4000), @Clave VARCHAR(200), @Sesion INT, @Tel8 VARCHAR(20);
  IF @Tipo='cotizacion'
  BEGIN
-  SELECT @Sesion=s.ID,
-   @Texto=CONCAT(N'Tu cotización COT-',c.ID,N' está lista: C$ ',c.PrecioCotizado,
-    N'. Indica el código y si deseas aceptarla o rechazarla.'),
-   @Clave=CONCAT('quote:',c.ID,':',c.PrecioCotizado)
-  FROM crm.Cotizaciones c JOIN crm.WhatsAppSesiones s ON c.SessionID=s.Token
-  WHERE c.ID=@ID AND c.ClienteID IS NULL AND c.Estado='Cotizada' AND s.Avisos=1;
+  SELECT @Tel8=RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(LTRIM(RTRIM(c.TelefonoContacto)),''),cl.Telefono,''),'+',''),'-',''),' ',''),'.',''),8)
+  FROM crm.Cotizaciones c LEFT JOIN crm.Clientes cl ON cl.ID=c.ClienteID WHERE c.ID=@ID;
+  IF LEN(@Tel8)=8 AND @Tel8 NOT LIKE '%[^0-9]%'
+   AND NOT EXISTS(SELECT 1 FROM crm.WhatsAppSesiones WHERE RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(Telefono,'+',''),'-',''),' ',''),'.',''),8)=@Tel8)
+   AND NOT EXISTS(SELECT 1 FROM crm.Cotizaciones c JOIN crm.WhatsAppSesiones s ON s.Token=c.SessionID WHERE c.ID=@ID)
+  BEGIN
+   INSERT crm.WhatsAppSesiones(JID,Telefono,Token,Avisos)
+    VALUES(CONCAT('505',@Tel8,'@s.whatsapp.net'),CONCAT('+505',@Tel8),LOWER(REPLACE(CONVERT(VARCHAR(36),NEWID()),'-','')),1);
+  END;
+  SELECT TOP 1 @Sesion=s.ID,
+   @Texto=CASE
+    WHEN c.Estado='Cotizada' THEN CONCAT(N'🍰 Brajher''s Cake: Tu cotización COT-',RIGHT(CONCAT('0000',c.ID),4),N' está lista por C$ ',CONVERT(NVARCHAR(30),c.PrecioCotizado),N' (Entrega: ',CONVERT(NVARCHAR(10),c.FechaEntrega,103),N'). Indica el código COT-',RIGHT(CONCAT('0000',c.ID),4),N' y si deseas aceptarla o rechazarla.')
+    WHEN c.Estado='Rechazada' THEN CONCAT(N'🍰 Brajher''s Cake: Tu cotización COT-',RIGHT(CONCAT('0000',c.ID),4),N' fue marcada como Rechazada. Escribe HUMANO si deseas ajustar tu pedido.')
+    WHEN c.Estado='Aceptada' THEN CONCAT(N'🍰 Brajher''s Cake: Confirmamos tu aceptación de la cotización COT-',RIGHT(CONCAT('0000',c.ID),4),N' por C$ ',CONVERT(NVARCHAR(30),c.PrecioCotizado),N'. Recuerda realizar el adelanto mínimo del 50% en caja.')
+    ELSE NULL END,
+   @Clave=CONCAT('quote:',c.ID,':',c.Estado,':',ISNULL(CONVERT(VARCHAR(30),c.PrecioCotizado),'0'))
+  FROM crm.Cotizaciones c LEFT JOIN crm.Clientes cl ON cl.ID=c.ClienteID
+  JOIN crm.WhatsAppSesiones s ON (c.SessionID=s.Token OR (LEN(@Tel8)=8 AND RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(s.Telefono,'+',''),'-',''),' ',''),'.',''),8)=@Tel8))
+  WHERE c.ID=@ID AND c.Estado IN ('Cotizada','Rechazada','Aceptada') AND s.Avisos=1;
  END
  ELSE IF @Tipo='pedido'
  BEGIN
-  -- Proactive orders require explicit opt-in. No access to history is conferred.
-  SELECT @Sesion=s.ID,@Texto=CONCAT(N'Tu pedido ',f.NumeroFactura,N' está ',e.Estado,
-   N'. Consulta el saldo con tu código privado de seguimiento.'),
+  SELECT @Tel8=RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(LTRIM(RTRIM(e.TelefonoContacto)),''),cl.Telefono,''),'+',''),'-',''),' ',''),'.',''),8)
+  FROM ventas.Encargos e JOIN ventas.Facturas f ON f.ID=e.FacturaID LEFT JOIN crm.Clientes cl ON cl.ID=f.ClienteID WHERE f.ID=@ID;
+  IF LEN(@Tel8)=8 AND @Tel8 NOT LIKE '%[^0-9]%'
+   AND NOT EXISTS(SELECT 1 FROM crm.WhatsAppSesiones WHERE RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(Telefono,'+',''),'-',''),' ',''),'.',''),8)=@Tel8)
+  BEGIN
+   INSERT crm.WhatsAppSesiones(JID,Telefono,Token,Avisos)
+    VALUES(CONCAT('505',@Tel8,'@s.whatsapp.net'),CONCAT('+505',@Tel8),LOWER(REPLACE(CONVERT(VARCHAR(36),NEWID()),'-','')),1);
+  END;
+  SELECT TOP 1 @Sesion=s.ID,
+   @Texto=CASE
+    WHEN e.Estado='Pendiente' THEN CONCAT(N'🧾 Brajher''s Cake: Tu pedido ',f.NumeroFactura,N' fue registrado (Estado: Pendiente, entrega ',CONVERT(NVARCHAR(10),e.FechaEntrega,103),N'). Código de seguimiento: ',f.CodigoSeguimiento,N'.')
+    WHEN e.Estado='En Proceso' THEN CONCAT(N'👩‍🍳 Brajher''s Cake: Tu pedido ',f.NumeroFactura,N' está En Proceso en pastelería (Entrega: ',CONVERT(NVARCHAR(10),e.FechaEntrega,103),N'). Código de seguimiento: ',f.CodigoSeguimiento,N'.')
+    WHEN e.Estado='Listo' THEN CONCAT(N'🎂 Brajher''s Cake: ¡Tu pedido ',f.NumeroFactura,N' está Listo para retirar! Consulta el saldo con tu código privado de seguimiento ',f.CodigoSeguimiento,N'.')
+    WHEN e.Estado='Entregado' THEN CONCAT(N'✅ Brajher''s Cake: Tu pedido ',f.NumeroFactura,N' fue marcado como Entregado. ¡Gracias por preferirnos!')
+    ELSE NULL END,
    @Clave=CONCAT('order:',f.ID,':',e.Estado)
-  FROM ventas.Encargos e JOIN ventas.Facturas f ON f.ID=e.FacturaID
-  JOIN crm.WhatsAppSesiones s ON RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(e.TelefonoContacto,'+',''),'-',''),' ',''),'.',''),8)=RIGHT(s.Telefono,8)
-  WHERE f.ID=@ID AND f.EstadoFiscal='Emitida' AND e.Estado IN ('En Proceso','Listo') AND s.Avisos=1;
+  FROM ventas.Encargos e JOIN ventas.Facturas f ON f.ID=e.FacturaID LEFT JOIN crm.Clientes cl ON cl.ID=f.ClienteID
+  JOIN crm.WhatsAppSesiones s ON LEN(@Tel8)=8 AND RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(s.Telefono,'+',''),'-',''),' ',''),'.',''),8)=@Tel8
+  WHERE f.ID=@ID AND (f.EstadoFiscal IS NULL OR f.EstadoFiscal='Emitida') AND e.Estado IN ('Pendiente','En Proceso','Listo','Entregado') AND s.Avisos=1;
  END;
- IF @Sesion IS NOT NULL AND NOT EXISTS(SELECT 1 FROM crm.WhatsAppOutbox WITH(UPDLOCK,HOLDLOCK) WHERE Clave=@Clave)
+ IF @Sesion IS NOT NULL AND @Texto IS NOT NULL AND NOT EXISTS(SELECT 1 FROM crm.WhatsAppOutbox WITH(UPDLOCK,HOLDLOCK) WHERE Clave=@Clave)
   INSERT crm.WhatsAppOutbox(SesionID,Clave,Texto,Tipo,Revision)
    SELECT ID,@Clave,@Texto,'Aviso',Revision FROM crm.WhatsAppSesiones WHERE ID=@Sesion;
 END;
@@ -131,7 +163,7 @@ CREATE OR ALTER PROCEDURE crm.sp_WhatsAppEncolar
 AS
 BEGIN
  SET NOCOUNT ON;
- IF NOT EXISTS(SELECT 1 FROM crm.WhatsAppOutbox WITH(UPDLOCK,HOLDLOCK) WHERE Clave=@P1) INSERT crm.WhatsAppOutbox(SesionID,Clave,Texto,Tipo,Revision) VALUES(@P2,@P3,@P4,@P5,@P6);
+ INSERT crm.WhatsAppOutbox(SesionID,Clave,Texto,Tipo,Revision) SELECT @P2,@P3,@P4,@P5,@P6 WHERE NOT EXISTS(SELECT 1 FROM crm.WhatsAppOutbox WITH(UPDLOCK,HOLDLOCK) WHERE Clave=@P1);
 END;
 GO
 GRANT EXECUTE ON crm.sp_WhatsAppEncolar TO usr_bd_whatsapp,db_rol_gerencia,db_rol_superadmin;
@@ -237,7 +269,7 @@ CREATE OR ALTER PROCEDURE crm.sp_WhatsAppHistorial
 AS
 BEGIN
  SET NOCOUNT ON;
- SELECT TOP 10 Texto,Tipo FROM (SELECT Texto,'user' AS Tipo,Creado FROM crm.WhatsAppInbox WHERE SesionID=@P1 AND Estado='Procesado' UNION ALL SELECT Texto,'model' AS Tipo,Creado FROM crm.WhatsAppOutbox WHERE SesionID=@P2 AND Estado='Enviado') m ORDER BY Creado DESC;
+ SELECT TOP 20 Texto,Tipo FROM (SELECT Texto,'user' AS Tipo,Creado FROM crm.WhatsAppInbox WHERE SesionID=@P1 AND Estado='Procesado' UNION ALL SELECT Texto,'model' AS Tipo,Creado FROM crm.WhatsAppOutbox WHERE SesionID=@P2 AND Estado IN ('Enviado','Pendiente')) m ORDER BY Creado DESC;
 END;
 GO
 GRANT EXECUTE ON crm.sp_WhatsAppHistorial TO usr_bd_whatsapp;
@@ -449,7 +481,7 @@ CREATE OR ALTER PROCEDURE crm.sp_WhatsAppHistorialAdmin
 AS
 BEGIN
  SET NOCOUNT ON;
- SELECT TOP 100 Texto,Tipo,Estado,Creado FROM (SELECT Texto,'Cliente' AS Tipo,Estado,Creado FROM crm.WhatsAppInbox WHERE SesionID=@P1 UNION ALL SELECT Texto,Tipo,Estado,Creado FROM crm.WhatsAppOutbox WHERE SesionID=@P2) m ORDER BY Creado DESC;
+ SELECT TOP 100 Texto,Tipo,Estado,Creado,Imagen FROM (SELECT Texto,'Cliente' AS Tipo,Estado,Creado,Imagen FROM crm.WhatsAppInbox WHERE SesionID=@P1 UNION ALL SELECT Texto,Tipo,Estado,Creado,CAST(NULL AS VARCHAR(255)) AS Imagen FROM crm.WhatsAppOutbox WHERE SesionID=@P2) m ORDER BY Creado DESC;
 END;
 GO
 GRANT EXECUTE ON crm.sp_WhatsAppHistorialAdmin TO db_rol_gerencia,db_rol_superadmin;
@@ -511,7 +543,7 @@ AS
 BEGIN
  SET NOCOUNT ON;
  UPDATE crm.WhatsAppSesiones SET Imagen=COALESCE(@Imagen,Imagen),
-  Pendiente=CASE WHEN UPPER(LTRIM(RTRIM(@Texto)))='CONFIRMAR' THEN Pendiente ELSE NULL END
+  Pendiente=CASE WHEN UPPER(LTRIM(RTRIM(@Texto))) IN ('CANCELAR','ANULAR') THEN NULL ELSE Pendiente END
  WHERE ID=@Sesion;
 END;
 GO
@@ -522,11 +554,31 @@ CREATE OR ALTER PROCEDURE crm.sp_WhatsAppPrecio
 AS
 BEGIN
  SET NOCOUNT ON;
- SELECT c.PrecioCotizado FROM crm.Cotizaciones c JOIN crm.WhatsAppSesiones s ON s.Token=c.SessionID
- WHERE s.ID=@P1 AND c.ID=@P2 AND c.ClienteID IS NULL AND c.Estado='Cotizada';
+ SELECT c.PrecioCotizado FROM crm.Cotizaciones c JOIN crm.WhatsAppSesiones s ON (s.Token=c.SessionID OR c.TelefonoContacto=s.Telefono)
+ WHERE s.ID=@P1 AND c.ID=@P2 AND c.Estado='Cotizada';
 END;
 GO
 GRANT EXECUTE ON crm.sp_WhatsAppPrecio TO usr_bd_whatsapp;
+GO
+CREATE OR ALTER PROCEDURE crm.sp_WhatsAppPedidosCliente
+ @Sesion INT
+AS
+BEGIN
+ SET NOCOUNT ON;
+ DECLARE @Tel8 VARCHAR(20);
+ SELECT @Tel8=RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(Telefono,''),'+',''),'-',''),' ',''),'.',''),8)
+  FROM crm.WhatsAppSesiones WHERE ID=@Sesion;
+ IF LEN(@Tel8)<>8 BEGIN SELECT TOP 0 CAST(NULL AS VARCHAR(50)) AS NumeroFactura; RETURN; END;
+ SELECT TOP 10 f.NumeroFactura, f.CodigoSeguimiento, e.Estado, e.FechaEntrega, f.Total,
+  ISNULL((SELECT SUM(p.Monto) FROM ventas.Pagos p WHERE p.FacturaID=f.ID), 0) AS Pagado
+ FROM ventas.Encargos e JOIN ventas.Facturas f ON f.ID=e.FacturaID
+ LEFT JOIN crm.Clientes cl ON cl.ID=f.ClienteID
+ WHERE (f.EstadoFiscal IS NULL OR f.EstadoFiscal='Emitida')
+  AND RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(LTRIM(RTRIM(e.TelefonoContacto)),''),cl.Telefono,''),'+',''),'-',''),' ',''),'.',''),8)=@Tel8
+ ORDER BY f.ID DESC;
+END;
+GO
+GRANT EXECUTE ON crm.sp_WhatsAppPedidosCliente TO usr_bd_whatsapp;
 GO
 IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('crm.WhatsAppInbox') AND name='IX_WhatsAppInbox_Pendiente')
  CREATE INDEX IX_WhatsAppInbox_Pendiente ON crm.WhatsAppInbox(Estado,ID) INCLUDE(SesionID,Intentos);

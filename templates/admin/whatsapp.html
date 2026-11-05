@@ -11,12 +11,34 @@
   <input id="{{ prefix }}-otp" name="otp" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" required data-no-draft>
   {% endif %}
 {% endmacro %}
-<div class="container-fluid whatsapp-workspace" data-wa-panel data-status-url="{{ url_for('admin.whatsapp_status') }}" data-ready="{{ '1' if installed and state.ready else '0' }}" data-revision="{{ state.ConnectionRevision }}">
+{% set active_protocols = protocols|default([
+  {'id': 'reauth_2fa', 'titulo': 'Reautenticación 2FA', 'detalle': 'Cambios de cuenta y QR protegidos con contraseña y código de segundo factor.'},
+  {'id': 'anti_injection', 'titulo': 'Escudo Anti-Inyección', 'detalle': 'Bloqueo de prompt injection, SQL y extracción de datos entre clientes.'},
+  {'id': 'phone_isolation', 'titulo': 'Vínculo por Teléfono', 'detalle': 'Notificaciones de cotización y estado de pedido asociadas al número del cliente.'},
+  {'id': 'two_step_confirm', 'titulo': 'Confirmación en 2 Pasos', 'detalle': 'Borrador previo y confirmación explícita para cotizaciones.'},
+  {'id': 'context_memory', 'titulo': 'Contexto Persistente', 'detalle': 'Memoria de sesión, imágenes de referencia, cotizaciones y encargos activos.'}
+]) %}
+<div class="container-fluid whatsapp-workspace" data-wa-panel data-status-url="{{ url_for('admin.whatsapp_status') }}" data-chat-id="{{ sid or '' }}" data-ready="{{ '1' if installed and state.ready else '0' }}" data-revision="{{ state.ConnectionRevision }}">
   <header class="wa-heading">
-    <div><h2>WhatsApp de la empresa</h2>
-    <p>Vincula el teléfono de la panadería y atiende a tus clientes desde aquí.</p></div>
-    <span class="wa-status" id="wa-status" role="status">{{ 'Conexión no iniciada' if state.Estado == 'Worker desconectado' else state.Estado }}</span>
+    <div>
+      <h2>WhatsApp de la empresa</h2>
+      <p>Vincula el teléfono de la panadería, supervisa notificaciones automáticas de cotizaciones y pedidos, y atiende a tus clientes desde aquí.</p>
+    </div>
+    <span class="wa-status" id="wa-status" role="status" data-connected="{{ 'true' if state.Estado == 'Conectado' else 'false' }}">{{ 'Conexión no iniciada' if state.Estado == 'Worker desconectado' else state.Estado }}</span>
   </header>
+
+  <section class="wa-protocols-bar" aria-label="Protocolos de seguridad y contexto activos">
+    {% for proto in active_protocols %}
+    <div class="wa-protocol-pill" title="{{ proto.detalle }}">
+      <span class="wa-protocol-dot" aria-hidden="true"></span>
+      <div>
+        <strong>{{ proto.titulo }}</strong>
+        <span>{{ proto.detalle }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+
   <section class="wa-connection" aria-labelledby="wa-connection-title">
     <div class="wa-pairing">
       <h3 id="wa-connection-title">Conectar un teléfono</h3>
@@ -69,10 +91,12 @@
       {% endif %}
     </div>
   </section>
+
   <section class="wa-attention" aria-labelledby="wa-attention-title">
-    <div><h3 id="wa-attention-title">Atención y pedidos</h3>
+    <div>
+      <h3 id="wa-attention-title">Atención, cotizaciones y avisos de pedidos</h3>
       <p id="wa-assistant-status">{{ 'Asistente y envíos activos.' if state.Activo else 'Asistente y envíos pausados.' }}</p>
-      <p class="wa-help">Las cotizaciones confirmadas por WhatsApp aparecen en <a href="/pos?solicitudes=1">Solicitudes de clientes del punto de venta</a>, junto con las de la web. El equipo asigna el precio allí.</p>
+      <p class="wa-help">Las cotizaciones confirmadas por WhatsApp aparecen en <a href="/pos?solicitudes=1">Solicitudes de clientes del punto de venta</a>. Cuando se cotiza un precio o cambia el estado de un pedido en el monitor, se notifica automáticamente al número de teléfono asociado.</p>
     </div>
     {% if installed and state.ready %}
     <form method="post" id="wa-global-form">
@@ -83,43 +107,137 @@
     </form>
     {% endif %}
   </section>
-  <div class="wa-inbox-heading"><h3>Conversaciones</h3><a class="btn btn-outline-secondary" href="{{ url_for('admin.whatsapp', chat=sid) }}">Actualizar conversaciones</a></div>
-  <div class="row g-4">
-    <section class="col-12 col-lg-4" aria-labelledby="chats-title">
-      <h4 id="chats-title">Chats recientes <span class="wa-count">{{ sessions|length }}</span></h4>
-      <ul class="list-group">
+
+  <div class="wa-inbox-heading">
+    <div>
+      <h3>Centro de mensajes y conversaciones</h3>
+      <p class="wa-help mb-0">Visualiza el historial en tiempo real, avisos enviados al teléfono del cliente y toma control humano cuando lo necesites.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.whatsapp', chat=sid) }}">Actualizar conversaciones</a>
+  </div>
+
+  <div class="row g-4 wa-messaging-grid">
+    <section class="col-12 col-lg-4 wa-chat-sidebar" aria-labelledby="chats-title">
+      <div class="wa-sidebar-header">
+        <h4 id="chats-title">Chats recientes <span class="wa-count" id="wa-chats-count">{{ sessions|length }}</span></h4>
+        <div class="wa-search-box">
+          <label for="wa-chat-search" class="visually-hidden">Buscar por teléfono o estado</label>
+          <input id="wa-chat-search" type="search" placeholder="Filtrar por teléfono (+505...)" autocomplete="off" data-no-draft>
+        </div>
+        <div class="wa-filter-pills" role="group" aria-label="Filtrar conversaciones">
+          <button type="button" class="wa-filter-btn is-active" data-wa-filter="all">Todos</button>
+          <button type="button" class="wa-filter-btn" data-wa-filter="HUMANO">Humano</button>
+          <button type="button" class="wa-filter-btn" data-wa-filter="IA">Asistente IA</button>
+        </div>
+      </div>
+      <ul class="list-group wa-chat-list" id="wa-chat-list">
         {% for chat in sessions %}
-        <li class="list-group-item"><a href="{{ url_for('admin.whatsapp', chat=chat.ID) }}" {% if sid == chat.ID %}aria-current="page"{% endif %}>{{ chat.Telefono }}</a>
-          <p class="mb-0">{{ 'Atención humana' if chat.Modo == 'HUMANO' else 'Asistente' }} · Avisos {{ 'permitidos' if chat.Avisos else 'desactivados' }}</p></li>
-        {% else %}<li class="list-group-item wa-empty">Los mensajes aparecerán aquí cuando vincules el teléfono y un cliente escriba a la empresa.</li>{% endfor %}
+        <li class="list-group-item wa-chat-item {% if sid == chat.ID %}is-selected{% endif %}" data-chat-phone="{{ chat.Telefono }}" data-chat-mode="{{ chat.Modo }}" data-chat-avisos="{{ '1' if chat.Avisos else '0' }}">
+          <div class="wa-chat-card-top">
+            <span class="wa-chat-avatar" aria-hidden="true">{{ (chat.Telefono or 'WA')[-2:] }}</span>
+            <div class="wa-chat-main">
+              <a href="{{ url_for('admin.whatsapp', chat=chat.ID) }}" {% if sid == chat.ID %}aria-current="page"{% endif %}>{{ chat.Telefono }}</a>
+              <p class="mb-0 wa-chat-meta">{{ 'Atención humana' if chat.Modo == 'HUMANO' else 'Asistente' }} · Avisos {{ 'permitidos' if chat.Avisos else 'desactivados' }}</p>
+            </div>
+            <span class="wa-mode-badge wa-mode-badge--{{ 'humano' if chat.Modo == 'HUMANO' else 'ia' }}">{{ 'Humano' if chat.Modo == 'HUMANO' else 'IA' }}</span>
+          </div>
+          {% if chat.UltimaInteraccion is defined and chat.UltimaInteraccion %}
+          <small class="wa-chat-time">Última actividad: {{ chat.UltimaInteraccion }}</small>
+          {% endif %}
+        </li>
+        {% else %}
+        <li class="list-group-item wa-empty">Los mensajes aparecerán aquí cuando vincules el teléfono y un cliente escriba a la empresa.</li>
+        {% endfor %}
       </ul>
     </section>
-    <section class="col-12 col-lg-8" aria-labelledby="conversation-title">
-      <h4 id="conversation-title">Conversación seleccionada</h4>
-      {% set selected = sessions|selectattr('ID', 'equalto', sid)|first %}
-      {% if selected %}
-      <form method="post" class="mb-3">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="action" value="mode"><input type="hidden" name="sid" value="{{ selected.ID }}">
-        <input type="hidden" name="revision" value="{{ selected.Revision }}">
-        <input type="hidden" name="mode" value="{{ 'IA' if selected.Modo == 'HUMANO' else 'HUMANO' }}">
-        <button class="btn btn-primary" type="submit">{{ 'Reactivar asistente' if selected.Modo == 'HUMANO' else 'Tomar control' }}</button>
-      </form>
-      <ol class="list-group mb-4" aria-label="Historial de mensajes">
-        {% for msg in messages %}<li class="list-group-item text-break"><strong>{{ msg.Tipo }}</strong> <small>{{ msg.Estado }} · {{ msg.Creado }}</small><p class="mb-0">{{ msg.Texto }}</p></li>
-        {% else %}<li class="list-group-item">No hay mensajes para mostrar.</li>{% endfor %}
-      </ol>
-      {% if selected.Modo == 'HUMANO' %}
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="action" value="reply"><input type="hidden" name="sid" value="{{ selected.ID }}">
-        <input type="hidden" name="revision" value="{{ selected.Revision }}">
-        <label for="wa-response" class="form-label">Respuesta al cliente</label>
-        <textarea id="wa-response" name="text" class="form-control mb-2" rows="4" maxlength="3500" required aria-describedby="wa-send-help"></textarea>
-        <p id="wa-send-help">La respuesta se enviará cuando el asistente y la conexión estén activos.</p>
-        <button class="btn btn-primary" type="submit">Enviar respuesta</button>
-      </form>{% endif %}
-      {% else %}<div class="wa-empty"><p>Selecciona un chat para ver su historial y gestionar la atención.</p><p class="wa-help">Con «Tomar control» puedes pausar al asistente en ese chat y responder personalmente.</p></div>{% endif %}
+
+    <section class="col-12 col-lg-8 wa-conversation-panel" aria-labelledby="conversation-title">
+      <div class="wa-conv-shell">
+        <div class="wa-conv-topbar">
+          <div>
+            <h4 id="conversation-title">Conversación seleccionada</h4>
+            {% set selected = sessions|selectattr('ID', 'equalto', sid)|first %}
+            {% if selected %}
+            <div class="wa-conv-badges">
+              <span class="wa-phone-chip">{{ selected.Telefono }}</span>
+              <span class="wa-mode-badge wa-mode-badge--{{ 'humano' if selected.Modo == 'HUMANO' else 'ia' }}">
+                {{ 'En atención humana' if selected.Modo == 'HUMANO' else 'Asistente IA activo' }}
+              </span>
+              <span class="wa-avisos-chip {{ 'is-on' if selected.Avisos else 'is-off' }}">
+                Avisos de cotización/pedido {{ 'activos' if selected.Avisos else 'desactivados' }}
+              </span>
+            </div>
+            {% endif %}
+          </div>
+          {% if selected %}
+          <form method="post" class="wa-mode-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="mode"><input type="hidden" name="sid" value="{{ selected.ID }}">
+            <input type="hidden" name="revision" value="{{ selected.Revision }}">
+            <input type="hidden" name="mode" value="{{ 'IA' if selected.Modo == 'HUMANO' else 'HUMANO' }}">
+            <button class="btn btn-primary" type="submit">{{ 'Reactivar asistente' if selected.Modo == 'HUMANO' else 'Tomar control' }}</button>
+          </form>
+          {% endif %}
+        </div>
+
+        {% if selected %}
+        <ol class="list-group mb-4 wa-message-list" id="wa-message-list" aria-label="Historial de mensajes">
+          {% for msg in messages %}
+          {% set msg_kind = (msg.Tipo or 'Cliente')|lower %}
+          <li class="list-group-item text-break wa-msg wa-msg--{{ msg_kind }}" data-msg-kind="{{ msg.Tipo }}">
+            <div class="wa-msg-header">
+              <strong class="wa-msg-sender">
+                {% if msg.Tipo == 'Cliente' %}Cliente ({{ selected.Telefono }})
+                {% elif msg.Tipo == 'IA' %}Asistente IA
+                {% elif msg.Tipo == 'Humano' %}Atención Humana
+                {% elif msg.Tipo == 'Aviso' %}Aviso Automático (Cotización / Pedido)
+                {% else %}{{ msg.Tipo }}{% endif %}
+              </strong>
+              <small class="wa-msg-meta"><span class="wa-msg-state" data-state="{{ msg.Estado }}">{{ msg.Estado }}</span> · {{ msg.Creado }}</small>
+            </div>
+            <p class="mb-0 wa-msg-body">{{ msg.Texto }}</p>
+            {% if msg.Imagen is defined and msg.Imagen %}
+            <div class="wa-msg-attachment">
+              <a href="{{ url_for('static', filename=msg.Imagen) }}" target="_blank" rel="noopener noreferrer">Ver imagen de referencia adjunta</a>
+            </div>
+            {% endif %}
+          </li>
+          {% else %}
+          <li class="list-group-item wa-empty-thread">No hay mensajes para mostrar.</li>
+          {% endfor %}
+        </ol>
+
+        {% if selected.Modo == 'HUMANO' %}
+        <form method="post" class="wa-composer" id="wa-reply-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="reply"><input type="hidden" name="sid" value="{{ selected.ID }}">
+          <input type="hidden" name="revision" value="{{ selected.Revision }}">
+          <div class="wa-quick-replies" aria-label="Respuestas rápidas sugeridas">
+            <span class="wa-quick-label">Respuestas rápidas:</span>
+            <button type="button" class="wa-chip-btn" data-quick-text="Hola, te atiende personalmente el equipo de Brajher's Cake. ¿En qué podemos ayudarte con tu pedido?">Saludo humano</button>
+            <button type="button" class="wa-chip-btn" data-quick-text="Recuerda que para agendar un pastel personalizado se requiere confirmar el 50% de adelanto en caja.">Adelanto 50%</button>
+            <button type="button" class="wa-chip-btn" data-quick-text="Tu cotización ya fue revisada por el pastelero. Respóndenos si deseas aceptarla o ajustar algún detalle.">Cotización lista</button>
+            <button type="button" class="wa-chip-btn" data-quick-text="¡Tu pedido ya está listo para retirar en sucursal! Te esperamos en Brajher's Cake.">Pedido listo</button>
+          </div>
+          <label for="wa-response" class="form-label">Respuesta al cliente</label>
+          <textarea id="wa-response" name="text" class="form-control mb-2" rows="4" maxlength="3500" required placeholder="Escribe tu mensaje para {{ selected.Telefono }}..." aria-describedby="wa-send-help"></textarea>
+          <div class="wa-composer-footer">
+            <p id="wa-send-help" class="mb-0">La respuesta se enviará cuando el asistente y la conexión estén activos. <span id="wa-char-count" class="wa-char-count">0 / 3500</span></p>
+            <button class="btn btn-primary" type="submit">Enviar respuesta</button>
+          </div>
+        </form>
+        {% else %}
+        <div class="wa-ia-mode-banner">
+          <p class="mb-0">El <strong>Asistente IA</strong> está respondiendo automáticamente en este chat y manteniendo el contexto del cliente. Pulsa <strong>«Tomar control»</strong> arriba si deseas pausar la IA y escribir personalmente.</p>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="wa-empty">
+          <p>Selecciona un chat para ver su historial de burbujas, avisos enviados y gestionar la atención.</p>
+          <p class="wa-help">Con «Tomar control» puedes pausar al asistente en ese chat y responder personalmente.</p>
+        </div>
+        {% endif %}
+      </div>
     </section>
   </div>
 </div>
