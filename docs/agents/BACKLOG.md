@@ -1,5 +1,21 @@
 # Plantilla de tareas futuras
 
+## TASK-2026-003 — Vinculación segura y pedidos de WhatsApp
+
+- Solicitud y fecha: reparar QR, mejorar panel y unificar cotizaciones, 04-11-2026.
+- Objetivo: iniciar vinculación, retirar una cuenta y vincular otra con reautenticación administrativa.
+- Alcance: módulo WhatsApp, migración aditiva, panel Jinja/CSS/JS y solicitudes del POS; excluye login y acciones sobre cuentas reales.
+- Dependencias: migración 06 instalada; Neonize y almacenamiento persistente para el proceso.
+- Prioridad y complejidad: alta; revocación externa, concurrencia y permisos.
+- Riesgos: credenciales de cuenta, QR temporal y envíos pendientes; conservar historial y pedidos.
+- Criterios: permisos Admin/SuperAdmin, contraseña/TOTP, QR actualizado, revocación verificada y cotizaciones visibles en POS.
+- Validación segura: pruebas unitarias sin SQL operativo y navegador con datos sintéticos.
+- Responsable e integrador: Codex; sin delegación por preferencia del usuario.
+- Participación de Antigravity: ninguna.
+- Aprobación recibida: implementación y pruebas locales; migración y vinculación real no ejecutadas.
+- Estado: implementación local verificada; migración preparada sin aplicar por indicación expresa del usuario.
+- Evidencia: 421 pruebas aprobadas, 168 omitidas; Chrome a 390/1440 px y sintaxis SQL comprobada con PARSEONLY. Plan `docs/superpowers/plans/2026-11-04-whatsapp-linking.md`.
+
 ## TASK-2026-002 — Asistente WhatsApp
 
 - Solicitud: implementación autorizada el 04-11-2026 tras revisión de viabilidad.

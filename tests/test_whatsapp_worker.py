@@ -2,6 +2,7 @@
 import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
+import pytest
 from contextlib import nullcontext
 from app.whatsapp.client import Transport
 from app.whatsapp import worker
@@ -60,4 +61,50 @@ def test_slow_inference_does_not_stop_heartbeat_or_human_delivery(monkeypatch, t
         pass
     assert healthy.is_set(), 'No heartbeat while inference was running'
     assert delivered == [2], 'Human response was delayed by inference'
+    connection.close.assert_called_once()
+
+
+@pytest.mark.parametrize('repeat_unlink', [False, True])
+def test_worker_stays_available_to_pair_another_account_after_unlink(monkeypatch, tmp_path, repeat_unlink):
+    transports = []
+    class Cursor:
+        def execute(self, *args):
+            if len(transports) == 2:
+                raise RuntimeError('verification finished')
+            return self
+        def fetchone(self): return (0,)
+    connection = SimpleNamespace(cursor=Cursor, commit=lambda: None, close=Mock())
+    class Store:
+        removed = 0
+        polls = 0
+        def state(self, *args):
+            self.polls += 1
+            if self.polls > 10:
+                raise RuntimeError('Lifecycle did not advance')
+            return {'Activo': False, 'Vinculado': self.removed == 0, 'SolicitudEstado': 'Pendiente',
+                    'SolicitudAccion': 'VINCULAR' if self.removed >= 1 + int(repeat_unlink) else 'DESVINCULAR',
+                    'SolicitudID': f'synthetic{self.removed}'}
+        def complete_link(self, operation, success, error=None):
+            assert success
+            self.removed += 1
+    class FakeTransport:
+        status, qr = 'Conectado', None
+        def __init__(self, *args):
+            self.ended = threading.Event()
+            transports.append(self)
+        def connect(self): self.ended.wait(5)
+        def stop(self): self.ended.set()
+        def logout(self): pass
+    monotonic = iter(range(0, 100000, 11))
+    monkeypatch.setenv('WHATSAPP_ENABLED', '1')
+    monkeypatch.setenv('WHATSAPP_SESSION_PATH', str(tmp_path/'synthetic.sqlite3'))
+    monkeypatch.setattr(worker, 'Store', Store)
+    monkeypatch.setattr(worker, 'Transport', FakeTransport)
+    monkeypatch.setattr(worker, 'get_db_connection', lambda **kwargs: connection)
+    monkeypatch.setattr(worker.time, 'monotonic', lambda: next(monotonic))
+    app = SimpleNamespace(app_context=nullcontext, instance_path=str(tmp_path))
+    with pytest.raises(RuntimeError, match='verification finished'):
+        worker.run(app)
+    assert len(transports) == 2
+    assert all(t.ended.is_set() for t in transports)
     connection.close.assert_called_once()

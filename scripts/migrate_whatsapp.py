@@ -15,11 +15,12 @@ from app.qa_safety import require_qa_string
 
 
 def migrate(conn):
-    sql = (Path(__file__).resolve().parents[1] / 'database/06_whatsapp_bot.sql').read_text(encoding='utf-8')
     try:
-        for batch in re.split(r'^\s*GO\s*$', sql, flags=re.MULTILINE | re.IGNORECASE):
-            if batch.strip():
-                conn.cursor().execute(batch)
+        for name in ('06_whatsapp_bot.sql', '07_whatsapp_vinculacion.sql'):
+            sql = (Path(__file__).resolve().parents[1] / 'database' / name).read_text(encoding='utf-8')
+            for batch in re.split(r'^\s*GO\s*$', sql, flags=re.MULTILINE | re.IGNORECASE):
+                if batch.strip():
+                    conn.cursor().execute(batch)
         conn.commit()
     except Exception:
         conn.rollback()

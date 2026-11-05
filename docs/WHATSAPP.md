@@ -1,6 +1,6 @@
 # Atención WhatsApp
 
-Implementación opcional para Flask y SQL Server. El servidor web nunca inicia Neonize.
+Implementación opcional para Flask y SQL Server. Neonize se ejecuta en un proceso separado.
 Codex implementó el canal sobre la rama existente, preservando los cambios de autenticación
 que ya estaban presentes. El transporte no oficial mantiene el riesgo operativo descrito
 en la evaluación previa; mostrar presencia de escritura no evita restricciones.
@@ -35,8 +35,8 @@ en la evaluación previa; mostrar presencia de escritura no evita restricciones.
 6. Ejecutar `python scripts/run_whatsapp.py` en un proceso distinto del servidor web.
    Usar un servicio/supervisor del sistema operativo con reinicio ante fallo y un solo
    worker por cuenta/base. El bloqueo de sesión SQL rechaza un segundo worker.
-7. Ingresar a `/admin/whatsapp` como Admin/SuperAdmin, actualizar para obtener el QR
-   y vincular una cuenta de prueba desde Dispositivos vinculados. Activar el interruptor
+7. Ingresar a `/admin/whatsapp` como Admin/SuperAdmin y usar «Verificar identidad y conectar»
+   para obtener el QR. Escanear una cuenta de prueba desde Dispositivos vinculados. Activar el interruptor
    y probar primero con números controlados. No se vinculó una cuenta real al desarrollar.
 
 ## Qué puede hacer
@@ -174,3 +174,58 @@ El despliegue web sigue iniciando Gunicorn. El worker debe ejecutarse por separa
 con `python scripts/run_whatsapp.py`, bajo el supervisor del destino y con almacenamiento
 persistente. Subir a `main` no equivale a vincular el teléfono ni activar el interruptor
 del bot. No se insertan claves locales en Git ni en el ZIP; deben configurarse en Azure.
+
+## Vinculación segura y solicitudes de clientes
+
+La actualización de vinculación añade `database/07_whatsapp_vinculacion.sql`, después
+de la migración 06. `scripts/migrate_whatsapp.py` aplica ambas dentro de una transacción;
+no reconstruye tablas. La 07 agrega control de solicitudes con revisión, auditoría y
+presupuesto de intentos de reautenticación compartido. También añade `CanalOrigen` al
+resultado del procedimiento de la bandeja de cotizaciones, sin duplicar cotizaciones.
+No se aplicó esta actualización a una base operativa durante las pruebas locales.
+
+En Administración > WhatsApp siempre aparece el área de conexión. Para iniciar o
+reconectar, introducir la contraseña actual del administrador y su TOTP de seis dígitos
+si lo tiene habilitado. Hay cinco intentos por administrador en quince minutos,
+compartidos por todos los procesos web. El QR requiere reautenticación reciente
+(cinco minutos) y coincide con la revisión actual de la cuenta. Las respuestas privadas
+no se almacenan en caché. La página actualiza estado y QR cada cuatro segundos sin
+recargar ni perder texto en edición; un cambio concurrente bloquea formularios antiguos.
+
+Para retirar una cuenta, abrir «Desvincular o cambiar de número», verificar contraseña
+y TOTP y escribir `DESVINCULAR`. El proceso pausa los envíos, invalida borradores y
+revoca la sesión remota mediante `logout()`. Desconectar el transporte por sí solo no
+cuenta como desvinculación. Si falla la revocación, la operación queda en error y no
+se confirma que la cuenta esté retirada. Cuando se confirma, se cancelan envíos y
+mensajes pendientes y se reinician los consentimientos de avisos; se conservan historial,
+cotizaciones y pedidos. El proceso permanece disponible para una nueva vinculación.
+
+Al ejecutar `python run.py` en modo debug desde localhost, el formulario puede iniciar
+el proceso separado automáticamente. `WHATSAPP_MANAGED_WORKER=0` deshabilita ese
+arranque. En un servidor se conserva el supervisor externo por defecto; solo definir
+`WHATSAPP_MANAGED_WORKER=1` si el operador desea habilitar el arranque desde el panel
+en ese destino. No reemplaza la supervisión ante fallos ni garantiza un proceso siempre
+activo. El registro local queda en `instance/logs/whatsapp-worker.log`; no se publica.
+El bloqueo exclusivo SQL sigue impidiendo dos conexiones activas a la vez.
+
+Gemini se inicializa al responder: una clave ausente ya no impide generar el QR ni
+responder manualmente. Para reinicios, el proceso necesita el mismo
+`WHATSAPP_SESSION_PATH` persistente. Si se pierde ese archivo, retirar el dispositivo
+anterior desde el WhatsApp del teléfono antes de recuperar el servicio: un QR nuevo
+por sí solo no demuestra que el dispositivo anterior haya sido retirado.
+
+Las solicitudes confirmadas en el chat se guardan en `crm.Cotizaciones` y aparecen en
+POS > Solicitudes de clientes, junto con las de la web y con su canal. El botón del
+panel abre `/pos?solicitudes=1`. La bandeja abierta busca nuevas solicitudes cada diez
+segundos y mantiene los campos de precio y el foco; cerrada, actualiza el contador cada
+treinta segundos. Reabrir la bandeja vuelve a cargar todos los estados y precios del
+servidor. Asignar precio y pasar a caja conserva el flujo comercial existente.
+
+Validación: 421 pruebas aprobadas y 168 omitidas sin QA configurada, cotización confirmada/idempotente leída por el
+endpoint POS con un adaptador SQLite que ejecuta los contratos SQL de inserción y
+lectura, y Chrome con datos sintéticos a 390/1440 px. Se comprobó la sintaxis de los
+diez lotes de la migración con [PARSEONLY de SQL Server](https://learn.microsoft.com/en-us/sql/t-sql/statements/set-parseonly-transact-sql):
+el servidor analizó las instrucciones sin ejecutarlas. Esto no verifica permisos
+efectivos ni reemplaza aplicar y comprobar la migración en QA. Falta probar el ciclo
+real de escaneo, revocación y nueva cuenta con un teléfono controlado.
+El usuario solicitó expresamente dejar la migración preparada y no modificar PanaderiaDB.

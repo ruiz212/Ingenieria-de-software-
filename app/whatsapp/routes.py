@@ -1,25 +1,31 @@
 """Management-only WhatsApp inbox. Forms use the application's CSRF extension."""
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 import pyodbc
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, redirect, render_template, request, url_for, session, jsonify, make_response
 from flask_login import login_required, current_user
 from app.admin import admin_bp
 from app.auth.decorators import roles_required
 from app.services.validation import required_text
 from app.whatsapp.repository import connection, rows, Store
+from app.whatsapp.security import verify_admin
+from app.whatsapp.linking import public_state, start_local_worker
 
 
-def snapshot(sid=None):
+def snapshot(sid=None, *, only_state=False):
     with connection() as (_, cur):
         cur.execute('EXEC crm.sp_WhatsAppLeerControl')
         state = rows(cur)[0]
         now = datetime.now(timezone.utc).replace(tzinfo=None)
-        if not state['Heartbeat'] or state['Heartbeat'] < now - timedelta(seconds=30):
+        state['worker_alive'] = bool(state['Heartbeat'] and state['Heartbeat'] >= now - timedelta(seconds=30))
+        if not state['worker_alive']:
             state['Estado'], state['QR'] = 'Worker desconectado', None
         if not state['QRExpira'] or state['QRExpira'] < now:
             state['QR'] = None
+        if only_state:
+            return state, [], []
         cur.execute('EXEC crm.sp_WhatsAppListarSesiones')
         sessions = rows(cur)
         messages = []
@@ -27,6 +33,24 @@ def snapshot(sid=None):
             cur.execute('EXEC crm.sp_WhatsAppHistorialAdmin ?,?', sid, sid)
             messages = list(reversed(rows(cur)))
         return state, sessions, messages
+
+
+@admin_bp.get('/whatsapp/estado')
+@login_required
+@roles_required('Admin', 'SuperAdmin')
+def whatsapp_status():
+    if os.environ.get('WHATSAPP_ENABLED', '0') != '1':
+        response = jsonify(error='La integración está desactivada.')
+        response.status_code = 503
+    else:
+        try:
+            state, _, _ = snapshot(only_state=True)
+            response = jsonify(public_state(state))
+        except pyodbc.Error:
+            response = jsonify(error='No se pudo actualizar la conexión. Vuelva a intentarlo.')
+            response.status_code = 503
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @admin_bp.route('/whatsapp', methods=['GET', 'POST'])
@@ -37,10 +61,33 @@ def whatsapp():
     installed = os.environ.get('WHATSAPP_ENABLED', '0') == '1'
     state, sessions, messages = {'Activo': False, 'Estado': 'Pendiente de instalación'}, [], []
     if not installed:
-        return render_template('admin/whatsapp.html', state=state, sessions=sessions, messages=messages, sid=sid, installed=False)
+        response = make_response(render_template('admin/whatsapp.html', state=public_state(state),
+                                                sessions=sessions, messages=messages, sid=sid, installed=False))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
     try:
         if request.method == 'POST':
             action = request.form.get('action')
+            if action in ('link', 'unlink'):
+                if action == 'unlink' and request.form.get('confirmation', '').strip() != 'DESVINCULAR':
+                    raise ValueError('Escriba DESVINCULAR para confirmar que desea retirar la cuenta.')
+                verify_admin(current_user, request.form.get('password', ''), request.form.get('otp', '').strip())
+                revision = request.form.get('revision', type=int)
+                state = Store().request_link('VINCULAR' if action == 'link' else 'DESVINCULAR', revision)
+                session.pop('wa_pairing', None)
+                if action == 'link':
+                    session['wa_pairing'] = {'until': time.time() + 300, 'revision': state['ConnectionRevision']}
+                # No network connection or native client runs in a Flask request.
+                if not state.get('Heartbeat') or state['Heartbeat'] < datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=30):
+                    try:
+                        started = start_local_worker()
+                    except OSError:
+                        started = False
+                    if not started:
+                        flash('Solicitud guardada. El responsable del sistema debe iniciar el servicio de WhatsApp; consulte la guía de instalación.', 'warning')
+                flash('Identidad verificada. Espere el QR para escanearlo.' if action == 'link'
+                      else 'Desvinculación solicitada. Espere la confirmación antes de agregar otra cuenta.', 'success')
+                return redirect(url_for('admin.whatsapp', chat=sid, _anchor='wa-connection-title' if action == 'link' else None))
             with connection() as (_, cur):
                 if action == 'global':
                     cur.execute('EXEC crm.sp_WhatsAppActivar ?', request.form.get('enabled') == '1')
@@ -72,11 +119,11 @@ def whatsapp():
     except ValueError as exc:
         flash(str(exc), 'error')
         return redirect(url_for('admin.whatsapp', chat=sid))
-    except pyodbc.Error:
-        flash('No se pudo cargar WhatsApp. Verifique la migración y la conexión SQL.', 'error')
-    response = render_template('admin/whatsapp.html', state=state, sessions=sessions,
+    except pyodbc.Error as exc:
+        flash('La conexión cambió o hay una operación pendiente. Actualice el panel antes de continuar.'
+              if '52027' in str(exc) else 'No se pudo cargar WhatsApp. Verifique la migración y la conexión SQL.', 'error')
+    response = render_template('admin/whatsapp.html', state=public_state(state), sessions=sessions,
                                messages=messages, sid=sid, installed=installed)
-    from flask import make_response
     response = make_response(response)
     response.headers['Cache-Control'] = 'no-store'
     return response
