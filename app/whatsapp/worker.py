@@ -90,7 +90,6 @@ def run(app):
             if cur.fetchone()[0] < 0:
                 raise RuntimeError('Ya existe un worker WhatsApp activo.')
             lock.commit()
-            owned = True
             path = _resolve_session_path(app)
             path.parent.mkdir(parents=True, exist_ok=True)
             is_real_transport = Transport is _RealTransport
@@ -113,6 +112,7 @@ def run(app):
                 elif not initial_state.get('Vinculado') and not has_local_device(path):
                     _clear_session_files(path)
             transport = Transport(app, store, path)
+            owned = True
             connector = threading.Thread(target=transport.connect, daemon=True)
             connector.start()
             executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='whatsapp-inference')
@@ -267,7 +267,7 @@ def run(app):
                         executor.shutdown(wait=True, cancel_futures=True)
                     if connector is not None:
                         connector.join(timeout=10)
-                    if owned:
+                    if owned and getattr(transport, 'status', '') != 'Esperando QR':
                         store.state('Desconectado')
                 finally:
                     lock.close()

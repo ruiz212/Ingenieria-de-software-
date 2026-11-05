@@ -101,9 +101,51 @@ def _resolve_sender_jid(client, source, session_path) -> str:
     raise ValueError('No se pudo resolver el número telefónico del remitente LID.')
 
 
+def _ensure_neonize_env() -> None:
+    import sys
+    import types
+    try:
+        import magic  # noqa: F401
+    except (ImportError, OSError):
+        shim = types.ModuleType('magic')
+        def _from_buffer(buf, mime=False):
+            b = bytes(buf[:16]) if buf else b''
+            if b.startswith(b'\xff\xd8\xff'):
+                return 'image/jpeg' if mime else 'JPEG image data'
+            if b.startswith(b'\x89PNG\r\n\x1a\n'):
+                return 'image/png' if mime else 'PNG image data'
+            if b[:4] == b'RIFF' and b[8:12] == b'WEBP':
+                return 'image/webp' if mime else 'WebP image data'
+            if b.startswith((b'GIF87a', b'GIF89a')):
+                return 'image/gif' if mime else 'GIF image data'
+            if b.startswith(b'%PDF'):
+                return 'application/pdf' if mime else 'PDF document'
+            if b.startswith(b'OggS'):
+                return 'audio/ogg' if mime else 'Ogg data'
+            return 'application/octet-stream' if mime else 'data'
+        def _from_file(filename, mime=False):
+            try:
+                with open(filename, 'rb') as fh:
+                    return _from_buffer(fh.read(16), mime=mime)
+            except OSError:
+                return 'application/octet-stream' if mime else 'data'
+        class _Magic:
+            def __init__(self, mime=False, **kwargs):
+                self.mime = mime
+            def from_buffer(self, buf):
+                return _from_buffer(buf, mime=self.mime)
+            def from_file(self, filename):
+                return _from_file(filename, mime=self.mime)
+        shim.from_buffer = _from_buffer
+        shim.from_file = _from_file
+        shim.Magic = _Magic
+        sys.modules['magic'] = shim
+
+
 class Transport:
     def __init__(self, app, store, session_path):
         from uuid import uuid4
+        _ensure_neonize_env()
         from neonize.client import NewClient
         from neonize.events import ConnectedEv, DisconnectedEv, LoggedOutEv, MessageEv
         self.session_path = Path(session_path) if session_path else None

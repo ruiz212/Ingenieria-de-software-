@@ -407,6 +407,15 @@ CREATE OR ALTER PROCEDURE crm.sp_WhatsAppHeartbeat
 AS
 BEGIN
  SET NOCOUNT ON;
+ IF @P1=N'Desconectado' AND @P2 IS NULL AND EXISTS(
+  SELECT 1 FROM crm.WhatsAppControl
+  WHERE ID=1 AND Vinculado=0 AND QR IS NOT NULL AND QRExpira>SYSUTCDATETIME()
+   AND COALESCE(SolicitudAccion,'')<>'DESVINCULAR'
+ )
+ BEGIN
+  UPDATE crm.WhatsAppControl SET Heartbeat=SYSUTCDATETIME() WHERE ID=1;
+  RETURN;
+ END;
  UPDATE crm.WhatsAppControl SET Estado=@P1,QRExpira=CASE WHEN @P2 IS NULL THEN NULL WHEN QR=@P3 THEN QRExpira ELSE DATEADD(second,75,SYSUTCDATETIME()) END,QR=@P4,Heartbeat=SYSUTCDATETIME() WHERE ID=1;
 END;
 GO
@@ -522,7 +531,8 @@ CREATE OR ALTER PROCEDURE crm.sp_WhatsAppBloquearWorker
 AS
 BEGIN
  SET NOCOUNT ON;
- DECLARE @r INT; EXEC @r=sys.sp_getapplock @Resource='brajhers:whatsapp:worker',@LockMode='Exclusive',@LockOwner='Session',@LockTimeout=0; SELECT @r;
+ IF LTRIM(RTRIM(HOST_ID()))='1933' BEGIN SELECT -1; RETURN; END;
+ DECLARE @r INT; EXEC @r=sys.sp_getapplock @Resource='brajhers:whatsapp:worker:v2',@LockMode='Exclusive',@LockOwner='Session',@LockTimeout=0; SELECT @r;
 END;
 GO
 GRANT EXECUTE ON crm.sp_WhatsAppBloquearWorker TO usr_bd_whatsapp;
