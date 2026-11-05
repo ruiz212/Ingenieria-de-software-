@@ -19,19 +19,12 @@ from app.services import auth_challenges as challenges
 from app.services import smtp_alerts as alerts
 
 
-DEFAULT_QA_CONN = (
-    "DRIVER={ODBC Driver 17 for SQL Server};"
-    "SERVER=localhost\\SQLDEV;"
-    "DATABASE=PanaderiaQA_Prevalidacion_20261015;"
-    "Trusted_Connection=yes;"
-)
-
-
 @pytest.fixture(scope="module")
 def qa_conn_str() -> str:
     previous_qa_conn = os.environ.get("TEST_DB_CONNECTION_STRING")
-    conn_str = previous_qa_conn or DEFAULT_QA_CONN
-    os.environ["TEST_DB_CONNECTION_STRING"] = conn_str
+    if not previous_qa_conn:
+        pytest.skip('Requiere TEST_DB_CONNECTION_STRING explícita hacia una base QA.')
+    conn_str = previous_qa_conn
     conn = pyodbc.connect(conn_str)
     try:
         db_name = conn.cursor().execute("SELECT DB_NAME()").fetchone()[0]

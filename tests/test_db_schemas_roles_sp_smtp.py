@@ -22,19 +22,12 @@ from app.services.smtp_alerts import (
 )
 
 
-DEFAULT_QA_CONN = (
-    "DRIVER={ODBC Driver 18 for SQL Server};"
-    "SERVER=localhost\\SQLDEV;"
-    "DATABASE=PanaderiaQA_Prevalidacion_20261015;"
-    "Trusted_Connection=yes;Encrypt=yes;TrustServerCertificate=yes;"
-)
-
-
 @pytest.fixture(scope="module")
 def app_instance():
     previous_qa_conn = os.environ.get("TEST_DB_CONNECTION_STRING")
-    conn_str = previous_qa_conn or DEFAULT_QA_CONN
-    os.environ["TEST_DB_CONNECTION_STRING"] = conn_str
+    if not previous_qa_conn:
+        pytest.skip('Requiere TEST_DB_CONNECTION_STRING explícita hacia una base QA.')
+    conn_str = previous_qa_conn
     app = create_app()
     app.config["TESTING"] = True
     app.config["WTF_CSRF_ENABLED"] = False
