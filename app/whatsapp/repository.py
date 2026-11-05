@@ -402,47 +402,12 @@ def notify(cursor, kind, entity_id, *, phone=None, estado=None, precio=None,
     """Trigger SQL notification SP and ensure phone-associated session delivery."""
     if os.environ.get('WHATSAPP_ENABLED', '0') != '1':
         return
-    # 1. Resolve phone/details from cursor if not explicitly passed, before SP call
-    if kind == 'cotizacion' and (not phone or not estado):
-        try:
-            cursor.execute(
-                'SELECT c.Estado, c.PrecioCotizado, c.FechaEntrega, c.TelefonoContacto, '
-                '(SELECT TOP 1 s.Telefono FROM crm.WhatsAppSesiones s WHERE s.Token = c.SessionID) '
-                'FROM crm.Cotizaciones c WHERE c.ID = ?',
-                entity_id,
-            )
-            row = cursor.fetchone()
-            if row:
-                estado = estado or row[0]
-                precio = precio if precio is not None else row[1]
-                if not fecha_entrega and row[2]:
-                    fecha_entrega = row[2].strftime('%d/%m/%Y') if hasattr(row[2], 'strftime') else str(row[2])[:10]
-                phone = phone or row[3] or row[4]
-        except Exception:
-            pass
-    elif kind == 'pedido' and (not phone or not estado or not numero_factura):
-        try:
-            cursor.execute(
-                'SELECT f.NumeroFactura, f.CodigoSeguimiento, e.Estado, e.FechaEntrega, e.TelefonoContacto '
-                'FROM ventas.Encargos e JOIN ventas.Facturas f ON f.ID = e.FacturaID WHERE f.ID = ?',
-                entity_id,
-            )
-            row = cursor.fetchone()
-            if row:
-                numero_factura = numero_factura or row[0]
-                codigo_seguimiento = codigo_seguimiento or row[1]
-                estado = estado or row[2]
-                if not fecha_entrega and row[3]:
-                    fecha_entrega = row[3].strftime('%d/%m/%Y') if hasattr(row[3], 'strftime') else str(row[3])[:10]
-                phone = phone or row[4]
-        except Exception:
-            pass
-    # 2. Execute SQL stored procedure (standard contract)
+    # 1. Execute SQL stored procedure (standard contract with ownership chaining)
     try:
         cursor.execute('EXEC crm.sp_WhatsAppNotificar ?,?', kind, entity_id)
     except Exception:
         logging.getLogger(__name__).debug('sp_WhatsAppNotificar omitido en cursor actual', exc_info=True)
-    # 3. Also ensure phone-based session creation and idempotent queueing
+    # 2. Also ensure phone-based session creation and idempotent queueing when phone is provided
     if phone and estado:
         if kind == 'cotizacion':
             text = _format_quote_notification(entity_id, estado, precio=precio, fecha_entrega=fecha_entrega)
