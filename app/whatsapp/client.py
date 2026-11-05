@@ -103,15 +103,20 @@ def _resolve_sender_jid(client, source, session_path) -> str:
 
 class Transport:
     def __init__(self, app, store, session_path):
+        from uuid import uuid4
         from neonize.client import NewClient
         from neonize.events import ConnectedEv, DisconnectedEv, LoggedOutEv, MessageEv
         self.session_path = Path(session_path) if session_path else None
-        self.client = NewClient(str(session_path))
+        try:
+            self.client = NewClient(str(session_path), uuid=uuid4().hex)
+        except TypeError:
+            self.client = NewClient(str(session_path))
         self.app, self.store = app, store
         self.status = 'Desconectado'
         self.qr = None
         self.started_at = time.monotonic()
         self.qr_updated_at = 0.0
+        self.last_error = None
         self._stopped = False
 
         @self.client.event.qr
@@ -214,7 +219,14 @@ class Transport:
                 logging.getLogger(__name__).exception('No se pudo registrar un mensaje WhatsApp')
 
     def connect(self):
-        self.client.connect()
+        try:
+            self.client.connect()
+        except Exception as exc:
+            self.last_error = str(exc)
+            logging.getLogger(__name__).warning('Error en conexion WhatsApp: %s', exc)
+            if not self._stopped:
+                time.sleep(2.0)
+            WAKE_EVENT.set()
 
     def send(self, jid, text):
         from neonize.utils.jid import build_jid
@@ -225,6 +237,12 @@ class Transport:
         self._stopped = True
         try:
             self.client.stop()
+        except Exception:
+            pass
+        try:
+            finalizer = getattr(self.client, '_stop_finalizer', None)
+            if finalizer is not None and hasattr(finalizer, 'detach'):
+                finalizer.detach()
         except Exception:
             pass
 

@@ -17,14 +17,15 @@ _RealTransport = Transport
 
 
 def _resolve_session_path(app) -> Path:
+    import tempfile
     explicit = os.environ.get('WHATSAPP_SESSION_PATH')
     if explicit:
         return Path(explicit).resolve()
-    if os.environ.get('WEBSITE_SITE_NAME') and Path('/home').is_dir():
-        azure_dir = Path('/home/data')
+    if os.environ.get('WEBSITE_SITE_NAME') or os.name != 'nt':
+        local_dir = Path(tempfile.gettempdir()) / 'brajhers_whatsapp'
         try:
-            azure_dir.mkdir(parents=True, exist_ok=True)
-            return (azure_dir / 'whatsapp_session.sqlite3').resolve()
+            local_dir.mkdir(parents=True, exist_ok=True)
+            return (local_dir / 'whatsapp_session.sqlite3').resolve()
         except OSError:
             pass
     return (Path(app.instance_path) / 'whatsapp_session.sqlite3').resolve()
@@ -209,15 +210,23 @@ def run(app):
                                 and getattr(transport, 'qr_updated_at', 0) > 0
                                 and (now - transport.qr_updated_at) < 45
                             )
+                            warming_up = (
+                                is_real_transport
+                                and connector is not None
+                                and connector.is_alive()
+                                and getattr(transport, 'started_at', 0) > 0
+                                and (now - transport.started_at) < 18
+                            )
                             stale_unlinked = (
                                 transport.status in ('Desconectado', 'Requiere vinculación')
                                 and getattr(transport, 'started_at', 0)
-                                and time.monotonic() - transport.started_at > 20
+                                and time.monotonic() - transport.started_at > 35
                             )
-                            if has_fresh_qr and state.get('SolicitudID') != active_link_request:
+                            if (has_fresh_qr or warming_up) and state.get('SolicitudID') != active_link_request:
                                 active_link_request = state.get('SolicitudID')
-                                state = store.state(transport.status, transport.qr)
-                                last_heartbeat = now
+                                if has_fresh_qr:
+                                    state = store.state(transport.status, transport.qr)
+                                    last_heartbeat = now
                             elif state.get('SolicitudID') != active_link_request or stale_unlinked:
                                 transport.stop()
                                 if connector is not None:
