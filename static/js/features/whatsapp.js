@@ -54,19 +54,17 @@
         error.hidden = true;
         update(state);
       } catch (_) {
-        qr.hidden = true;
-        qr.removeAttribute('src');
-        placeholder.hidden = false;
+        if (stopped || !qr.getAttribute('src')) {
+          qr.hidden = true;
+          qr.removeAttribute('src');
+          placeholder.hidden = false;
+        }
         error.hidden = false;
         error.textContent = stopped ? 'La sesión terminó. Inicia sesión de nuevo para ver la conexión.' :
           'No se pudo actualizar la conexión. Se volverá a intentar automáticamente.';
       }
-    } else {
-      qr.hidden = true;
-      qr.removeAttribute('src');
-      placeholder.hidden = false;
     }
-    if (!stopped) window.setTimeout(poll, 4000);
+    if (!stopped) window.setTimeout(poll, 2500);
   }
   poll();
 })();
