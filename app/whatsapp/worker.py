@@ -73,20 +73,28 @@ def run(app):
             pending = None
             last_send, last_heartbeat = 0, 0
             waiting_unlink = None
-            state = store.state(transport.status)
+            state = store.state(transport.status, transport.qr)
+            active_link_request = state.get('SolicitudID')
             while True:
                 if connector is not None and not connector.is_alive() and transport.status != 'Requiere vinculación':
-                    break
+                    if state.get('SolicitudEstado') == 'Pendiente' and state.get('SolicitudAccion') == 'VINCULAR' and not state.get('Vinculado'):
+                        transport = None
+                    else:
+                        break
                 cur.execute('EXEC crm.sp_WhatsAppPing')  # Do not continue if singleton ownership is lost.
                 cur.fetchone()
-                if time.monotonic() - last_heartbeat >= 2:
+                now = time.monotonic()
+                if transport is not None and transport.status == 'Esperando QR' and getattr(transport, 'qr_updated_at', 0) and now - transport.qr_updated_at > 70:
+                    transport.status, transport.qr, transport.qr_updated_at = 'Desconectado', None, 0.0
+                if now - last_heartbeat >= 2:
                     state = store.state(transport.status if transport else 'Sin vincular', transport.qr if transport else None)
-                    last_heartbeat = time.monotonic()
+                    last_heartbeat = now
                 if transport is None:
                     if state.get('SolicitudEstado') == 'Pendiente' and state.get('SolicitudAccion') == 'VINCULAR':
                         transport = Transport(app, store, path)
                         connector = threading.Thread(target=transport.connect, daemon=True)
                         connector.start()
+                        active_link_request = state.get('SolicitudID')
                     elif state.get('SolicitudEstado') == 'Pendiente' and state.get('SolicitudAccion') == 'DESVINCULAR':
                         # This process already revoked the previous native session.
                         store.complete_link(state['SolicitudID'], True)
@@ -118,8 +126,24 @@ def run(app):
                                 waiting_unlink = None
                         time.sleep(0.5)
                         continue
-                    if state.get('SolicitudAccion') == 'VINCULAR' and transport.status == 'Conectado':
-                        store.complete_link(state['SolicitudID'], True)
+                    if state.get('SolicitudAccion') == 'VINCULAR':
+                        if transport.status == 'Conectado':
+                            store.complete_link(state['SolicitudID'], True)
+                            active_link_request = state.get('SolicitudID')
+                        elif not state.get('Vinculado'):
+                            stale_unlinked = (
+                                transport.status in ('Desconectado', 'Requiere vinculación')
+                                and getattr(transport, 'started_at', 0)
+                                and time.monotonic() - transport.started_at > 20
+                            )
+                            if state.get('SolicitudID') != active_link_request or stale_unlinked:
+                                transport.stop()
+                                if connector is not None:
+                                    connector.join(timeout=5)
+                                transport = Transport(app, store, path)
+                                connector = threading.Thread(target=transport.connect, daemon=True)
+                                connector.start()
+                                active_link_request = state.get('SolicitudID')
                 if state['Activo']:
                     if pending is not None and pending.done():
                         try:

@@ -1,6 +1,7 @@
 """Neonize adapter. Imported lazily; never connects on web startup."""
 from pathlib import Path
 import logging
+import time
 from app.services.auth_challenges import normalize_phone
 from app.utils.qr import generar_qr_base64
 from app.whatsapp.media import save_image
@@ -21,16 +22,20 @@ class Transport:
         self.app, self.store = app, store
         self.status = 'Desconectado'
         self.qr = None
+        self.started_at = time.monotonic()
+        self.qr_updated_at = 0.0
 
         @self.client.event.qr
         def qr(client, code):
-            self.status, self.qr = 'Esperando QR', generar_qr_base64(code)
+            self.qr = generar_qr_base64(code)
+            self.qr_updated_at = time.monotonic()
+            self.status = 'Esperando QR'
             with app.app_context():
                 store.state(self.status, self.qr)
 
         @self.client.event(ConnectedEv)
         def connected(client, event):
-            self.status, self.qr = 'Conectado', None
+            self.status, self.qr, self.qr_updated_at = 'Conectado', None, 0.0
             with app.app_context():
                 device = client.get_me()
                 phone = sender_phone(f'{device.JID.User}@{device.JID.Server}')
@@ -39,11 +44,11 @@ class Transport:
 
         @self.client.event(DisconnectedEv)
         def disconnected(client, event):
-            self.status, self.qr = 'Desconectado', None
+            self.status, self.qr, self.qr_updated_at = 'Desconectado', None, 0.0
 
         @self.client.event(LoggedOutEv)
         def logged_out(client, event):
-            self.status, self.qr = 'Requiere vinculación', None
+            self.status, self.qr, self.qr_updated_at = 'Requiere vinculación', None, 0.0
             with app.app_context():
                 store.account(None, False)
                 store.state(self.status)

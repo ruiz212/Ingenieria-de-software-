@@ -108,3 +108,40 @@ def test_worker_stays_available_to_pair_another_account_after_unlink(monkeypatch
     assert len(transports) == 2
     assert all(t.ended.is_set() for t in transports)
     connection.close.assert_called_once()
+
+
+def test_worker_restarts_transport_when_new_link_request_arrives(monkeypatch, tmp_path):
+    transports = []
+    class Cursor:
+        def execute(self, *args):
+            if len(transports) == 2:
+                raise RuntimeError('restarted for new QR')
+            return self
+        def fetchone(self): return (0,)
+    connection = SimpleNamespace(cursor=Cursor, commit=lambda: None, close=Mock())
+    class Store:
+        polls = 0
+        def state(self, *args):
+            self.polls += 1
+            return {'Activo': False, 'Vinculado': False, 'SolicitudEstado': 'Pendiente',
+                    'SolicitudAccion': 'VINCULAR', 'SolicitudID': f'req{self.polls}'}
+    class FakeTransport:
+        status, qr = 'Esperando QR', 'data:image/png;base64,synthetic'
+        def __init__(self, *args):
+            self.ended = threading.Event()
+            transports.append(self)
+        def connect(self): self.ended.wait(5)
+        def stop(self): self.ended.set()
+    monotonic = iter(range(0, 100000, 11))
+    monkeypatch.setenv('WHATSAPP_ENABLED', '1')
+    monkeypatch.setenv('WHATSAPP_SESSION_PATH', str(tmp_path/'synthetic.sqlite3'))
+    monkeypatch.setattr(worker, 'Store', Store)
+    monkeypatch.setattr(worker, 'Transport', FakeTransport)
+    monkeypatch.setattr(worker, 'get_db_connection', lambda **kwargs: connection)
+    monkeypatch.setattr(worker.time, 'monotonic', lambda: next(monotonic))
+    app = SimpleNamespace(app_context=nullcontext, instance_path=str(tmp_path))
+    with pytest.raises(RuntimeError, match='restarted for new QR'):
+        worker.run(app)
+    assert len(transports) == 2
+    assert all(t.ended.is_set() for t in transports)
+    connection.close.assert_called_once()

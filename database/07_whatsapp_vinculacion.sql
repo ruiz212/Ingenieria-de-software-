@@ -55,19 +55,26 @@ BEGIN
  IF @Accion NOT IN ('VINCULAR','DESVINCULAR') OR @Accion IS NULL OR @Revision IS NULL OR @Solicitud IS NULL OR LEN(@Solicitud)<>32
   THROW 52027,'Solicitud de cuenta no válida.',1;
  BEGIN TRANSACTION;
- DECLARE @Actual INT,@Pendiente VARCHAR(12),@Estado VARCHAR(12);
- SELECT @Actual=ConnectionRevision,@Pendiente=SolicitudAccion,@Estado=SolicitudEstado
+ DECLARE @Actual INT,@Pendiente VARCHAR(12),@Estado VARCHAR(12),@TieneQRValido BIT=0;
+ SELECT @Actual=ConnectionRevision,@Pendiente=SolicitudAccion,@Estado=SolicitudEstado,
+  @TieneQRValido=CASE WHEN @Accion='VINCULAR' AND SolicitudEstado='Pendiente' AND SolicitudAccion='VINCULAR'
+   AND QR IS NOT NULL AND QRExpira>DATEADD(second,15,SYSUTCDATETIME())
+   AND Heartbeat>DATEADD(second,-30,SYSUTCDATETIME()) THEN 1 ELSE 0 END
   FROM crm.WhatsAppControl WITH(UPDLOCK,HOLDLOCK) WHERE ID=1;
  IF @Revision<>@Actual THROW 52027,'La conexión cambió. Actualice el panel.',1;
- IF @Estado='Pendiente' AND @Pendiente=@Accion
+ IF @Estado='Pendiente' AND @Pendiente='DESVINCULAR' AND @Accion='DESVINCULAR'
  BEGIN
   COMMIT; SELECT * FROM crm.WhatsAppControl WHERE ID=1; RETURN;
  END;
  IF @Estado='Pendiente' AND @Pendiente='DESVINCULAR'
   THROW 52027,'Espere a que termine la desvinculación antes de vincular otra cuenta.',1;
- UPDATE crm.WhatsAppControl SET ConnectionRevision=ConnectionRevision+1, SolicitudID=@Solicitud,
-  SolicitudAccion=@Accion,SolicitudEstado='Pendiente',SolicitudError=NULL,SolicitadoPor=@Actor,
-  SolicitadoEn=SYSUTCDATETIME(),Activo=0,QR=NULL,QRExpira=NULL WHERE ID=1;
+ IF @TieneQRValido=1
+  UPDATE crm.WhatsAppControl SET ConnectionRevision=ConnectionRevision+1,
+   SolicitudError=NULL,SolicitadoPor=@Actor,SolicitadoEn=SYSUTCDATETIME(),Activo=0 WHERE ID=1;
+ ELSE
+  UPDATE crm.WhatsAppControl SET ConnectionRevision=ConnectionRevision+1, SolicitudID=@Solicitud,
+   SolicitudAccion=@Accion,SolicitudEstado='Pendiente',SolicitudError=NULL,SolicitadoPor=@Actor,
+   SolicitadoEn=SYSUTCDATETIME(),Activo=0,QR=NULL,QRExpira=NULL WHERE ID=1;
  IF @Accion='DESVINCULAR'
  BEGIN
   UPDATE crm.WhatsAppSesiones SET Revision=Revision+1,Pendiente=NULL;
