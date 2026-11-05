@@ -152,7 +152,8 @@ def test_recomendador_vacaciones_rotativo_prioridades_y_bloqueos():
 # ==============================================================================
 
 def test_render_colilla_pago_con_3_partes_y_asistencia():
-    app = Flask(__name__, template_folder=r'c:\Ingenieria de software\panaderia_amada\templates')
+    from pathlib import Path
+    app = Flask(__name__, template_folder=str(Path(__file__).resolve().parents[1] / 'templates'))
     app.config['SECRET_KEY'] = 'test-secret'
 
     def fake_css_url(bundle):
