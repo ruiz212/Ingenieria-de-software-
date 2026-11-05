@@ -732,6 +732,7 @@ def obtener_cotizaciones_pendientes():
             'fecha_entrega': row.FechaEntrega.strftime('%Y-%m-%d') if row.FechaEntrega else '',
             'ruta_imagen': row.RutaImagenReferencia,
             'estado': row.Estado,
+            'canal': getattr(row, 'CanalOrigen', 'Web'),
             'precio_cotizado': float(row.PrecioCotizado) if getattr(row, 'PrecioCotizado', None) is not None else None,
             'fecha_solicitud': row.FechaSolicitud.strftime('%Y-%m-%d %H:%M')
         })

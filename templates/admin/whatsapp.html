@@ -3,37 +3,99 @@
 {% block page_title %}Atención por WhatsApp{% endblock %}
 {% block page_styles %}<link rel="stylesheet" href="{{ css_url('pages/admin/whatsapp') }}">{% endblock %}
 {% block content %}
-<div class="container-fluid whatsapp-workspace">
-  <header class="mb-4">
-    <h2>Conversaciones de la panadería</h2>
-    <p>Consulta los mensajes y toma el control cuando un cliente necesite atención personal.</p>
-    <p role="status">Conexión: <strong>{{ state.Estado }}</strong> · Asistente: <strong>{{ 'Activo' if state.Activo else 'Apagado' }}</strong></p>
-    <a class="btn btn-outline-secondary" href="{{ url_for('admin.whatsapp', chat=sid) }}">Actualizar conversaciones</a>
-    {% if installed %}
-    <form method="post" class="d-inline">
+{% macro credentials(prefix) %}
+  <label for="{{ prefix }}-password">Tu contraseña de administrador</label>
+  <input id="{{ prefix }}-password" name="password" type="password" autocomplete="current-password" maxlength="256" required data-no-draft>
+  {% if current_user.totp_enabled %}
+  <label for="{{ prefix }}-otp">Código de verificación de dos pasos</label>
+  <input id="{{ prefix }}-otp" name="otp" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" required data-no-draft>
+  {% endif %}
+{% endmacro %}
+<div class="container-fluid whatsapp-workspace" data-wa-panel data-status-url="{{ url_for('admin.whatsapp_status') }}" data-ready="{{ '1' if installed and state.ready else '0' }}" data-revision="{{ state.ConnectionRevision }}">
+  <header class="wa-heading">
+    <div><h2>WhatsApp de la empresa</h2>
+    <p>Vincula el teléfono de la panadería y atiende a tus clientes desde aquí.</p></div>
+    <span class="wa-status" id="wa-status" role="status">{{ 'Conexión no iniciada' if state.Estado == 'Worker desconectado' else state.Estado }}</span>
+  </header>
+  <section class="wa-connection" aria-labelledby="wa-connection-title">
+    <div class="wa-pairing">
+      <h3 id="wa-connection-title">Conectar un teléfono</h3>
+      <div class="wa-qr-area">
+        <img id="wa-qr" {% if state.QR %}src="{{ state.QR }}"{% else %}hidden{% endif %} alt="Código QR para vincular el WhatsApp de la empresa" width="260" height="260">
+        <div id="wa-qr-placeholder" {% if state.QR %}hidden{% endif %}>
+          <svg aria-hidden="true" viewBox="0 0 48 48" width="64" height="64" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6H6v12M30 6h12v12M42 30v12H30M18 42H6V30"/><rect x="13" y="13" width="7" height="7"/><rect x="28" y="13" width="7" height="7"/><rect x="13" y="28" width="7" height="7"/><path d="M28 28h7v7h-7v-3h4M24 24h3M24 35v3"/></svg>
+          <p id="wa-qr-help">{{ 'Teléfono vinculado. Puedes atender a tus clientes.' if state.Vinculado else 'Verifica tu identidad para mostrar el código QR.' }}</p>
+        </div>
+      </div>
+      <p id="wa-qr-note" class="wa-help">En WhatsApp, abre <strong>Dispositivos vinculados → Vincular un dispositivo</strong>. El QR se actualiza automáticamente.</p>
+      <p id="wa-poll-error" class="wa-notice" role="status" hidden></p>
+    </div>
+    <div class="wa-connection-details">
+      {% if not installed or not state.ready %}
+      <h3>Configuración pendiente</h3>
+      <p>El responsable del sistema debe completar {{ 'la instalación' if not installed else 'la actualización de WhatsApp' }} para habilitar la vinculación.</p>
+      {% else %}
+      <div class="wa-account"><h3>Cuenta de la empresa</h3><p id="wa-account">{{ state.CuentaTelefono or 'Aún no hay un teléfono vinculado' }}</p></div>
+      <details class="wa-scan-help"><summary>Cómo escanear el código QR</summary><ol class="wa-steps">
+        <li>Verifica tu identidad con el formulario de abajo.</li>
+        <li>Abre WhatsApp en el teléfono de la empresa.</li>
+        <li>En <strong>Dispositivos vinculados</strong>, elige <strong>Vincular un dispositivo</strong> y escanea el QR.</li>
+      </ol></details>
+      <p id="wa-operation" class="wa-notice" role="status">{% if state.SolicitudEstado == 'Error' %}{{ state.SolicitudError }}{% elif state.SolicitudEstado == 'Pendiente' %}{{ 'Desvinculando la cuenta. Espera antes de agregar otra.' if state.SolicitudAccion == 'DESVINCULAR' else 'Preparando la vinculación. El QR aparecerá aquí.' }}{% endif %}</p>
+      <details class="wa-security" id="wa-link-details" {% if not state.Vinculado and state.needs_auth %}open{% endif %}>
+        <summary>Verificar identidad y conectar</summary>
+        <form method="post" class="wa-account-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="link">
+          <input type="hidden" name="revision" value="{{ state.ConnectionRevision }}">
+          {{ credentials('wa-link') }}
+          <p class="wa-help">Solo administradores. La autorización para ver el QR dura cinco minutos.</p>
+          <button class="btn btn-primary" type="submit" data-account-submit>Mostrar QR o reconectar</button>
+        </form>
+      </details>
+      <details class="wa-security wa-remove" id="wa-unlink-details">
+        <summary>Desvincular o cambiar de número</summary>
+        <p>Se cerrará la sesión de WhatsApp y se detendrán los envíos pendientes. Tus pedidos y el historial se conservarán. Después podrás vincular otro teléfono.</p>
+        <form method="post" class="wa-account-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="unlink">
+          <input type="hidden" name="revision" value="{{ state.ConnectionRevision }}">
+          {{ credentials('wa-unlink') }}
+          <label for="wa-unlink-confirm">Escribe DESVINCULAR para confirmar</label>
+          <input id="wa-unlink-confirm" name="confirmation" autocomplete="off" pattern="DESVINCULAR" required data-no-draft>
+          <button class="btn wa-danger" type="submit" data-account-submit>Desvincular cuenta</button>
+        </form>
+      </details>
+      {% endif %}
+    </div>
+  </section>
+  <section class="wa-attention" aria-labelledby="wa-attention-title">
+    <div><h3 id="wa-attention-title">Atención y pedidos</h3>
+      <p id="wa-assistant-status">{{ 'Asistente y envíos activos.' if state.Activo else 'Asistente y envíos pausados.' }}</p>
+      <p class="wa-help">Las cotizaciones confirmadas por WhatsApp aparecen en <a href="/pos?solicitudes=1">Solicitudes de clientes del punto de venta</a>, junto con las de la web. El equipo asigna el precio allí.</p>
+    </div>
+    {% if installed and state.ready %}
+    <form method="post" id="wa-global-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="global">
       <input type="hidden" name="enabled" value="{{ '0' if state.Activo else '1' }}">
-      <button class="btn btn-primary" type="submit">{{ 'Apagar asistente y envíos' if state.Activo else 'Activar asistente y envíos' }}</button>
+      <button class="btn btn-primary" type="submit" {% if not state.Activo and state.Estado != 'Conectado' %}disabled{% endif %}>{{ 'Pausar asistente y envíos' if state.Activo else 'Activar asistente y envíos' }}</button>
     </form>
-    {% else %}<p>La integración está pendiente de instalación. Solicite al responsable del sistema completar la configuración.</p>{% endif %}
-    {% if state.QR %}
-    <figure class="mt-3"><img src="{{ state.QR }}" alt="Código QR para vincular el teléfono de la panadería" width="260" height="260">
-      <figcaption>Escanea desde Dispositivos vinculados. Si vence, actualiza esta página.</figcaption></figure>
     {% endif %}
-  </header>
+  </section>
+  <div class="wa-inbox-heading"><h3>Conversaciones</h3><a class="btn btn-outline-secondary" href="{{ url_for('admin.whatsapp', chat=sid) }}">Actualizar conversaciones</a></div>
   <div class="row g-4">
     <section class="col-12 col-lg-4" aria-labelledby="chats-title">
-      <h3 id="chats-title">Chats recientes</h3>
+      <h4 id="chats-title">Chats recientes <span class="wa-count">{{ sessions|length }}</span></h4>
       <ul class="list-group">
         {% for chat in sessions %}
         <li class="list-group-item"><a href="{{ url_for('admin.whatsapp', chat=chat.ID) }}" {% if sid == chat.ID %}aria-current="page"{% endif %}>{{ chat.Telefono }}</a>
           <p class="mb-0">{{ 'Atención humana' if chat.Modo == 'HUMANO' else 'Asistente' }} · Avisos {{ 'permitidos' if chat.Avisos else 'desactivados' }}</p></li>
-        {% else %}<li class="list-group-item">Todavía no hay conversaciones.</li>{% endfor %}
+        {% else %}<li class="list-group-item wa-empty">Los mensajes aparecerán aquí cuando vincules el teléfono y un cliente escriba a la empresa.</li>{% endfor %}
       </ul>
     </section>
     <section class="col-12 col-lg-8" aria-labelledby="conversation-title">
-      <h3 id="conversation-title">Conversación seleccionada</h3>
+      <h4 id="conversation-title">Conversación seleccionada</h4>
       {% set selected = sessions|selectattr('ID', 'equalto', sid)|first %}
       {% if selected %}
       <form method="post" class="mb-3">
@@ -57,8 +119,9 @@
         <p id="wa-send-help">La respuesta se enviará cuando el asistente y la conexión estén activos.</p>
         <button class="btn btn-primary" type="submit">Enviar respuesta</button>
       </form>{% endif %}
-      {% else %}<p>Selecciona un chat para ver su historial y gestionar la atención.</p>{% endif %}
+      {% else %}<div class="wa-empty"><p>Selecciona un chat para ver su historial y gestionar la atención.</p><p class="wa-help">Con «Tomar control» puedes pausar al asistente en ese chat y responder personalmente.</p></div>{% endif %}
     </section>
   </div>
 </div>
 {% endblock %}
+{% block extra_scripts %}<script src="{{ url_for('static', filename='js/features/whatsapp.js') }}" defer></script>{% endblock %}

@@ -114,20 +114,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Lógica del Botón "Solicitudes Web" (Cotizaciones pendientes y cotizadas)
+    // Solicitudes de clientes: web y WhatsApp comparten la misma bandeja.
     const btnVerPedidosClientes = document.getElementById('btn-ver-pedidos-clientes');
     const pedidosClientesModal = document.getElementById('pedidos-clientes-modal');
     const btnCerrarPedidosClientes = document.getElementById('btn-cerrar-pedidos-clientes');
     const badgePedidos = document.getElementById('badge-pedidos');
 
     if (btnVerPedidosClientes && !window.esClienteOnline) {
-        btnVerPedidosClientes.addEventListener('click', async () => {
-            const listContainer = document.getElementById('cotizaciones-pendientes-list');
-            listContainer.innerHTML = '<p class="sales-ui-message">Cargando...</p>';
-            pedidosClientesModal.classList.remove('hidden');
-
-            try {
-                const cotizaciones = await API.obtenerCotizacionesPendientes();
+        const listContainer = document.getElementById('cotizaciones-pendientes-list');
+        function renderSolicitudes(cotizaciones, preserveEdits = false) {
                     const pendientesCount = cotizaciones.filter(c => (c.estado || 'Pendiente') === 'Pendiente').length;
                     if (badgePedidos) {
                         badgePedidos.textContent = pendientesCount;
@@ -135,14 +130,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     if (cotizaciones.length === 0) {
-                        listContainer.innerHTML = '<div class="sales-ui-message-2"><span class="sales-ui-text">🎉</span>No hay solicitudes web pendientes.</div>';
+                        listContainer.innerHTML = '<p class="sales-ui-message-2">No hay solicitudes de clientes pendientes.</p>';
                         return;
                     }
 
-                    listContainer.innerHTML = '';
+                    if (!preserveEdits || !listContainer.querySelector('[data-quote-id]')) listContainer.innerHTML = '';
+                    const visibleIds = new Set(cotizaciones.map(c => String(c.id)));
+                    listContainer.querySelectorAll('[data-quote-id]').forEach(item => {
+                        if (!visibleIds.has(item.dataset.quoteId)) item.remove();
+                    });
                     cotizaciones.forEach(c => {
+                        // Retain existing rows, including their draft price and keyboard focus.
+                        if (preserveEdits && [...listContainer.children].some(item => item.dataset.quoteId === String(c.id))) return;
                         const div = document.createElement('div');
                         div.className = 'modal-section';
+                        div.dataset.quoteId = String(c.id);
                         const estadoCot = c.estado || 'Pendiente';
                         const precioVal = c.precio_cotizado !== null && c.precio_cotizado !== undefined ? parseFloat(c.precio_cotizado).toFixed(2) : '';
 
@@ -151,6 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <div>
                                     <h4>Solicitud #${c.id}</h4>
                                     <div class="modal-section-meta">
+                                        <strong>Canal:</strong> ${escapeHTML(c.canal || 'Web')} <br>
                                         <strong>Cliente:</strong> ${escapeHTML(c.cliente)} <br>
                                         <strong>Teléfono:</strong> ${escapeHTML(c.telefono || 'No proporcionado')} <br>
                                         <strong>Para:</strong> ${escapeHTML(c.fecha_entrega)}
@@ -165,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
 
                             <div class="modal-action-row">
-                                <input type="number" id="precio-cotizacion-${c.id}" class="form-control" placeholder="Precio (C$)" min="0" step="0.01" value="${precioVal}">
+                                <input type="number" id="precio-cotizacion-${c.id}" class="form-control" aria-label="Precio para solicitud ${c.id}" placeholder="Precio (C$)" min="0.01" step="0.01" value="${precioVal}">
                                 <button type="button" class="modal-btn modal-btn--primary" onclick="cotizarPedido(${c.id})">${precioVal ? 'Actualizar Precio' : 'Cotizar'}</button>
                                 ${precioVal ? `<button type="button" class="modal-btn modal-btn--info btn-facturar-cotizacion" data-cot='${escapeHTML(JSON.stringify(c))}'>Pasar a Caja</button>` : ''}
                                 <button type="button" class="modal-btn modal-btn--danger-outline" onclick="rechazarPedido(${c.id})">Rechazar</button>
@@ -212,40 +215,40 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         listContainer.appendChild(div);
                     });
+        }
+        let loading = false;
+        async function refreshSolicitudes(preserveEdits = true) {
+            if (loading) return;
+            loading = true;
+            try {
+                const cotizaciones = await API.obtenerCotizacionesPendientes();
+                if (!pedidosClientesModal.classList.contains('hidden')) renderSolicitudes(cotizaciones, preserveEdits);
+                if (badgePedidos) {
+                    const count = cotizaciones.filter(c => (c.estado || 'Pendiente') === 'Pendiente').length;
+                    badgePedidos.textContent = count;
+                    badgePedidos.style.display = count > 0 ? 'flex' : 'none';
+                }
             } catch (error) {
-                listContainer.innerHTML = '<p class="sales-ui-message-3">Error de conexión.</p>';
+                if (!preserveEdits) listContainer.innerHTML = '<p class="sales-ui-message-3">No se pudieron cargar las solicitudes. Cierra y vuelve a abrir este panel para reintentar.</p>';
+            } finally {
+                loading = false;
             }
+        }
+        btnVerPedidosClientes.addEventListener('click', () => {
+            pedidosClientesModal.classList.remove('hidden');
+            refreshSolicitudes(false);
         });
 
-        // Polling para actualizar el badge de notificaciones cada minuto
-        // Polling inteligente: pausa cuando la pestaña está oculta, backoff si no hay datos
         let _pollTimer;
-        function _pollCotizaciones() {
+        async function _pollCotizaciones() {
             clearTimeout(_pollTimer);
             if (document.hidden) return;
-            API.obtenerCotizacionesPendientes()
-                .then(data => {
-                    if (badgePedidos) {
-                        badgePedidos.textContent = data.length;
-                        badgePedidos.style.display = data.length > 0 ? 'flex' : 'none';
-                    }
-                    _pollTimer = setTimeout(_pollCotizaciones, data.length > 0 ? 60000 : 180000);
-                })
-                .catch(() => { _pollTimer = setTimeout(_pollCotizaciones, 180000); });
+            await refreshSolicitudes();
+            _pollTimer = setTimeout(_pollCotizaciones, pedidosClientesModal.classList.contains('hidden') ? 30000 : 10000);
         }
         document.addEventListener('visibilitychange', () => { if (!document.hidden) _pollCotizaciones(); });
-        _pollTimer = setTimeout(_pollCotizaciones, 60000);
-
-        // Lanzar una vez al inicio
-        setTimeout(() => {
-            if (badgePedidos) {
-                API.obtenerCotizacionesPendientes()
-                    .then(data => {
-                        badgePedidos.textContent = data.length;
-                        badgePedidos.style.display = data.length > 0 ? 'flex' : 'none';
-                    }).catch(() => {});
-            }
-        }, 2000);
+        _pollTimer = setTimeout(_pollCotizaciones, 2000);
+        if (new URLSearchParams(location.search).get('solicitudes') === '1') btnVerPedidosClientes.click();
     }
 
     if (btnCerrarPedidosClientes) {

@@ -32,6 +32,9 @@ class Transport:
         def connected(client, event):
             self.status, self.qr = 'Conectado', None
             with app.app_context():
+                device = client.get_me()
+                phone = sender_phone(f'{device.JID.User}@{device.JID.Server}')
+                store.account(phone, True)
                 store.state(self.status)
 
         @self.client.event(DisconnectedEv)
@@ -41,6 +44,9 @@ class Transport:
         @self.client.event(LoggedOutEv)
         def logged_out(client, event):
             self.status, self.qr = 'Requiere vinculación', None
+            with app.app_context():
+                store.account(None, False)
+                store.state(self.status)
 
         @self.client.event(MessageEv)
         def incoming(client, event):
@@ -82,3 +88,6 @@ class Transport:
 
     def stop(self):
         self.client.stop()
+
+    def logout(self):
+        self.client.logout()

@@ -11,6 +11,21 @@ from app.whatsapp.agent import Agent, Gemini
 from app.whatsapp.client import Transport
 from app.whatsapp.repository import Store
 from app.whatsapp.tools import Tools
+from app.whatsapp.linking import apply_unlink
+
+
+class LazyAgent:
+    """Pairing and manual replies do not depend on an inference credential."""
+    def __init__(self):
+        self.agent = None
+
+    def reply(self, *args):
+        if self.agent is None:
+            try:
+                self.agent = Agent(Gemini())
+            except ValueError:
+                return 'El asistente no está disponible. Escribe HUMANO para que te atienda el equipo.'
+        return self.agent.reply(*args)
 
 
 def process(store, agent, item):
@@ -36,7 +51,7 @@ def process(store, agent, item):
 def run(app):
     if os.environ.get('WHATSAPP_ENABLED') != '1':
         raise ValueError('Defina WHATSAPP_ENABLED=1 después de instalar la migración.')
-    store, agent = Store(), Agent(Gemini())
+    store, agent = Store(), LazyAgent()
     with app.app_context():
         # Session-owned applock survives commits. Lost connection stops all processing.
         lock = get_db_connection(inject_context=False, apply_role=False)
@@ -57,13 +72,54 @@ def run(app):
             executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='whatsapp-inference')
             pending = None
             last_send, last_heartbeat = 0, 0
+            waiting_unlink = None
             state = store.state(transport.status)
-            while connector.is_alive():
+            while True:
+                if connector is not None and not connector.is_alive() and transport.status != 'Requiere vinculación':
+                    break
                 cur.execute('EXEC crm.sp_WhatsAppPing')  # Do not continue if singleton ownership is lost.
                 cur.fetchone()
-                if time.monotonic() - last_heartbeat >= 10:
-                    state = store.state(transport.status, transport.qr)
+                if time.monotonic() - last_heartbeat >= 2:
+                    state = store.state(transport.status if transport else 'Sin vincular', transport.qr if transport else None)
                     last_heartbeat = time.monotonic()
+                if transport is None:
+                    if state.get('SolicitudEstado') == 'Pendiente' and state.get('SolicitudAccion') == 'VINCULAR':
+                        transport = Transport(app, store, path)
+                        connector = threading.Thread(target=transport.connect, daemon=True)
+                        connector.start()
+                    elif state.get('SolicitudEstado') == 'Pendiente' and state.get('SolicitudAccion') == 'DESVINCULAR':
+                        # This process already revoked the previous native session.
+                        store.complete_link(state['SolicitudID'], True)
+                        state = store.state('Sin vincular')
+                        continue
+                    else:
+                        time.sleep(0.5)
+                        continue
+                if state.get('SolicitudEstado') == 'Pendiente':
+                    if state.get('SolicitudAccion') == 'DESVINCULAR':
+                        waiting_unlink = waiting_unlink or time.monotonic()
+                        # Finish in-flight SQL work before revoking this account.
+                        if pending is None or pending.done():
+                            removed = apply_unlink(store, transport, state)
+                            if removed is True:
+                                connector.join(timeout=10)
+                                if connector.is_alive():
+                                    raise RuntimeError('La conexión anterior no terminó; reinicie el servicio antes de vincular otra cuenta.')
+                                # Retain the singleton process, ready for an explicit new pairing.
+                                transport = connector = None
+                                state = store.state('Sin vincular')
+                                waiting_unlink = None
+                                continue
+                            if removed is False or time.monotonic() - waiting_unlink > 60:
+                                if removed is not False:
+                                    store.complete_link(state['SolicitudID'], False,
+                                        'La cuenta no pudo reconectarse para desvincular. Revise la conexión y reintente.')
+                                state = store.state(transport.status, transport.qr)
+                                waiting_unlink = None
+                        time.sleep(0.5)
+                        continue
+                    if state.get('SolicitudAccion') == 'VINCULAR' and transport.status == 'Conectado':
+                        store.complete_link(state['SolicitudID'], True)
                 if state['Activo']:
                     if pending is not None and pending.done():
                         try:

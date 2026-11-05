@@ -34,6 +34,19 @@ def connection(worker=False):
 
 
 class Store:
+    def request_link(self, action, revision):
+        with connection() as (_, cur):
+            cur.execute('EXEC crm.sp_WhatsAppSolicitarVinculo ?,?,?', action, revision, uuid4().hex)
+            return rows(cur)[0]
+
+    def complete_link(self, operation, success, error=None):
+        with connection(True) as (_, cur):
+            cur.execute('EXEC crm.sp_WhatsAppCompletarVinculo ?,?,?', operation, success, error)
+
+    def account(self, phone, linked):
+        with connection(True) as (_, cur):
+            cur.execute('EXEC crm.sp_WhatsAppCuenta ?,?', phone, linked)
+
     def state(self, status=None, qr=None):
         with connection(True) as (_, cur):
             if status:
