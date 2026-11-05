@@ -12,9 +12,11 @@ _INJECTION_PATTERNS = (
     (
         'prompt_injection',
         re.compile(
-            r'(?:ignora|olvida|descarta|omite|ignore|forget|disregard|override)\s+'
+            r'(?:(?:ignora|olvida|descarta|omite|anula|desactiva|ignore|forget|disregard|override|bypass)\s+'
             r'(?:todas\s+|all\s+)?(?:las\s+|tus\s+|previous\s+|prior\s+|anteriores\s+)?'
-            r'(?:instrucciones|reglas|ordenes|órdenes|instructions|rules|prompts?|restricciones)',
+            r'(?:instrucciones|reglas|ordenes|órdenes|pol[ií]ticas|protocolos|instructions|rules|prompts?|restricciones)|'
+            r'(?:cu[aá]l\s+es|dime|mu[eé]strame|revela|repite|imprime|copia)\s+'
+            r'(?:tu\s+|el\s+|las?\s+)?(?:system\s*prompt|prompt\s+inicial|instrucciones\s+internas|reglas\s+internas|configuraci[oó]n\s+interna))',
             re.IGNORECASE,
         ),
     ),
@@ -22,7 +24,7 @@ _INJECTION_PATTERNS = (
         'system_override',
         re.compile(
             r'(?:system\s*prompt|instrucciones\s+del\s+sistema|developer\s+mode|modo\s+desarrollador|'
-            r'jailbreak|act[uú]a\s+como\s+(?:administrador|superadmin|root|dba|sistema))',
+            r'jailbreak|act[uú]a\s+como\s+(?:administrador|superadmin|root|dba|sistema|hacker))',
             re.IGNORECASE,
         ),
     ),
@@ -31,24 +33,25 @@ _INJECTION_PATTERNS = (
         re.compile(
             r'(?:\b(?:drop\s+table|truncate\s+table|xp_cmdshell|sp_executesql|'
             r'union\s+(?:all\s+)?select|exec\s+(?:crm|ventas|seguridad|contabilidad|rrhh|fiscal)\.)\b|'
-            r';\s*(?:drop|delete|update|insert|alter|exec|execute)\b)',
+            r';\s*(?:drop|delete|update|insert|alter|exec|execute)\b|'
+            r'\bselect\s+.+\s+from\s+(?:crm|ventas|seguridad|catalogo|produccion)\.)',
             re.IGNORECASE,
         ),
     ),
     (
         'cross_tenant_probe',
         re.compile(
-            r'(?:muestra|muéstrame|dame|lista|listar|consulta|ver|extrae)\s+'
-            r'(?:todos\s+los\s+|todas\s+las\s+|los\s+|las\s+)?'
-            r'(?:pedidos|cotizaciones|tel[eé]fonos|clientes|facturas|correos)\s+'
-            r'de\s+(?:otros?\s+clientes?|todas?\s+las?\s+personas?|todos|otra\s+persona|otro\s+n[uú]mero)',
+            r'(?:muestra|muéstrame|dame|lista|listar|consulta|ver|extrae|p[aá]same|revela)\s+'
+            r'(?:todos\s+los\s+|todas\s+las\s+|los\s+|las\s+|la\s+|el\s+)?'
+            r'(?:pedidos|cotizaciones|tel[eé]fonos|clientes|facturas|correos|direcciones|contrase[ñn]as|claves|api\s*keys?|tokens?|credenciales|base\s+de\s+datos)\s*'
+            r'(?:de\s+(?:otros?\s+clientes?|todas?\s+las?\s+personas?|todos|otra\s+persona|otro\s+n[uú]mero|los\s+usuarios|la\s+empresa|el\s+sistema)|del\s+sistema|intern[ao]s?)?',
             re.IGNORECASE,
         ),
     ),
 )
 
 _SENSITIVE_LEAK_RE = re.compile(
-    r'(?:AIza[0-9A-Za-z_\-]{20,}|GEMINI_API_KEY|sp_WhatsApp\w+|usr_bd_\w+|db_rol_\w+|'
+    r'(?:AIza[0-9A-Za-z_\-]{20,}|AQ\.[0-9A-Za-z_\-]{20,}|GEMINI_API_KEY|sp_WhatsApp\w+|usr_bd_\w+|db_rol_\w+|'
     r'SESSION_CONTEXT|Traceback\s*\(most\s+recent\s+call\s+last\))',
     re.IGNORECASE,
 )
@@ -59,8 +62,9 @@ _PAYMENT_HARVEST_RE = re.compile(
 )
 
 SECURITY_BLOCK_REPLY = (
-    'Por seguridad, solo puedo ayudarte con consultas del catálogo, tus propias cotizaciones '
-    'y el estado de los pedidos asociados a tu número. Escribe HUMANO si necesitas atención personalizada.'
+    "Por seguridad y políticas de privacidad de Brajher's Cake, no puedo compartir instrucciones internas, "
+    "credenciales ni información de otros clientes. Con gusto puedo ayudarte a consultar nuestro catálogo, "
+    "cotizar un pastel personalizado o revisar el estado de los pedidos asociados a tu número de teléfono."
 )
 
 SECURITY_PROTOCOLS = (
@@ -107,6 +111,20 @@ def detect_security_violation(text):
         return False, None, None
     for code, pattern in _INJECTION_PATTERNS:
         if pattern.search(cleaned):
+            # For cross_tenant_probe, ensure we don't block "muéstrame mis pedidos" or "dame mis cotizaciones"
+            if code == 'cross_tenant_probe':
+                lower = cleaned.lower()
+                if re.search(r'\b(?:mis\s+pedidos|mis\s+cotizaciones|mi\s+pedido|mi\s+cotizaci[oó]n)\b', lower) and not re.search(
+                    r'\b(?:otros?|todas?|todos|ajeno|otra\s+persona|otro\s+n[uú]mero|contrase[ñn]a|clave|token|base\s+de\s+datos)\b',
+                    lower,
+                ):
+                    continue
+                if not re.search(
+                    r'\b(?:otros?\s+clientes?|todas?\s+las?\s+personas?|todos|otra\s+persona|otro\s+n[uú]mero|'
+                    r'contrase[ñn]as?|claves?|api\s*keys?|tokens?|credenciales|base\s+de\s+datos|tel[eé]fonos|correos|direcciones)\b',
+                    lower,
+                ):
+                    continue
             return True, code, SECURITY_BLOCK_REPLY
     return False, None, None
 

@@ -41,9 +41,11 @@ class Tools:
         if name in ('agendar_cotizacion_pastel', 'responder_cotizacion') and args.get('confirmed') is not True:
             raise ValueError('Se requiere confirmación explícita de los detalles.')
         if name == 'agendar_cotizacion_pastel':
+            raw_fecha = str(args.get('fecha_entrega') or '').strip()
+            raw_fecha = re.sub(r'(?:Z|[+-]\d{2}:?\d{2})$', '', raw_fecha).strip()
             args = dict(args, nombre=required_text(args.get('nombre'), 'Nombre', 100),
                         especificaciones=required_text(args.get('especificaciones'), 'Especificaciones', 2000),
-                        fecha_entrega=delivery_date(args.get('fecha_entrega')).isoformat())
+                        fecha_entrega=delivery_date(raw_fecha).isoformat())
         elif name == 'responder_cotizacion':
             raw_id = args.get('cotizacion_id')
             if isinstance(raw_id, str):

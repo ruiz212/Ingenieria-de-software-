@@ -121,33 +121,39 @@ class Store:
             logging.getLogger(__name__).debug('No se pudo respaldar sesion WhatsApp en SQL', exc_info=True)
             return False
         finally:
-            if tmp_path and tmp_path.exists():
+            if tmp_path:
                 try:
-                    tmp_path.unlink()
-                except Exception:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
                     pass
 
     def restore_session_blob(self, session_path):
         import base64
         import zlib
         from pathlib import Path
+        from app.whatsapp.client import has_local_device
         p = Path(session_path) if session_path else None
         if not p:
             return False
+        if has_local_device(p):
+            return True
         try:
             with connection(True) as (_, cur):
                 cur.execute('EXEC crm.sp_WhatsAppLeerSesion')
                 row = cur.fetchone()
-            if not row or not row[0]:
-                return False
-            raw = zlib.decompress(base64.b64decode(row[0].encode('ascii')))
+                if not row or not row[0]:
+                    return False
+                raw = zlib.decompress(base64.b64decode(row[0].encode('ascii')))
             p.parent.mkdir(parents=True, exist_ok=True)
-            for suffix in ('', '-wal', '-shm', '-journal'):
-                candidate = Path(str(p) + suffix)
-                if candidate.exists():
-                    candidate.unlink()
+            for suffix in ('-wal', '-shm', '-journal'):
+                aux = Path(str(p) + suffix)
+                try:
+                    if aux.exists():
+                        aux.unlink()
+                except OSError:
+                    pass
             p.write_bytes(raw)
-            return True
+            return has_local_device(p)
         except Exception:
             logging.getLogger(__name__).debug('No se pudo restaurar sesion WhatsApp desde SQL', exc_info=True)
             return False
@@ -197,7 +203,14 @@ class Store:
     def history(self, sid):
         with connection(True) as (_, cur):
             cur.execute('EXEC crm.sp_WhatsAppHistorial ?,?', sid, sid)
-            return [{'role': r['Tipo'], 'text': r['Texto']} for r in reversed(rows(cur))]
+            return [
+                {'role': r['Tipo'], 'text': r['Texto']}
+                for r in reversed(rows(cur))
+                if r.get('Texto') not in (
+                    'No pude completar la consulta. Escribe HUMANO para que te atienda una persona.',
+                    'El asistente no está disponible. Escribe HUMANO para que te atienda el equipo.',
+                )
+            ]
 
     def finish(self, item, text):
         with connection(True) as (_, cur):
@@ -221,7 +234,9 @@ class Store:
         has_pending = bool(item.get('Pendiente'))
         is_confirm = text == 'CONFIRMAR' or (has_pending and normalized in _CONFIRM_VARIANTS)
         is_cancel = has_pending and normalized in ('CANCELAR', 'ANULAR')
-        if not is_confirm and not is_cancel and normalized not in ('HUMANO', 'AVISOS SI', 'AVISOS SÍ', 'AVISOS NO'):
+        if not is_confirm and not is_cancel and normalized not in (
+            'HUMANO', 'IA', 'ASISTENTE', 'BOT', 'REACTIVAR IA', 'AVISOS SI', 'AVISOS SÍ', 'AVISOS NO'
+        ):
             return False, None
         if is_cancel:
             with connection(True) as (_, cur):
@@ -249,6 +264,10 @@ class Store:
                 cur.execute('EXEC crm.sp_WhatsAppHandoff ?', item['id'])
                 # The acknowledgment is human-mode compatible.
                 self.enqueue(cur, item['id'], f"handoff:{item['ID']}", 'Tu conversación está en atención humana.', 'Humano', item['Revision'] + 1)
+                return True, None
+            if normalized in ('IA', 'ASISTENTE', 'BOT', 'REACTIVAR IA'):
+                cur.execute('EXEC crm.sp_WhatsAppModo ?,?', 'IA', item['id'])
+                self.enqueue(cur, item['id'], f"reactivate:{item['ID']}", "Asistente virtual de Brajher's Cake reactivado. ¿En qué te puedo ayudar hoy?", 'IA', item['Revision'] + 1)
                 return True, None
             enabled = normalized != 'AVISOS NO'
             cur.execute('EXEC crm.sp_WhatsAppConsentimiento ?,?', enabled, item['id'])
@@ -474,7 +493,7 @@ def _format_order_notification(numero_factura, estado, codigo_seguimiento=None, 
 
 def notify(cursor, kind, entity_id, *, phone=None, estado=None, precio=None,
            numero_factura=None, codigo_seguimiento=None, fecha_entrega=None, saldo=None):
-    """Trigger SQL notification SP and ensure phone-associated session delivery."""
+    """Trigger SQL stored procedure and ensure phone-associated session delivery."""
     if os.environ.get('WHATSAPP_ENABLED', '0') != '1':
         return
     # 1. Execute SQL stored procedure (standard contract with ownership chaining)

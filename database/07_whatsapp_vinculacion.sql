@@ -170,6 +170,13 @@ BEGIN
  SELECT TOP 1 DatosSesion FROM crm.WhatsAppVinculosAudit WHERE Accion='SESION_BACKUP' AND DatosSesion IS NOT NULL ORDER BY ID DESC;
 END;
 GO
+CREATE OR ALTER PROCEDURE crm.sp_WhatsAppLeerConfigIA
+AS
+BEGIN
+ SET NOCOUNT ON;
+ SELECT TOP 1 DatosSesion FROM crm.WhatsAppVinculosAudit WHERE Accion='CONFIG_IA' AND DatosSesion IS NOT NULL ORDER BY ID DESC;
+END;
+GO
 CREATE OR ALTER PROCEDURE crm.sp_ObtenerCotizacionesPendientesAdmin
 AS
 BEGIN
@@ -201,6 +208,8 @@ GRANT EXECUTE ON crm.sp_WhatsAppCompletarVinculo TO usr_bd_whatsapp,db_rol_geren
 GRANT EXECUTE ON crm.sp_WhatsAppCuenta TO usr_bd_whatsapp;
 GRANT EXECUTE ON crm.sp_WhatsAppGuardarSesion TO usr_bd_whatsapp;
 GRANT EXECUTE ON crm.sp_WhatsAppLeerSesion TO usr_bd_whatsapp;
+GRANT EXECUTE ON crm.sp_WhatsAppLeerConfigIA TO usr_bd_whatsapp;
+GRANT EXECUTE ON crm.sp_WhatsAppModo TO usr_bd_whatsapp,db_rol_gerencia,db_rol_superadmin;
 GRANT EXECUTE ON crm.sp_WhatsAppActivar TO usr_bd_whatsapp,db_rol_gerencia,db_rol_superadmin;
 DENY EXECUTE ON crm.sp_WhatsAppIntentoAdmin TO usr_bd_whatsapp,db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
 DENY EXECUTE ON crm.sp_WhatsAppResultadoAuth TO usr_bd_whatsapp,db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
@@ -209,4 +218,5 @@ DENY EXECUTE ON crm.sp_WhatsAppCompletarVinculo TO db_rol_cajero_pos,db_rol_prod
 DENY EXECUTE ON crm.sp_WhatsAppCuenta TO db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
 DENY EXECUTE ON crm.sp_WhatsAppGuardarSesion TO db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
 DENY EXECUTE ON crm.sp_WhatsAppLeerSesion TO db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
+DENY EXECUTE ON crm.sp_WhatsAppLeerConfigIA TO db_rol_cajero_pos,db_rol_produccion,db_rol_kiosco,db_rol_portal_cliente;
 GO

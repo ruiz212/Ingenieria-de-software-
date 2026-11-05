@@ -75,7 +75,9 @@ class LazyAgent:
 
 
 def process(store, agent, item):
-    if item['Modo'] == 'HUMANO' and item['Texto'].strip().upper() not in ('AVISOS SI', 'AVISOS SÍ', 'AVISOS NO'):
+    if item['Modo'] == 'HUMANO' and item['Texto'].strip().upper() not in (
+        'AVISOS SI', 'AVISOS SÍ', 'AVISOS NO', 'IA', 'ASISTENTE', 'BOT', 'REACTIVAR IA'
+    ):
         store.finish(item, None)
         return
     try:
