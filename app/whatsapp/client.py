@@ -2,6 +2,7 @@
 from pathlib import Path
 import logging
 import sqlite3
+import threading
 import time
 from app.services.auth_challenges import normalize_phone
 from app.utils.qr import generar_qr_base64
@@ -20,9 +21,47 @@ def sender_phone(jid):
 
 def _connect_sqlite_session(p: Path):
     try:
-        return sqlite3.connect(str(p), timeout=3.0)
+        conn = sqlite3.connect(str(p), timeout=5.0)
+        conn.execute('PRAGMA busy_timeout=5000')
+        return conn
     except Exception:
-        return sqlite3.connect(f'file:{p.as_posix()}?mode=ro', uri=True, timeout=3.0)
+        return sqlite3.connect(f'file:{p.as_posix()}?mode=ro', uri=True, timeout=5.0)
+
+
+def _build_neonize_dsn(session_path: Path | None) -> str:
+    """Build a SQLite path/URI for goneonize that enables WAL, NORMAL sync, and 30s busy_timeout."""
+    if not session_path:
+        return 'whatsapp_session.sqlite3'
+    # Pre-initialize WAL mode on disk so both Go (mattn/go-sqlite3) and Python share WAL non-blockingly
+    try:
+        session_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(str(session_path), timeout=5.0) as conn:
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA synchronous=NORMAL')
+            conn.execute('PRAGMA busy_timeout=30000')
+    except Exception:
+        pass
+    return f'{session_path.as_posix()}?_foreign_keys=on&_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL&v='
+
+
+def _build_lightweight_device_props():
+    """Return DeviceProps that disable heavy full-history sync so QR pairing completes in 1-2 seconds."""
+    try:
+        from neonize.proto.waCompanionReg.WAWebProtobufsCompanionReg_pb2 import DeviceProps
+        return DeviceProps(
+            os='BrajhersCake',
+            platformType=DeviceProps.CHROME,
+            requireFullSync=False,
+            historySyncConfig=DeviceProps.HistorySyncConfig(
+                fullSyncDaysLimit=1,
+                fullSyncSizeMbLimit=5,
+                storageQuotaMb=50,
+                recentSyncDaysLimit=1,
+                supportCallLogHistory=False,
+            ),
+        )
+    except Exception:
+        return None
 
 
 def has_local_device(session_path) -> bool:
@@ -89,7 +128,7 @@ def _extract_phone_from_jid_obj(jid_obj) -> str | None:
         return None
 
 
-def _resolve_own_phone(client, session_path, paired_phone: str | None = None) -> str:
+def _resolve_own_phone(client, session_path, paired_phone: str | None = None, *, allow_cgo: bool = True) -> str:
     if paired_phone:
         return paired_phone
     # 1. Check cached client.me if populated
@@ -101,28 +140,27 @@ def _resolve_own_phone(client, session_path, paired_phone: str | None = None) ->
                 return phone
     except Exception:
         pass
-    # 2. Call client.get_me()
-    try:
-        device = client.get_me()
-        if device:
-            phone = _extract_phone_from_jid_obj(getattr(device, 'JID', None))
-            if phone:
-                return phone
-    except Exception:
-        pass
-    # 3. Inspect whatsmeow_device in SQLite (with brief retries for WAL flush)
-    for _ in range(4):
-        fallback_jid = _lookup_sqlite_device_jid(session_path)
-        if fallback_jid:
-            try:
-                return sender_phone(fallback_jid)
-            except Exception:
-                pass
-        time.sleep(0.15)
+    # 2. Inspect whatsmeow_device in SQLite
+    fallback_jid = _lookup_sqlite_device_jid(session_path)
+    if fallback_jid:
+        try:
+            return sender_phone(fallback_jid)
+        except Exception:
+            pass
+    # 3. Call client.get_me() only when allowed (outside CGo callback thread)
+    if allow_cgo and client is not None:
+        try:
+            device = client.get_me()
+            if device:
+                phone = _extract_phone_from_jid_obj(getattr(device, 'JID', None))
+                if phone:
+                    return phone
+        except Exception:
+            pass
     return '+50500000000'
 
 
-def _complete_connection_in_sql(store, session_path, phone: str) -> None:
+def _complete_connection_in_sql(store, session_path, phone: str, *, save_blob: bool = True) -> None:
     store.account(phone, True)
     current = store.state('Conectado')
     if isinstance(current, dict):
@@ -141,7 +179,7 @@ def _complete_connection_in_sql(store, session_path, phone: str) -> None:
                     store.set_active(True)
                 except Exception:
                     pass
-    if hasattr(store, 'save_session_blob') and session_path:
+    if save_blob and hasattr(store, 'save_session_blob') and session_path:
         store.save_session_blob(session_path)
 
 
@@ -232,10 +270,15 @@ class Transport:
         except ImportError:
             PairStatusEv = None
         self.session_path = Path(session_path) if session_path else None
+        dsn = _build_neonize_dsn(self.session_path)
+        props = _build_lightweight_device_props()
         try:
-            self.client = NewClient(str(session_path), uuid=uuid4().hex)
+            self.client = NewClient(dsn, props=props, uuid=uuid4().hex)
         except TypeError:
-            self.client = NewClient(str(session_path))
+            try:
+                self.client = NewClient(dsn, uuid=uuid4().hex)
+            except TypeError:
+                self.client = NewClient(str(session_path))
         self.app, self.store = app, store
         self.status = 'Desconectado'
         self.qr = None
@@ -244,8 +287,35 @@ class Transport:
         self.pairing_completed = False
         self.paired_at = 0.0
         self.paired_phone = None
+        self.sql_synced = False
         self.last_error = None
         self._stopped = False
+        self._sync_lock = threading.Lock()
+
+        def _async_sync_sql():
+            if self._stopped:
+                return
+            with self._sync_lock:
+                if self._stopped:
+                    return
+                try:
+                    with app.app_context():
+                        phone = _resolve_own_phone(
+                            self.client,
+                            self.session_path,
+                            self.paired_phone,
+                            allow_cgo=False,
+                        )
+                        if phone and phone != '+50500000000':
+                            self.paired_phone = phone
+                        # Do not run sqlite3.backup (save_blob=False) during initial prekey upload;
+                        # worker.py backs up once the handshake has settled.
+                        _complete_connection_in_sql(store, self.session_path, phone, save_blob=False)
+                        self.sql_synced = True
+                except Exception:
+                    logging.getLogger(__name__).debug('Sincronizacion diferida al worker loop', exc_info=True)
+                finally:
+                    WAKE_EVENT.set()
 
         @self.client.event.qr
         def qr(client, code):
@@ -270,29 +340,32 @@ class Transport:
                 status_val = getattr(event, 'Status', 2)
                 if err_str or status_val == 1:
                     return
+                # Return immediately to Go so whatsmeow's pairing handshake & prekey upload never stall!
                 self.pairing_completed = True
                 self.paired_at = time.monotonic()
                 extracted = _extract_phone_from_jid_obj(getattr(event, 'ID', None))
                 if extracted:
                     self.paired_phone = extracted
                 self.status, self.qr, self.qr_updated_at = 'Conectado', None, 0.0
-                with app.app_context():
-                    phone = _resolve_own_phone(client, self.session_path, self.paired_phone)
-                    _complete_connection_in_sql(store, self.session_path, phone)
                 WAKE_EVENT.set()
+                threading.Thread(target=_async_sync_sql, daemon=True).start()
 
         @self.client.event(ConnectedEv)
         def connected(client, event):
             if self._stopped:
                 return
+            # Return immediately to Go so whatsmeow's post-connect sync never stalls!
             self.pairing_completed = True
             self.paired_at = time.monotonic()
+            if not self.paired_phone:
+                me_cached = getattr(client, 'me', None)
+                if me_cached:
+                    extracted = _extract_phone_from_jid_obj(getattr(me_cached, 'JID', None))
+                    if extracted:
+                        self.paired_phone = extracted
             self.status, self.qr, self.qr_updated_at = 'Conectado', None, 0.0
-            with app.app_context():
-                phone = _resolve_own_phone(client, self.session_path, self.paired_phone)
-                self.paired_phone = phone
-                _complete_connection_in_sql(store, self.session_path, phone)
             WAKE_EVENT.set()
+            threading.Thread(target=_async_sync_sql, daemon=True).start()
 
         @self.client.event(DisconnectedEv)
         def disconnected(client, event):
@@ -301,7 +374,7 @@ class Transport:
             # During QR pairing, whatsmeow closes the anonymous pairing socket right after
             # PairStatusEv and immediately opens an authenticated socket. Do not drop to
             # 'Desconectado' during this handshake window.
-            if self.pairing_completed and (time.monotonic() - self.paired_at) < 25:
+            if self.pairing_completed and (time.monotonic() - self.paired_at) < 35:
                 return
             self.status, self.qr, self.qr_updated_at = 'Desconectado', None, 0.0
             WAKE_EVENT.set()
@@ -312,6 +385,7 @@ class Transport:
                 return
             self.pairing_completed = False
             self.paired_phone = None
+            self.sql_synced = False
             self.status, self.qr, self.qr_updated_at = 'Requiere vinculación', None, 0.0
             with app.app_context():
                 store.account(None, False)

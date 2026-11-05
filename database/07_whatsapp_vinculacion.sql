@@ -62,8 +62,8 @@ BEGIN
   @WorkerVivo=CASE WHEN Heartbeat>DATEADD(second,-30,SYSUTCDATETIME()) THEN 1 ELSE 0 END,
   @DesvincularExpirado=CASE WHEN SolicitudEnCurso=1 AND (Heartbeat IS NULL OR Heartbeat<DATEADD(second,-25,SYSUTCDATETIME()) OR SolicitadoEn<DATEADD(second,-20,SYSUTCDATETIME())) THEN 1 ELSE 0 END,
   @TieneQRValido=CASE WHEN @Accion='VINCULAR' AND Vinculado=0
-   AND QR IS NOT NULL AND QRExpira>DATEADD(second,15,SYSUTCDATETIME())
-   AND Heartbeat>DATEADD(second,-30,SYSUTCDATETIME()) THEN 1 ELSE 0 END
+   AND QR IS NOT NULL AND QRExpira>DATEADD(second,35,SYSUTCDATETIME())
+   AND Heartbeat>DATEADD(second,-15,SYSUTCDATETIME()) THEN 1 ELSE 0 END
   FROM (
    SELECT *, CASE WHEN SolicitudEstado='Pendiente' AND SolicitudAccion='DESVINCULAR' THEN 1 ELSE 0 END AS SolicitudEnCurso
    FROM crm.WhatsAppControl WITH(UPDLOCK,HOLDLOCK) WHERE ID=1
@@ -91,7 +91,7 @@ BEGIN
   THROW 52027,'Espere a que termine la desvinculación antes de vincular otra cuenta.',1;
  IF @TieneQRValido=1
   UPDATE crm.WhatsAppControl SET ConnectionRevision=ConnectionRevision+1,
-   SolicitudID=COALESCE(SolicitudID,@Solicitud),SolicitudAccion='VINCULAR',SolicitudEstado='Pendiente',
+   SolicitudID=@Solicitud,SolicitudAccion='VINCULAR',SolicitudEstado='Pendiente',
    SolicitudError=NULL,SolicitadoPor=@Actor,SolicitadoEn=SYSUTCDATETIME(),Activo=0 WHERE ID=1;
  ELSE
   UPDATE crm.WhatsAppControl SET ConnectionRevision=ConnectionRevision+1, SolicitudID=@Solicitud,

@@ -137,6 +137,7 @@ def run(app):
             executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='whatsapp-inference')
             pending = None
             last_send, last_heartbeat, last_backup = 0.0, 0.0, time.monotonic()
+            initial_blob_backed_up = False
             waiting_unlink = None
             state = store.state(transport.status, transport.qr)
             active_link_request = state.get('SolicitudID')
@@ -144,6 +145,8 @@ def run(app):
                 WAKE_EVENT.clear()
                 if connector is not None and not connector.is_alive() and transport.status != 'Requiere vinculación':
                     if state.get('SolicitudEstado') == 'Pendiente' and state.get('SolicitudAccion') == 'VINCULAR' and not state.get('Vinculado'):
+                        transport = None
+                    elif is_real_transport and not state.get('Vinculado'):
                         transport = None
                     else:
                         break
@@ -155,7 +158,7 @@ def run(app):
                     and transport.status == 'Esperando QR'
                     and not getattr(transport, 'pairing_completed', False)
                     and getattr(transport, 'qr_updated_at', 0)
-                    and now - transport.qr_updated_at > 70
+                    and now - transport.qr_updated_at > 50
                 ):
                     transport.status, transport.qr, transport.qr_updated_at = 'Desconectado', None, 0.0
                 if (
@@ -173,16 +176,20 @@ def run(app):
                 ):
                     transport.status, transport.qr, transport.qr_updated_at = 'Conectado', None, 0.0
                     phone = _resolve_paired_phone_fallback(transport, path)
-                    _complete_connection_in_sql(store, path, phone)
+                    _complete_connection_in_sql(store, path, phone, save_blob=False)
                     state = store.state('Conectado')
                     last_heartbeat = now
                 if now - last_heartbeat >= 2:
                     state = store.state(transport.status if transport else 'Sin vincular', transport.qr if transport else None)
                     last_heartbeat = now
-                if is_real_transport and transport is not None and transport.status == 'Conectado' and now - last_backup >= 120:
-                    if hasattr(store, 'save_session_blob'):
-                        store.save_session_blob(path)
-                    last_backup = now
+                if is_real_transport and transport is not None and transport.status == 'Conectado':
+                    paired_at = getattr(transport, 'paired_at', 0.0) or 0.0
+                    settled = (paired_at == 0.0) or (now - paired_at >= 12.0)
+                    if settled and (not initial_blob_backed_up or now - last_backup >= 120):
+                        if hasattr(store, 'save_session_blob'):
+                            store.save_session_blob(path)
+                        initial_blob_backed_up = True
+                        last_backup = now
                 if transport is None:
                     if state.get('SolicitudEstado') == 'Pendiente' and state.get('SolicitudAccion') == 'VINCULAR':
                         if is_real_transport and not state.get('Vinculado') and not has_local_device(path):
@@ -231,6 +238,7 @@ def run(app):
                                     _clear_session_files(path)
                                 # Retain the singleton process, ready for an explicit new pairing.
                                 transport = connector = None
+                                initial_blob_backed_up = False
                                 state = store.state('Sin vincular')
                                 waiting_unlink = None
                                 continue
@@ -246,7 +254,7 @@ def run(app):
                         if transport.status == 'Conectado' or getattr(transport, 'pairing_completed', False):
                             if is_real_transport and not state.get('Vinculado'):
                                 phone = _resolve_paired_phone_fallback(transport, path)
-                                _complete_connection_in_sql(store, path, phone)
+                                _complete_connection_in_sql(store, path, phone, save_blob=False)
                                 state = store.state('Conectado')
                             else:
                                 store.complete_link(state['SolicitudID'], True)
@@ -260,21 +268,20 @@ def run(app):
                                 and transport.status == 'Esperando QR'
                                 and bool(transport.qr)
                                 and getattr(transport, 'qr_updated_at', 0) > 0
-                                and (now - transport.qr_updated_at) < 55
+                                and (now - transport.qr_updated_at) < 18
                             )
                             warming_up = (
                                 is_real_transport
                                 and connector is not None
                                 and connector.is_alive()
                                 and getattr(transport, 'started_at', 0) > 0
-                                and (now - transport.started_at) < 25
+                                and (now - transport.started_at) < 15
                             )
                             stale_unlinked = (
                                 not already_paired
                                 and transport.status in ('Desconectado', 'Requiere vinculación')
                                 and getattr(transport, 'started_at', 0)
-                                and getattr(transport, 'qr_updated_at', 0) == 0
-                                and time.monotonic() - transport.started_at > 60
+                                and time.monotonic() - transport.started_at > 18
                             )
                             if already_paired:
                                 active_link_request = state.get('SolicitudID')
@@ -293,6 +300,24 @@ def run(app):
                                 connector = threading.Thread(target=transport.connect, daemon=True)
                                 connector.start()
                                 active_link_request = state.get('SolicitudID')
+                elif (
+                    is_real_transport
+                    and transport is not None
+                    and not state.get('Vinculado')
+                    and not getattr(transport, 'pairing_completed', False)
+                    and not has_local_device(path)
+                    and transport.status in ('Desconectado', 'Requiere vinculación')
+                    and getattr(transport, 'started_at', 0)
+                    and (now - transport.started_at) > 18
+                ):
+                    # Keep a fresh QR channel alive at all times when unlinked
+                    transport.stop()
+                    if connector is not None:
+                        connector.join(timeout=5)
+                    _clear_session_files(path)
+                    transport = Transport(app, store, path)
+                    connector = threading.Thread(target=transport.connect, daemon=True)
+                    connector.start()
                 if state['Activo']:
                     if pending is not None and pending.done():
                         try:
