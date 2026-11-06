@@ -1,33 +1,31 @@
-"""Gunicorn production configuration for Azure App Service.
-Leverages multiple CPU cores and multithreaded worker model (gthread)
-to maximize throughput and minimize latency on upgraded servers.
+"""Gunicorn production configuration optimized for Azure App Service B1 tier.
+B1 instance constraints: 1 vCPU (burstable), 1.75 GB RAM.
+Configured with 1 worker and 2 threads to prevent OOM kills and CPU throttling.
 """
-import multiprocessing
 import os
 
-# Server socket
-bind = os.environ.get('GUNICORN_BIND', '0.0.0.0:8000')
+# Port: Listen on Azure's assigned PORT or WEBSITES_PORT (default to 8000)
+port = os.environ.get('PORT', os.environ.get('WEBSITES_PORT', '8000'))
+bind = f"0.0.0.0:{port}"
 
-# Worker processes:
-# Scales dynamically with server CPU cores allocated in Azure App Service.
-cpu_cores = multiprocessing.cpu_count()
-default_workers = max(2, min(cpu_cores * 2, 8))
-workers = int(os.environ.get('GUNICORN_WORKERS', os.environ.get('WEB_CONCURRENCY', default_workers)))
+# Workers: Hard cap at 1 worker on B1 to prevent exceeding the 1.75 GB RAM limit.
+# Each worker with OpenCV, NumPy and pyodbc takes ~180-250MB.
+workers = int(os.environ.get('GUNICORN_WORKERS', os.environ.get('WEB_CONCURRENCY', 1)))
+workers = min(workers, 2)
 
-# Worker threads:
-# gthread worker class handles concurrent I/O (SQL, static assets) without blocking.
-threads = int(os.environ.get('GUNICORN_THREADS', 4))
+# Worker threads: gthread handles concurrent I/O (SQL queries, static files)
+# without spawning multiple memory-heavy Python processes.
+threads = int(os.environ.get('GUNICORN_THREADS', 2))
 worker_class = 'gthread'
 
-# HTTP Connection pooling and Keep-Alive (reuses TCP/TLS connections)
-keepalive = int(os.environ.get('GUNICORN_KEEPALIVE', 5))
-timeout = int(os.environ.get('GUNICORN_TIMEOUT', 120))
+# HTTP Keep-Alive and timeouts (600s matches Azure Oryx standard)
+keepalive = 5
+timeout = int(os.environ.get('GUNICORN_TIMEOUT', 600))
 
 # Periodic worker recycling to eliminate memory fragmentation
 max_requests = 1000
 max_requests_jitter = 50
 
-# Preloading application code for fast worker startup and copy-on-write memory sharing
 preload_app = False
 
 # Logging configuration

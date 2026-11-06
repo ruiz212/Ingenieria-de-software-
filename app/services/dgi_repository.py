@@ -153,7 +153,18 @@ def periods(cursor):
     return rows(cursor)
 
 
-def get_period(cursor, period_id):
+def get_period(cursor, period_id, for_update=False):
+    if not for_update:
+        execute_sp(
+            cursor,
+            'fiscal.sp_ObtenerPeriodoDGIPorID_Lectura',
+            (period_id,),
+            fallback_sql='SELECT ID,Desde,Hasta,Estado FROM DGI_Periodos WHERE ID=?',
+        )
+        result = rows(cursor)
+        if not result:
+            raise DGINotFound('Período no encontrado.')
+        return result[0]
     execute_sp(
         cursor,
         'fiscal.sp_ObtenerPeriodoDGIPorID',
@@ -186,7 +197,16 @@ def create_period(cursor, month, actor):
     return rid
 
 
-def snapshot(cursor, period, obligation):
+def snapshot_base(cursor, period):
+    return snapshot(cursor, period, None)
+
+
+def snapshot(cursor, period, obligation=None, *, cached_base=None):
+    if cached_base is not None:
+        result = dict(cached_base)
+        if obligation is not None:
+            result['obligacion'] = obligation
+        return json.loads(json_dump(result))
     start, stop = period['Desde'], period['Hasta'] + timedelta(days=1)
     # Ventana ampliada para capturar históricos UTC que caen en el día adyacente.
     candidate_start, candidate_stop = start - timedelta(days=1), stop + timedelta(days=1)
@@ -287,8 +307,12 @@ def snapshot(cursor, period, obligation):
     for row in rows(cursor):
         by_id[row.pop('asiento_id')]['detalles'].append(row)
     # Un solo formato persistido y utilizado también para la primera evaluación.
-    return json.loads(json_dump(dict(motor=ENGINE_VERSION, alcance='ANALISIS_INTERNO', desde=start, hasta=period['Hasta'],
-        obligacion=obligation, perfil=profile(cursor), ventas=sales, compras=purchases, asientos=journals)))
+    base_dict = dict(motor=ENGINE_VERSION, alcance='ANALISIS_INTERNO', desde=start, hasta=period['Hasta'],
+        perfil=profile(cursor), ventas=sales, compras=purchases, asientos=journals)
+    if obligation is None:
+        return base_dict
+    full_dict = dict(base_dict, obligacion=obligation)
+    return json.loads(json_dump(full_dict))
 
 
 def history(cursor, period_id=None):
@@ -318,7 +342,18 @@ def is_review_fresh(cursor, review, period=None):
     return current_hash == saved_hash
 
 
-def get_review(cursor, review_id):
+def get_review(cursor, review_id, for_update=False):
+    if not for_update:
+        execute_sp(
+            cursor,
+            'fiscal.sp_ObtenerRevisionDGIPorID_Lectura',
+            (review_id,),
+            fallback_sql='SELECT * FROM DGI_Revisiones WHERE ID=?',
+        )
+        result = rows(cursor)
+        if not result:
+            raise DGINotFound('Revisión no encontrada.')
+        return result[0]
     execute_sp(
         cursor,
         'fiscal.sp_ObtenerRevisionDGIPorID',

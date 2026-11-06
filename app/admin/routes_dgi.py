@@ -108,22 +108,25 @@ def dgi_dashboard():
         past = [p for p in periods if p['Desde'] <= today]
         suggested = past[0] if past else (periods[-1] if periods else None)
         selected_id = positive_id(request.args['periodo']) if request.args.get('periodo') else (suggested['ID'] if suggested else None)
-        selected = repo.get_period(cursor, selected_id) if selected_id else None
+        selected = repo.get_period(cursor, selected_id, for_update=False) if selected_id else None
         all_reviews = repo.history(cursor, selected_id) if selected_id else []
         show_history = request.args.get('historial') == '1'
         reviews, seen = [], set()
         any_stale = False
         snapshot_hashes = {}
+        base_snapshot = None
         for review in all_reviews:
             latest = review['Obligacion'] not in seen
             seen.add(review['Obligacion'])
             if show_history or latest:
                 obligation = review['Obligacion']
                 if selected and obligation not in snapshot_hashes:
-                    snapshot_hashes[obligation] = fingerprint(repo.snapshot(cursor, selected, obligation))
+                    if base_snapshot is None:
+                        base_snapshot = repo.snapshot_base(cursor, selected)
+                    snapshot_hashes[obligation] = fingerprint(repo.snapshot(cursor, selected, obligation, cached_base=base_snapshot))
                 saved_hash = review.get('Huella')
                 if not saved_hash:
-                    saved_hash = repo.get_review(cursor, review['ID']).get('Huella')
+                    saved_hash = repo.get_review(cursor, review['ID'], for_update=False).get('Huella')
                 hash_matches = bool(selected and saved_hash and snapshot_hashes.get(obligation) == saved_hash)
                 is_fresh = review['Estado'] != 'OBSOLETO' and review['Motor'] == ENGINE_VERSION and hash_matches
                 review['actual'] = is_fresh
