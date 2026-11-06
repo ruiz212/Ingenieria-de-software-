@@ -161,6 +161,95 @@
     </div>
 </div>
 
+
+<div class="panel panel-full panel-accent-primary mb-3" id="seccion-periodos-contables">
+    <div class="panel-header flex-between flex-wrap gap-2">
+        <h3>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Historial de Períodos Contables y Estados Financieros ({{ periodos_contables|length }} Períodos)
+        </h3>
+        <div class="payroll-header-controls flex-wrap gap-2">
+            <label for="filtro-anio-contable">Año:</label>
+            <select id="filtro-anio-contable" class="payroll-filter-select" onchange="filtrarPeriodosContables()">
+                <option value="ALL">Todos los Años</option>
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+                <option value="2024">2024</option>
+                <option value="2023">2023</option>
+            </select>
+            <label for="filtro-estado-contable">Estado:</label>
+            <select id="filtro-estado-contable" class="payroll-filter-select" onchange="filtrarPeriodosContables()">
+                <option value="ALL">Todos los Estados</option>
+                <option value="Cerrado">Cerrados</option>
+                <option value="Abierto">Abiertos</option>
+            </select>
+            <a href="{{ url_for('admin.estado_resultados') }}" class="btn btn-primary btn-sm">Ver Último Estado Resultados</a>
+        </div>
+    </div>
+    <div class="panel-body panel-body-flush">
+        <div class="table-responsive">
+            <table class="data-table" id="tabla-periodos-contables">
+                <thead>
+                    <tr>
+                        <th>Período Contable</th>
+                        <th>Estado</th>
+                        <th class="col-num">Ingresos Contables</th>
+                        <th class="col-num">Costos de Ventas</th>
+                        <th class="col-num">Gastos Operativos</th>
+                        <th class="col-num">Utilidad Neta</th>
+                        <th class="col-actions text-center">Acciones y Estados Financieros</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in periodos_contables or [] %}
+                    <tr class="fila-periodo-contable" data-anio="{{ p.anio }}" data-estado="{{ p.estado }}">
+                        <td>
+                            <div class="cell-bold">{{ p.mes_nombre }} {{ p.anio }}</div>
+                            <div class="payroll-sub">Cierre: {{ p.fecha_corte }}</div>
+                        </td>
+                        <td>
+                            {% if p.estado == 'Cerrado' %}
+                            <span class="badge badge-success">Cerrado</span>
+                            {% else %}
+                            <span class="badge badge-warning badge-live">Abierto</span>
+                            {% endif %}
+                        </td>
+                        <td class="cell-money col-num text-success">C${{ "{:,.2f}".format(p.total_ingresos) }}</td>
+                        <td class="cell-money col-num text-warning">-C${{ "{:,.2f}".format(p.total_costos) }}</td>
+                        <td class="cell-money col-num text-danger">-C${{ "{:,.2f}".format(p.total_gastos) }}</td>
+                        <td class="cell-money col-num fw-700 {{ 'text-success' if p.utilidad_neta >= 0 else 'text-danger' }}">
+                            C${{ "{:,.2f}".format(p.utilidad_neta) }}
+                        </td>
+                        <td class="col-actions">
+                            <div class="payroll-actions-group">
+                                <a href="{{ url_for('admin.estado_resultados', mes=p.mes, anio=p.anio) }}" class="btn btn-primary btn-sm" title="Consultar Estado de Resultados de este período">
+                                    Estado Resultados
+                                </a>
+                                <a href="{{ url_for('admin.balance_general', fecha_corte=p.fecha_corte) }}" class="btn btn-outline btn-sm" title="Consultar Balance General al corte de este período">
+                                    Balance General
+                                </a>
+                                <a href="{{ url_for('admin.balance_comprobacion', mes=p.mes, anio=p.anio) }}" class="btn btn-outline btn-sm" title="Consultar Balanza de Comprobación">
+                                    Comprobación
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📊</div>
+                                <p>No hay períodos contables registrados en la base de datos.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <div class="panel panel-full panel-accent-primary mb-3">
     <div class="panel-header flex-between">
         <h3>

@@ -15,6 +15,12 @@ from datetime import datetime, timedelta
 from app.services.validation import amount, required_text
 from app.services.contabilidad_service import ContabilidadService, ContabilidadError
 
+MESES_ES = {
+    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+    5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+    9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+}
+
 @admin_bp.route('/contabilidad')
 @login_required
 @roles_required('Admin', 'SuperAdmin')
@@ -215,6 +221,52 @@ def contabilidad():
     resumen_hoy = ContabilidadService.obtener_resumen_financiero_rango(cursor, inicio_hoy, fin_hoy)
     resumen_mes = ContabilidadService.obtener_resumen_financiero_rango(cursor, inicio_mes, fin_mes)
 
+    # Historial completo de Períodos Contables (36 meses)
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ListarPeriodosContablesResumen',
+        fallback_sql="""
+        SELECT 
+            p.ID,
+            p.Mes,
+            p.Anio,
+            p.Estado,
+            p.FechaApertura,
+            p.FechaCierre,
+            p.CierreUtilidad,
+            ISNULL(SUM(CASE WHEN c.Clase = 'Ingreso' THEN (d.Haber - d.Debe) ELSE 0 END), 0) AS TotalIngresos,
+            ISNULL(SUM(CASE WHEN c.Clase = 'Costo' THEN (d.Debe - d.Haber) ELSE 0 END), 0) AS TotalCostos,
+            ISNULL(SUM(CASE WHEN c.Clase = 'Gasto' THEN (d.Debe - d.Haber) ELSE 0 END), 0) AS TotalGastos
+        FROM PeriodosContables p
+        LEFT JOIN AsientosDiario a ON a.PeriodoID = p.ID AND a.Estado IN ('Contabilizado', 'Anulado')
+        LEFT JOIN DetalleAsientos d ON d.AsientoID = a.ID
+        LEFT JOIN CatalogoCuentas c ON d.CuentaID = c.ID AND c.Clase IN ('Ingreso', 'Costo', 'Gasto')
+        GROUP BY p.ID, p.Mes, p.Anio, p.Estado, p.FechaApertura, p.FechaCierre, p.CierreUtilidad
+        ORDER BY p.Anio DESC, p.Mes DESC
+        """,
+    )
+    periodos_contables = []
+    for r in cursor.fetchall():
+        ingr = float(r.TotalIngresos)
+        cost = float(r.TotalCostos)
+        gast = float(r.TotalGastos)
+        util_calc = ingr - (cost + gast)
+        util_final = float(r.CierreUtilidad) if r.CierreUtilidad is not None else util_calc
+        ultimo_dia = calendar.monthrange(r.Anio, r.Mes)[1]
+        periodos_contables.append({
+            'id': r.ID,
+            'mes': r.Mes,
+            'anio': r.Anio,
+            'mes_nombre': MESES_ES.get(r.Mes, f"Mes {r.Mes}"),
+            'periodo_str': f"{MESES_ES.get(r.Mes, f'Mes {r.Mes}')} {r.Anio}",
+            'estado': r.Estado,
+            'fecha_corte': f"{r.Anio}-{r.Mes:02d}-{ultimo_dia:02d}",
+            'total_ingresos': ingr,
+            'total_costos': cost,
+            'total_gastos': gast,
+            'utilidad_neta': util_final,
+        })
+
     conn.close()
 
     metricas = {
@@ -265,6 +317,7 @@ def contabilidad():
         empleados=empleados,
         metricas=metricas,
         nominas_contables=nominas_contables,
+        periodos_contables=periodos_contables,
     )
 
 
@@ -424,12 +477,39 @@ def balance_general():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    fecha_corte = request.args.get('fecha_corte', business_now().strftime('%Y-%m-%d'))
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ListarPeriodosContablesSimple',
+        fallback_sql="SELECT ID, Mes, Anio, Estado, CierreUtilidad FROM PeriodosContables ORDER BY Anio DESC, Mes DESC",
+    )
+    periodos_disponibles = []
+    for row in cursor.fetchall():
+        ultimo_dia = calendar.monthrange(row.Anio, row.Mes)[1]
+        periodos_disponibles.append({
+            'id': row.ID,
+            'mes': row.Mes,
+            'anio': row.Anio,
+            'mes_nombre': MESES_ES.get(row.Mes, f"Mes {row.Mes}"),
+            'periodo_str': f"{MESES_ES.get(row.Mes, f'Mes {row.Mes}')} {row.Anio}",
+            'estado': row.Estado,
+            'cierre_utilidad': float(row.CierreUtilidad) if row.CierreUtilidad is not None else None,
+            'fecha_corte': f"{row.Anio}-{row.Mes:02d}-{ultimo_dia:02d}"
+        })
+
+    now_ni = business_now()
+    hoy_str = now_ni.strftime('%Y-%m-%d')
+    fecha_corte = request.args.get('fecha_corte')
+    if not fecha_corte:
+        if periodos_disponibles:
+            fecha_corte = periodos_disponibles[0]['fecha_corte']
+        else:
+            fecha_corte = hoy_str
+
     try:
         fecha_corte_dt = datetime.strptime(str(fecha_corte)[:10], '%Y-%m-%d').date()
     except ValueError:
-        fecha_corte_dt = business_now().date()
-        fecha_corte = fecha_corte_dt.strftime('%Y-%m-%d')
+        fecha_corte_dt = now_ni.date()
+        fecha_corte = hoy_str
     inicio_ejercicio = f"{fecha_corte_dt.year:04d}-01-01"
 
     sql_balance = f"""
@@ -568,6 +648,8 @@ def balance_general():
     return render_template('admin/balance_general.html',
                            user=current_user,
                            fecha_corte=fecha_corte,
+                           hoy_str=hoy_str,
+                           periodos_disponibles=periodos_disponibles,
                            activos=activos, total_activos=total_activos,
                            pasivos=pasivos, total_pasivos=total_pasivos,
                            capital=capital, total_capital=total_capital,
@@ -658,9 +740,47 @@ def estado_resultados():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    execute_sp(
+        cursor,
+        'contabilidad.sp_ListarPeriodosContablesSimple',
+        fallback_sql="SELECT ID, Mes, Anio, Estado, CierreUtilidad FROM PeriodosContables ORDER BY Anio DESC, Mes DESC",
+    )
+    periodos_disponibles = []
+    for row in cursor.fetchall():
+        ultimo_dia = calendar.monthrange(row.Anio, row.Mes)[1]
+        periodos_disponibles.append({
+            'id': row.ID,
+            'mes': row.Mes,
+            'anio': row.Anio,
+            'mes_nombre': MESES_ES.get(row.Mes, f"Mes {row.Mes}"),
+            'periodo_str': f"{MESES_ES.get(row.Mes, f'Mes {row.Mes}')} {row.Anio}",
+            'estado': row.Estado,
+            'cierre_utilidad': float(row.CierreUtilidad) if row.CierreUtilidad is not None else None,
+            'fecha_corte': f"{row.Anio}-{row.Mes:02d}-{ultimo_dia:02d}"
+        })
+
     now_ni = business_now()
-    mes = request.args.get('mes', now_ni.month)
-    anio = request.args.get('anio', now_ni.year)
+    req_mes = request.args.get('mes')
+    req_anio = request.args.get('anio')
+
+    if req_mes is not None and req_anio is not None:
+        try:
+            mes = int(req_mes)
+            anio = int(req_anio)
+        except ValueError:
+            mes = now_ni.month
+            anio = now_ni.year
+    else:
+        if periodos_disponibles:
+            mes = periodos_disponibles[0]['mes']
+            anio = periodos_disponibles[0]['anio']
+        else:
+            mes = now_ni.month
+            anio = now_ni.year
+
+    ultimo_dia_sel = calendar.monthrange(anio, mes)[1]
+    fecha_corte_periodo = f"{anio}-{mes:02d}-{ultimo_dia_sel:02d}"
+    mes_nombre = MESES_ES.get(mes, f"Mes {mes}")
 
     execute_sp(
         cursor,
@@ -672,11 +792,14 @@ def estado_resultados():
 
     if not periodo_row:
         conn.close()
-        flash(f'No hay un periodo contable creado para {mes}/{anio}.', 'warning')
+        flash(f'No hay un periodo contable creado para {mes_nombre} {anio}.', 'warning')
         return render_template('admin/estado_resultados.html',
                                user=current_user,
                                mes=mes, anio=anio,
+                               mes_nombre=mes_nombre,
+                               fecha_corte_periodo=fecha_corte_periodo,
                                periodo_creado=False,
+                               periodos_disponibles=periodos_disponibles,
                                ingresos=[], costos=[], gastos=[],
                                total_ingresos=0, total_costos=0, total_gastos=0,
                                utilidad_bruta=0, utilidad_neta=0)
@@ -766,7 +889,10 @@ def estado_resultados():
     return render_template('admin/estado_resultados.html',
                            user=current_user,
                            mes=mes, anio=anio,
+                           mes_nombre=mes_nombre,
+                           fecha_corte_periodo=fecha_corte_periodo,
                            periodo_creado=True,
+                           periodos_disponibles=periodos_disponibles,
                            ingresos=ingresos, total_ingresos=total_ingresos,
                            costos=costos, total_costos=total_costos,
                            gastos=gastos, total_gastos=total_gastos,
@@ -800,9 +926,35 @@ def balance_comprobacion():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ListarPeriodosContablesSimple',
+            fallback_sql="SELECT ID, Mes, Anio, Estado, CierreUtilidad FROM PeriodosContables ORDER BY Anio DESC, Mes DESC",
+        )
+        periodos_disponibles = [
+            {
+                'id': row.ID,
+                'mes': row.Mes,
+                'anio': row.Anio,
+                'mes_nombre': MESES_ES.get(row.Mes, f"Mes {row.Mes}"),
+                'periodo_str': f"{MESES_ES.get(row.Mes, f'Mes {row.Mes}')} {row.Anio}",
+                'estado': row.Estado
+            }
+            for row in cursor.fetchall()
+        ]
+
         now_ni = business_now()
-        mes = request.args.get('mes', now_ni.month)
-        anio = request.args.get('anio', now_ni.year)
+        req_mes = request.args.get('mes')
+        req_anio = request.args.get('anio')
+        if req_mes is not None and req_anio is not None:
+            mes = int(req_mes)
+            anio = int(req_anio)
+        elif periodos_disponibles:
+            mes = periodos_disponibles[0]['mes']
+            anio = periodos_disponibles[0]['anio']
+        else:
+            mes = now_ni.month
+            anio = now_ni.year
 
         balance = ContabilidadService.balanza_mensual(cursor, int(mes), int(anio))
         total_debe = sum(item['TotalDebe'] for item in balance)
@@ -811,6 +963,7 @@ def balance_comprobacion():
                                user=current_user,
                                balance=balance,
                                mes=mes, anio=anio,
+                               periodos_disponibles=periodos_disponibles,
                                total_debe=total_debe, total_haber=total_haber)
     except Exception as e:
         flash(f'Error al cargar balance: {str(e)}', 'error')
@@ -825,10 +978,36 @@ def libro_mayor():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ListarPeriodosContablesSimple',
+            fallback_sql="SELECT ID, Mes, Anio, Estado, CierreUtilidad FROM PeriodosContables ORDER BY Anio DESC, Mes DESC",
+        )
+        periodos_disponibles = [
+            {
+                'id': row.ID,
+                'mes': row.Mes,
+                'anio': row.Anio,
+                'mes_nombre': MESES_ES.get(row.Mes, f"Mes {row.Mes}"),
+                'periodo_str': f"{MESES_ES.get(row.Mes, f'Mes {row.Mes}')} {row.Anio}",
+                'estado': row.Estado
+            }
+            for row in cursor.fetchall()
+        ]
+
         now_ni = business_now()
         cuenta_codigo = request.args.get('cuenta_codigo')
-        mes = int(request.args.get('mes', now_ni.month))
-        anio = int(request.args.get('anio', now_ni.year))
+        req_mes = request.args.get('mes')
+        req_anio = request.args.get('anio')
+        if req_mes is not None and req_anio is not None:
+            mes = int(req_mes)
+            anio = int(req_anio)
+        elif periodos_disponibles:
+            mes = periodos_disponibles[0]['mes']
+            anio = periodos_disponibles[0]['anio']
+        else:
+            mes = now_ni.month
+            anio = now_ni.year
 
         cuentas = ContabilidadService.obtener_catalogo_cuentas(cursor, solo_transaccionales=True)
 
@@ -844,6 +1023,7 @@ def libro_mayor():
                                cuentas=cuentas,
                                movimientos=movimientos,
                                cuenta_seleccionada=cuenta_codigo,
+                               periodos_disponibles=periodos_disponibles,
                                mes=mes, anio=anio)
     except Exception as e:
         flash(f'Error al cargar libro mayor: {str(e)}', 'error')

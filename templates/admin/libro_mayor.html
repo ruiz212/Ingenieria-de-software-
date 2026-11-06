@@ -58,7 +58,7 @@
             <div>
                 <label class="libro-mayor-label-text" for="mayor-anio">Año</label>
                 <select id="mayor-anio" name="anio" class="form-control libro-mayor-form-control">
-                    {% for a in range(2025, 2030) %}
+                    {% for a in range(2023, 2030) %}
                     <option value="{{ a }}" {% if anio|int == a %}selected{% endif %}>{{ a }}</option>
                     {% endfor %}
                 </select>

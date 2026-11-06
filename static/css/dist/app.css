@@ -3703,6 +3703,60 @@ a single drawer below 900px. */
     color: var(--text-muted);
 }
 
+
+/* Toolbar / Filter Bar */
+.c-report__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 2.5rem;
+    padding: 1.25rem 1.75rem;
+    background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+    background-color: var(--card-bg, #1e1e24);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-xl, 16px);
+    box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0,0,0,0.1));
+}
+
+.c-report__filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.c-report__nav-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.c-report__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--brand-dorado, #d4952b);
+    white-space: nowrap;
+}
+
+.c-report__select {
+    min-width: 280px;
+    padding: 0.65rem 1rem;
+    border-radius: var(--radius-md, 8px);
+    background-color: var(--surface-input, rgba(0,0,0,0.2));
+    color: var(--text-main, #fff);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
 /* Source: utilities/_helpers.css */
 /* ============================================================
    UTILITIES — Brajher's Cake
