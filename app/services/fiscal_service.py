@@ -15,13 +15,30 @@ def audit(cursor, user_id, action, entity, entity_id, detail, ip=None):
     )
 
 
-def configuration(cursor):
+_CONFIG_CACHE = None
+_CONFIG_CACHE_TIME = 0.0
+
+
+def invalidate_configuration_cache():
+    global _CONFIG_CACHE, _CONFIG_CACHE_TIME
+    _CONFIG_CACHE = None
+    _CONFIG_CACHE_TIME = 0.0
+
+
+def configuration(cursor, *, max_age_seconds=60):
+    global _CONFIG_CACHE, _CONFIG_CACHE_TIME
+    import time
+    now = time.monotonic()
+    if _CONFIG_CACHE is not None and (now - _CONFIG_CACHE_TIME) < max_age_seconds:
+        return _CONFIG_CACHE.copy()
     execute_sp(
         cursor,
         'seguridad.sp_ObtenerConfiguracionGlobal',
         fallback_sql='SELECT Clave, Valor FROM ConfiguracionSistema',
     )
-    return {r[0]: r[1] for r in cursor.fetchall()}
+    _CONFIG_CACHE = {r[0]: r[1] for r in cursor.fetchall()}
+    _CONFIG_CACHE_TIME = now
+    return _CONFIG_CACHE.copy()
 
 
 def next_invoice(cursor, serie='FAC'):

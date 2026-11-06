@@ -25,6 +25,7 @@ from app.services.payroll_engine import (
     calcular_tasa_provision_indemnizacion,
 )
 from app.services.business_time import business_now
+from app.services.contabilidad_service import ContabilidadError
 
 
 class _NominaConflictError(ValueError):
@@ -560,14 +561,14 @@ def crear_empleado():
             face_service.actualizar_cache_empleado(nuevo_id, json.loads(descriptor_str))
             
         return jsonify({'status': 'success', 'mensaje': 'Empleado registrado'})
-    except ValueError as e:
+    except (ValueError, ContabilidadError) as e:
         conn.rollback()
         return jsonify(error=str(e)), 400
     except Exception as e:
         conn.rollback()
         import logging
         logging.error(f"Internal server error: {e}")
-        return jsonify({'error': 'Error interno del servidor al procesar la solicitud.'}), 500
+        return jsonify({'error': f'Error interno del servidor: {str(e)}'}), 500
     finally:
         conn.close()
 
@@ -1864,7 +1865,7 @@ def calcular_aguinaldo_batch():
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': f'Planilla de Aguinaldo generada y contabilizada para {generados} empleados.'})
         
-    except ValueError as e:
+    except (ValueError, ContabilidadError) as e:
         conn.rollback()
         return jsonify(error=str(e)), 400
     except Exception as e:

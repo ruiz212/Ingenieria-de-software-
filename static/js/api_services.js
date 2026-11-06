@@ -140,11 +140,21 @@ const API = {
     // FACTURACIÓN
     // ==========================================
     obtenerTipoCambio: async () => {
+        if (window.tipoCambioOficial && window.tipoCambioOficial > 0) {
+            return window.tipoCambioOficial;
+        }
+        const globalTc = parseFloat(window.configuracionGlobal?.tipo_cambio_usd);
+        if (globalTc > 0) {
+            window.tipoCambioOficial = globalTc;
+            return globalTc;
+        }
         try {
             const res = await fetch('/admin/api/tipo_cambio');
             if (res.ok) {
                 const data = await res.json();
-                return data.tipo_cambio;
+                const tc = data.tipo_cambio || 36.6243;
+                window.tipoCambioOficial = tc;
+                return tc;
             }
             return 36.6243;
         } catch (error) {
@@ -153,25 +163,29 @@ const API = {
     },
 
     procesarFactura: async (datosFactura) => {
-        // Mantener la clave si una respuesta se pierde; cambiarla al cambiar el contenido.
-        const fingerprint = JSON.stringify(datosFactura);
-        let pending = JSON.parse(sessionStorage.getItem('venta-pendiente') || 'null');
-        if (!pending || pending.fingerprint !== fingerprint) {
-            pending = {fingerprint, key: crypto.randomUUID()};
-            sessionStorage.setItem('venta-pendiente', JSON.stringify(pending));
+        if (!datosFactura.clave_solicitud) {
+            datosFactura.clave_solicitud = crypto.randomUUID();
         }
-        datosFactura.clave_solicitud = pending.key;
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
             const response = await fetch('/api/factura', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-                body: JSON.stringify(datosFactura)
+                body: JSON.stringify(datosFactura),
+                signal: controller.signal
             });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Error al registrar factura');
+            clearTimeout(timeoutId);
+            const result = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error((result && result.error) || `Error ${response.status} al registrar factura`);
+            }
             sessionStorage.removeItem('venta-pendiente');
             return result;
         } catch (error) {
+            if (error.name === 'AbortError') {
+                throw new Error('La facturación tardó demasiado tiempo en responder (timeout 15s). Revise la conexión.');
+            }
             console.error('API Error:', error);
             throw error;
         }
@@ -182,15 +196,24 @@ const API = {
     // ==========================================
     cerrarTurno: async (datosArqueo) => {
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
             const response = await fetch('/admin/api/arqueo/etapa1-conteo', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-                body: JSON.stringify(datosArqueo)
+                body: JSON.stringify(datosArqueo),
+                signal: controller.signal
             });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Error al cerrar turno');
+            clearTimeout(timeoutId);
+            const result = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error((result && result.error) || `Error ${response.status} al cerrar turno`);
+            }
             return result;
         } catch (error) {
+            if (error.name === 'AbortError') {
+                throw new Error('El cierre de turno tardó demasiado tiempo en responder (timeout 15s). Revise la conexión.');
+            }
             console.error('API Error:', error);
             throw error;
         }

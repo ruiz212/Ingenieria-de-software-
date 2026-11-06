@@ -8,13 +8,13 @@ import os
 port = os.environ.get('PORT', os.environ.get('WEBSITES_PORT', '8000'))
 bind = f"0.0.0.0:{port}"
 
-# Keep memory use conservative; allow at most two explicitly requested workers.
-workers = int(os.environ.get('GUNICORN_WORKERS', os.environ.get('WEB_CONCURRENCY', 1)))
+# Keep memory use conservative; default to 1 worker for B1 tier to prevent OOM/CPU starvation.
+workers = int(os.environ.get('GUNICORN_WORKERS', 1))
 workers = min(workers, 2)
 
 # Worker threads: gthread handles concurrent I/O (SQL queries, static files)
 # without spawning multiple memory-heavy Python processes.
-threads = int(os.environ.get('GUNICORN_THREADS', 2))
+threads = int(os.environ.get('GUNICORN_THREADS', 4))
 worker_class = 'gthread'
 
 # HTTP Keep-Alive and timeouts (600s matches Azure Oryx standard)

@@ -275,12 +275,12 @@ def registrar_factura():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Serializar reintentos antes de asignar número o registrar cobros.
+        # Serializar reintentos antes de asignar número o registrar cobros (timeout rápido para evitar esperas infinitas).
         execute_sp(
             cursor,
             'ventas.sp_AdquirirLockFactura',
             ('factura:' + key,),
-            fallback_sql="DECLARE @r INT; EXEC @r=sp_getapplock @Resource=?,@LockMode='Exclusive',@LockOwner='Transaction',@LockTimeout=10000; SELECT @r",
+            fallback_sql="DECLARE @r INT; EXEC @r=sp_getapplock @Resource=?,@LockMode='Exclusive',@LockOwner='Transaction',@LockTimeout=3000; SELECT @r",
         )
         if cursor.fetchone()[0] < 0:
             raise ValueError('La operación está en proceso. Reintente con el mismo carrito.')

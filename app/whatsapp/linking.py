@@ -102,7 +102,8 @@ def ensure_worker_supervisor(app):
         _SUPERVISOR_STARTED = True
 
     def _supervisor_loop():
-        time.sleep(1.5)
+        # Wait 15s before starting WhatsApp so Gunicorn completes binding and passes Azure container health check
+        time.sleep(15.0)
         while True:
             try:
                 with app.app_context():

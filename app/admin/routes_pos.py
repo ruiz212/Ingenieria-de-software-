@@ -252,7 +252,7 @@ def arqueo_etapa1_conteo():
             fallback_sql="SELECT ID FROM ArqueoCaja WHERE TurnoID=? AND EstadoArqueo IN ('Pendiente','Verificado')",
         )
         if cursor.fetchone():
-            return jsonify(error='Ya existe un arqueo pendiente para este turno.'), 409
+            return jsonify(error='Ya existe un arqueo registrado para este turno que está pendiente de verificación por gerencia en el módulo de Arqueos.'), 409
 
         # Calcular valores del sistema de la gaveta del turno POS (incluye cobros y resta devoluciones/anulaciones del turno)
         execute_sp(

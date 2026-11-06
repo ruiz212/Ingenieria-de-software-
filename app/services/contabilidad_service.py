@@ -136,9 +136,15 @@ class ContabilidadService:
     # FUNCIONES AUXILIARES INTERNAS
     # ============================================================
 
-    @staticmethod
-    def _get_cuenta_id(cursor, codigo):
-        """Obtiene el ID de una cuenta por su código. Lanza error si no existe."""
+    _CUENTAS_CACHE = {}
+
+    @classmethod
+    def _get_cuenta_info(cls, cursor, codigo):
+        """Obtiene (cuenta_id, es_transaccional) con caché en memoria para eliminar round-trips repetidos en SQL Server."""
+        use_global_cache = is_sqlserver_cursor(cursor)
+        if use_global_cache and codigo in cls._CUENTAS_CACHE:
+            return cls._CUENTAS_CACHE[codigo]
+
         execute_sp(
             cursor,
             'contabilidad.sp_ObtenerCuentaActivaPorCodigo',
@@ -148,7 +154,25 @@ class ContabilidadService:
         row = cursor.fetchone()
         if not row:
             raise ContabilidadError(f"Cuenta contable '{codigo}' no encontrada o inactiva.")
-        return row[0]
+        cuenta_id = row[0]
+
+        execute_sp(
+            cursor,
+            'contabilidad.sp_ObtenerEsTransaccionalCuenta',
+            (cuenta_id,),
+            fallback_sql="SELECT EsTransaccional FROM CatalogoCuentas WHERE ID = ?",
+        )
+        row_trans = cursor.fetchone()
+        es_transaccional = bool(row_trans[0]) if row_trans else True
+
+        if use_global_cache:
+            cls._CUENTAS_CACHE[codigo] = (cuenta_id, es_transaccional)
+        return cuenta_id, es_transaccional
+
+    @classmethod
+    def _get_cuenta_id(cls, cursor, codigo):
+        """Obtiene el ID de una cuenta por su código. Lanza error si no existe."""
+        return cls._get_cuenta_info(cursor, codigo)[0]
 
     @staticmethod
     def _validar_partida_doble(detalles):
@@ -289,17 +313,8 @@ class ContabilidadService:
 
         # 6. Insertar líneas de detalle
         for cuenta_codigo, debe, haber, desc_linea in detalles_normalizados:
-            cuenta_id = cls._get_cuenta_id(cursor, cuenta_codigo)
-
-            # Validar que la cuenta es transaccional
-            execute_sp(
-                cursor,
-                'contabilidad.sp_ObtenerEsTransaccionalCuenta',
-                (cuenta_id,),
-                fallback_sql="SELECT EsTransaccional FROM CatalogoCuentas WHERE ID = ?",
-            )
-            es_transaccional = cursor.fetchone()
-            if es_transaccional and not es_transaccional[0]:
+            cuenta_id, es_transaccional = cls._get_cuenta_info(cursor, cuenta_codigo)
+            if not es_transaccional:
                 raise ContabilidadError(
                     f"La cuenta '{cuenta_codigo}' es de agrupación, no es transaccional."
                 )
