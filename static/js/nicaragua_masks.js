@@ -260,15 +260,17 @@
         input.__nicaraguaTelefonoMaskAttached = true;
 
         input.setAttribute('placeholder', '8888-8888');
-        input.setAttribute('maxlength', '9');
+        input.setAttribute('maxlength', '18');
         input.setAttribute('type', 'tel');
         input.setAttribute('inputmode', 'numeric');
         input.setAttribute('autocomplete', 'tel');
 
         function formatTelefonoValue(raw) {
             let digits = String(raw || '').replace(/\D/g, '');
-            // Si el usuario pegó con prefijo internacional +505 o 505
-            if (digits.length >= 10 && digits.startsWith('505')) {
+            // Si el usuario pegó con prefijo internacional +505, 505 o 00505
+            if (digits.startsWith('00505') && digits.length >= 13) {
+                digits = digits.slice(5);
+            } else if (digits.length > 8 && digits.startsWith('505')) {
                 digits = digits.slice(3);
             }
             digits = digits.slice(0, 8);

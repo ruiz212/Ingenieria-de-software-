@@ -260,15 +260,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function confirmarAccionPOS({title, message, confirmText = 'Confirmar', danger = false}) {
         return new Promise(resolve => {
             const overlay = document.createElement('div');
-            overlay.className = 'pos-confirm-overlay';
+            overlay.className = 'confirm-overlay pos-confirm-overlay';
+            overlay.style.cssText = 'position:fixed!important;inset:0!important;z-index:10000!important;display:flex!important;align-items:center!important;justify-content:center!important;background:rgba(30,18,10,0.75)!important;backdrop-filter:blur(8px)!important;';
             overlay.innerHTML = `
-                <div class="pos-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-confirm-title">
-                    <div class="pos-confirm-icon ${danger ? 'danger' : ''}">${danger ? '!' : '?'}</div>
-                    <h3 id="pos-confirm-title">${title}</h3>
-                    <p>${message}</p>
-                    <div class="pos-confirm-actions">
+                <div class="confirm-dialog pos-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-confirm-title" style="position:relative!important;z-index:10001!important;margin:auto!important;">
+                    <div class="confirm-icon ${danger ? 'danger' : 'warning'}">${danger ? '!' : '?'}</div>
+                    <h3 id="pos-confirm-title" class="confirm-title">${escapeHTML(title)}</h3>
+                    <p class="confirm-message">${escapeHTML(message)}</p>
+                    <div class="confirm-actions">
                         <button type="button" class="btn btn-outline" data-action="cancel">Cancelar</button>
-                        <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-action="confirm">${confirmText}</button>
+                        <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-action="confirm">${escapeHTML(confirmText)}</button>
                     </div>
                 </div>`;
             document.body.appendChild(overlay);

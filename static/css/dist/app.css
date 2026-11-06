@@ -2951,6 +2951,36 @@ a single drawer below 900px. */
     min-width: 100px;
 }
 
+
+/* POS High-Z-Index Confirm Dialog (Overlays on top of reception modals) */
+.pos-confirm-overlay,
+.confirm-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(30, 18, 10, 0.75) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 10000 !important;
+    padding: 1rem !important;
+}
+
+.pos-confirm-dialog,
+.confirm-dialog {
+    position: relative !important;
+    z-index: 10001 !important;
+    background: var(--surface) !important;
+    border-radius: var(--radius-xl) !important;
+    border: 1px solid var(--border-card) !important;
+    padding: 2rem !important;
+    max-width: 420px !important;
+    width: 100% !important;
+    text-align: center !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6) !important;
+}
+
 /* Source: components/_data_viz.css */
 /* ============================================================
    DATA VISUALIZATION — Brajher's Cake

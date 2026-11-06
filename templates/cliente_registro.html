@@ -107,7 +107,7 @@
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="telefono">Teléfono Celular (WhatsApp)</label>
-                            <input type="tel" id="telefono" name="telefono" class="form-input" required placeholder="8888-8888" data-mask="telefono" maxlength="9">
+                            <input type="tel" id="telefono" name="telefono" class="form-input" required placeholder="8888-8888" data-mask="telefono" maxlength="18">
                             <button type="button" id="send-sms" class="btn btn-outline">Enviar código por WhatsApp / SMS</button>
                         </div>
                         <div class="form-group">
@@ -207,6 +207,9 @@
                     {telefono: phone, codigo: smsInput.value.trim()});
                 if (requestId !== smsRequest) return;
                 verifiedPhone = phone;
+                phoneInput.setCustomValidity('');
+                phoneInput.classList.remove('is-invalid');
+                phoneInput.classList.add('is-valid');
                 smsStatus.textContent = data.mensaje;
                 registerButton.disabled = false;
             } catch (error) {
@@ -218,9 +221,13 @@
         });
 
         document.getElementById('registroForm').addEventListener('submit', (event) => {
-            if (!verifiedPhone || verifiedPhone !== phoneInput.value.trim()) {
+            phoneInput.setCustomValidity('');
+            const digitsInput = phoneInput.value.replace(/\D/g, '');
+            const digitsVerified = (verifiedPhone || '').replace(/\D/g, '');
+            if (!verifiedPhone || (digitsInput.slice(-8) !== digitsVerified.slice(-8))) {
                 event.preventDefault();
                 smsStatus.textContent = 'Verifica el teléfono antes de registrar la cuenta.';
+                return false;
             }
         });
 
