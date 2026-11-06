@@ -980,7 +980,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Turno cerrado exitosamente');
                 setTimeout(() => window.location.href = '/', 1500);
             } catch (err) {
-                showToast('Error de conexión', true);
+                showToast(err.message || 'Error al cerrar turno', true);
                 btnConfirmarArqueo.disabled = false;
                 btnConfirmarArqueo.textContent = 'Cerrar Turno';
             }

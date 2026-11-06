@@ -164,7 +164,7 @@ const API = {
         try {
             const response = await fetch('/api/factura', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                 body: JSON.stringify(datosFactura)
             });
             const result = await response.json();
@@ -184,7 +184,7 @@ const API = {
         try {
             const response = await fetch('/admin/api/arqueo/etapa1-conteo', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                 body: JSON.stringify(datosArqueo)
             });
             const result = await response.json();
