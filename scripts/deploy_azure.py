@@ -6,9 +6,10 @@ The source archive deliberately contains no virtualenv; Oryx must build it.
 import argparse
 import os
 from pathlib import Path
+import re
 import sys
 import time
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 from xml.etree import ElementTree
 
 import requests
@@ -107,10 +108,12 @@ def deploy(archive, profile_xml, app_name):
     location = result.headers.get('Location')
     if not location:
         raise RuntimeError('Azure did not return a deployment status URL')
-    polling_url = urljoin(endpoint, location)
-    parsed = urlsplit(polling_url)
-    if (parsed.scheme, parsed.netloc) != (urlsplit(endpoint).scheme, urlsplit(endpoint).netloc):
-        raise ValueError('Deployment polling URL has a different origin')
+    # Kudu may report its internal proxy origin or an explicit :443. Only use
+    # its deployment resource path; keep all authenticated calls on our SCM host.
+    polling_path = urlsplit(location).path
+    if not re.fullmatch(r'/api/deployments/[A-Za-z0-9][A-Za-z0-9_.-]*', polling_path):
+        raise ValueError('Invalid deployment polling path; refusing another origin')
+    polling_url = endpoint + polling_path
     wait_for_deployment(session, polling_url, 1200)
     try:
         manifest = request(session, 'GET', endpoint + '/api/vfs/site/wwwroot/oryx-manifest.toml')
