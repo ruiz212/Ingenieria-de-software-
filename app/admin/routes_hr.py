@@ -1092,7 +1092,12 @@ def calcular_nomina():
         if acum_gravable > 0 or (hist_ir and hist_ir[2] > 0):
             from app.services.payroll_engine import calcular_ir_metodo_acumulado
             gravable_mes = total_devengado_salarial - inss_laboral
-            ir_mensual = float(calcular_ir_metodo_acumulado(gravable_mes, acum_gravable, ir_acum, periodo_fin_dt.month))
+            ir_mensual = float(calcular_ir_metodo_acumulado(
+                renta_gravable_mes=gravable_mes,
+                acumulado_renta_anio=acum_gravable,
+                mes_del_anio=periodo_fin_dt.month,
+                ir_retenido_acumulado=ir_acum,
+            ))
             renta_neta_anual = (acum_gravable + gravable_mes) / periodo_fin_dt.month * 12
         else:
             renta_neta_mensual = total_devengado_salarial - inss_laboral
@@ -1562,7 +1567,12 @@ def calcular_nomina_batch():
             if acum_gravable > 0 or (hist_ir and hist_ir[2] > 0):
                 from app.services.payroll_engine import calcular_ir_metodo_acumulado
                 gravable_mes = total_devengado_salarial - inss_laboral
-                ir_mensual = round(float(calcular_ir_metodo_acumulado(gravable_mes, acum_gravable, ir_acum, fin_dt.month)), 2)
+                ir_mensual = round(float(calcular_ir_metodo_acumulado(
+                    renta_gravable_mes=gravable_mes,
+                    acumulado_renta_anio=acum_gravable,
+                    mes_del_anio=fin_dt.month,
+                    ir_retenido_acumulado=ir_acum,
+                )), 2)
             else:
                 renta_neta_anual = (total_devengado_salarial - inss_laboral) * 12
                 ir_anual = 0

@@ -1,5 +1,23 @@
 # Plantilla de tareas futuras
 
+## TASK-2026-008 — Generación de planilla y revisión funcional
+
+- Solicitud: reparar generación de planilla y revisar funciones del sistema.
+- Causa comprobada: mes e IR previo intercambiados en cálculo acumulado de las
+  rutas individual y masiva; generaba retenciones erróneas y asientos descuadrados.
+- Cambio: argumentos nombrados; 12 regresiones sintéticas con partida doble y
+  rollback. Preservados períodos, motor tributario y restricciones existentes.
+- Verificación: 496 pruebas aprobadas, 168 omitidas por QA; ocho recorridos POS
+  en Edge y 46 paquetes CSS. Diagnóstico productivo exclusivamente de lectura.
+- Pendientes: contratos SQL antiguos y columnas ausentes en inventario; migración
+  acotada preparada, no aplicada. Estadística/SMTP/metadatos de avisos requieren
+  validación adicional. No se certifican todas las funciones con pruebas unitarias.
+- Autorización: reparación y GitHub/main previamente autorizados; no hay
+  autorización específica ni base QA indicada para aplicar la migración nueva.
+- Estado: validado localmente; CI y despliegue pendientes.
+- Responsable e integrador: Codex, sin delegación.
+- Informe: `docs/REVISION_FUNCIONAL_PLANILLA_2026-11-06.md`.
+
 ## TASK-2026-007 — Precio/rechazo de cotizaciones y sincronización WhatsApp
 
 - Solicitud: reparar acciones de cotizaciones del POS y su enlace con el bot.
@@ -9,7 +27,7 @@
   desde WhatsApp visibles; borradores conservados si no cambia el servidor.
 - Evidencia local: 484 pruebas aprobadas, 168 omitidas y ocho recorridos Edge;
   SP/roles y heartbeat comprobados mediante consultas de solo lectura.
-- Estado: validación local completa; CI y despliegue pendientes de verificar.
+- Estado: fusionado y desplegado en `bf95263`; workflow 42180290730 aprobado.
 - Integrador: Codex, sin delegación. Push/merge/main autorizados previamente.
 - Informe: `docs/REPARACION_COTIZACIONES_POS_2026-11-06.md`.
 
