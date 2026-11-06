@@ -2,28 +2,46 @@
    CONFIRMATION DIALOG — Standardized critical action confirmations
    ============================================================ */
 
-.confirm-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(59, 34, 24, 0.60);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 3000;
-    padding: 1rem;
+dialog.confirm-overlay:not([open]),
+dialog.pos-confirm-overlay:not([open]),
+.confirm-overlay:not([open]) {
+    display: none !important;
+}
+
+dialog.confirm-overlay[open],
+dialog.pos-confirm-overlay[open],
+.confirm-overlay[open] {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    border: none !important;
+    background: rgba(30, 18, 10, 0.75) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 10000 !important;
+    padding: 1rem !important;
     animation: modalFadeIn 0.2s ease forwards;
 }
 
+.pos-confirm-dialog,
 .confirm-dialog {
-    background: var(--surface);
-    border-radius: var(--radius-xl);
-    padding: 2rem;
-    max-width: 400px;
-    width: 100%;
-    text-align: center;
-    box-shadow: var(--shadow-lg);
+    position: relative !important;
+    z-index: 10001 !important;
+    background: var(--surface) !important;
+    border-radius: var(--radius-xl) !important;
+    border: 1px solid var(--border-card) !important;
+    padding: 2rem !important;
+    max-width: 420px !important;
+    width: 100% !important;
+    text-align: center !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6) !important;
     animation: modalSlideUp 0.3s var(--ease-out) forwards;
 }
 
@@ -85,34 +103,4 @@
 
 .confirm-actions .btn {
     min-width: 100px;
-}
-
-
-/* POS High-Z-Index Confirm Dialog (Overlays on top of reception modals) */
-.pos-confirm-overlay,
-.confirm-overlay {
-    position: fixed !important;
-    inset: 0 !important;
-    background: rgba(30, 18, 10, 0.75) !important;
-    backdrop-filter: blur(8px) !important;
-    -webkit-backdrop-filter: blur(8px) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    z-index: 10000 !important;
-    padding: 1rem !important;
-}
-
-.pos-confirm-dialog,
-.confirm-dialog {
-    position: relative !important;
-    z-index: 10001 !important;
-    background: var(--surface) !important;
-    border-radius: var(--radius-xl) !important;
-    border: 1px solid var(--border-card) !important;
-    padding: 2rem !important;
-    max-width: 420px !important;
-    width: 100% !important;
-    text-align: center !important;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6) !important;
 }
