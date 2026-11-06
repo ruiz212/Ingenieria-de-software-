@@ -8,6 +8,7 @@
 !static/**
 !run.py
 !config.py
+!gunicorn.conf.py
 !requirements.txt
 !requirements.lock
 !requirements-whatsapp.txt

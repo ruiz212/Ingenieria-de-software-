@@ -39,4 +39,4 @@ RUN test ! -e /app/.env && test ! -e /app/scratch && test ! -e /app/.git
 EXPOSE 8000
 
 # Comando de inicio
-CMD ["gunicorn", "--bind=0.0.0.0:8000", "--timeout", "600", "run:app"]
+CMD ["gunicorn", "--config", "gunicorn.conf.py", "run:app"]

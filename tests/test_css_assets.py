@@ -72,6 +72,22 @@ def test_jinja_resolves_built_asset_and_reloads_manifest(tmp_path):
             app.jinja_env.globals['css_url']('missing')
 
 
+def test_production_asset_urls_do_not_touch_disk_after_first_load(tmp_path, monkeypatch):
+    from app.assets import init_assets
+    root = sources(tmp_path)
+    build_css(root)
+    app = Flask(__name__, static_folder=str(root.parent))
+    app.config['TEMPLATES_AUTO_RELOAD'] = False
+    init_assets(app)
+    with app.test_request_context():
+        resolve = app.jinja_env.globals['css_url']
+        expected = resolve('app')
+        def unexpected_stat(*args, **kwargs):
+            raise AssertionError('Production CSS resolution accessed the filesystem')
+        monkeypatch.setattr(Path, 'stat', unexpected_stat)
+        assert resolve('app') == expected
+
+
 def test_templates_reference_built_packages_and_keep_presentation_external():
     """Catch broken package links and accidental reintroduction of embedded CSS."""
     root = Path(__file__).resolve().parents[1]
