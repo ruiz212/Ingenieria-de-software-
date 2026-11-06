@@ -312,7 +312,7 @@ def actualizar_estado(codigo):
                     return jsonify(error='El cobro pendiente debe confirmarlo un cajero con turno abierto.'), 409
                 execute_sp(
                     cursor, 'ventas.sp_ObtenerTurnoActivoParaVenta', (current_user.id,),
-                    fallback_sql='SELECT ID FROM TurnosCaja WITH(UPDLOCK,HOLDLOCK) WHERE UsuarioID = ? AND Cerrado = 0',
+                    fallback_sql='SELECT ID FROM TurnosCaja WITH (ROWLOCK) WHERE UsuarioID = ? AND Cerrado = 0',
                 )
                 turno_receptor = cursor.fetchone()
                 if not turno_receptor:
@@ -373,9 +373,12 @@ def actualizar_estado(codigo):
         except Exception as audit_err:
             current_app.logger.warning(f"Auditoría BitacoraFiscal omitida para encargo {codigo}: {audit_err}")
 
-        from app.whatsapp.repository import notify
-        notify(cursor, 'pedido', factura_id, estado=nuevo_estado, numero_factura=numero_factura, codigo_seguimiento=codigo)
         conn.commit()
+        try:
+            from app.whatsapp.repository import notify
+            notify(cursor, 'pedido', factura_id, estado=nuevo_estado, numero_factura=numero_factura, codigo_seguimiento=codigo)
+        except Exception as notify_err:
+            current_app.logger.warning('WhatsApp notification failed: %s', notify_err)
         return jsonify({
             'status': 'success',
             'mensaje': 'Estado actualizado correctamente',

@@ -238,7 +238,7 @@ def arqueo_etapa1_conteo():
             cursor,
             'ventas.sp_ObtenerTurnoActivoParaVenta',
             (current_user.id,),
-            fallback_sql="SELECT ID FROM TurnosCaja WITH(UPDLOCK,HOLDLOCK) WHERE UsuarioID = ? AND Cerrado = 0",
+            fallback_sql="SELECT ID FROM TurnosCaja WITH (ROWLOCK) WHERE UsuarioID = ? AND Cerrado = 0",
         )
         turno_row = cursor.fetchone()
         if not turno_row:

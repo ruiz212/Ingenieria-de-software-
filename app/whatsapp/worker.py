@@ -130,7 +130,7 @@ def run(app):
                     if not has_local_device(path):
                         _clear_session_files(path)
                         store.account(None, False)
-                elif not initial_state.get('Vinculado') and not has_local_device(path):
+                elif not initial_state.get('Vinculado'):
                     _clear_session_files(path)
             transport = Transport(app, store, path)
             owned = True
@@ -262,9 +262,7 @@ def run(app):
                                 store.complete_link(state['SolicitudID'], True)
                             active_link_request = state.get('SolicitudID')
                         elif not state.get('Vinculado'):
-                            already_paired = is_real_transport and (
-                                getattr(transport, 'pairing_completed', False) or has_local_device(path)
-                            )
+                            already_paired = is_real_transport and getattr(transport, 'pairing_completed', False)
                             has_fresh_qr = (
                                 is_real_transport
                                 and transport.status == 'Esperando QR'

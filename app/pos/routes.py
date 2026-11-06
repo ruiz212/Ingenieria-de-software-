@@ -182,7 +182,7 @@ def abrir_turno():
             'ventas.sp_ObtenerTurnoAbiertoBloqueo',
             (current_user.id,),
             fallback_sql=(
-                "SELECT TOP 1 ID FROM TurnosCaja WITH (UPDLOCK, HOLDLOCK) "
+                "SELECT TOP 1 ID FROM TurnosCaja WITH (ROWLOCK) "
                 "WHERE UsuarioID = ? AND Cerrado = 0 ORDER BY ID DESC"
             ),
         )
@@ -386,7 +386,7 @@ def registrar_factura():
             cursor,
             'ventas.sp_ObtenerTurnoActivoParaVenta',
             (current_user.id,),
-            fallback_sql='SELECT ID FROM TurnosCaja WITH (UPDLOCK,HOLDLOCK) WHERE UsuarioID=? AND Cerrado=0',
+            fallback_sql='SELECT ID FROM TurnosCaja WITH (ROWLOCK) WHERE UsuarioID=? AND Cerrado=0',
         )
         shift = cursor.fetchone()
         if shift:
@@ -548,10 +548,13 @@ def registrar_factura():
             fallback_sql='UPDATE Facturas SET DocumentoJSON=? WHERE ID=?',
         )
         audit(cursor, current_user.id, 'EMISION', 'Factura', factura_id, {'numero': number, 'total': total}, request.remote_addr)
-        if es_encargo:
-            from app.whatsapp.repository import notify
-            notify(cursor, 'pedido', factura_id, phone=encargo.get('telefono'), estado='Pendiente', numero_factura=number, codigo_seguimiento=code, fecha_entrega=delivery.strftime('%d/%m/%Y') if delivery else None, saldo=float(total - (advance or 0)))
         conn.commit()
+        if es_encargo:
+            try:
+                from app.whatsapp.repository import notify
+                notify(cursor, 'pedido', factura_id, phone=encargo.get('telefono'), estado='Pendiente', numero_factura=number, codigo_seguimiento=code, fecha_entrega=delivery.strftime('%d/%m/%Y') if delivery else None, saldo=float(total - (advance or 0)))
+            except Exception as notify_err:
+                current_app.logger.warning('WhatsApp notification failed: %s', notify_err)
         return jsonify(status='success', mensaje='Factura registrada', factura=document)
     except (ValueError, ContabilidadError) as error:
         conn.rollback()

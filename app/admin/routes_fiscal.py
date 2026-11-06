@@ -226,7 +226,7 @@ def void_invoice(invoice_id):
             cursor,
             'ventas.sp_ObtenerEstadoCerradoTurnoBloqueo',
             (row[2],),
-            fallback_sql='SELECT Cerrado FROM TurnosCaja WITH(UPDLOCK,HOLDLOCK) WHERE ID=?',
+            fallback_sql='SELECT Cerrado FROM TurnosCaja WITH (ROWLOCK) WHERE ID=?',
         )
         shift=cursor.fetchone()
         if not shift or shift[0]:

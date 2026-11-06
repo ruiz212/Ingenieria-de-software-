@@ -387,6 +387,11 @@ class Transport:
             self.paired_phone = None
             self.sql_synced = False
             self.status, self.qr, self.qr_updated_at = 'Requiere vinculación', None, 0.0
+            try:
+                from app.whatsapp.worker import _clear_session_files
+                _clear_session_files(self.session_path)
+            except Exception:
+                pass
             with app.app_context():
                 store.account(None, False)
                 store.state(self.status)
