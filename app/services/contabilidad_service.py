@@ -8,6 +8,7 @@
 # ============================================================
 
 import decimal
+from decimal import Decimal
 from datetime import datetime
 from app.db import get_db_connection, execute_sp, is_sqlserver_cursor
 from app.services.validation import amount
@@ -679,6 +680,24 @@ class ContabilidadService:
 
         if float(provision_indemnizacion) > 0:
             detalles.append((cls.INDEMNIZACION_POR_PAGAR, 0, float(amount(provision_indemnizacion)), f"Provisión Indemnización {empleado_nombre}"))
+
+        # Reconciliar posibles diferencias de centavos por redondeos independientes
+        total_debe = sum(amount(d[1]) for d in detalles)
+        total_haber = sum(amount(d[2]) for d in detalles)
+        delta = total_debe - total_haber
+        if delta != Decimal('0.00') and abs(delta) <= Decimal('0.05'):
+            ajustado = False
+            for i, (cta, d, h, desc) in enumerate(detalles):
+                if cta == cls.SUELDOS_POR_PAGAR and h > 0:
+                    detalles[i] = (cta, d, float(amount(h) + delta), desc)
+                    ajustado = True
+                    break
+            if not ajustado:
+                for i, (cta, d, h, desc) in enumerate(detalles):
+                    if h > 0:
+                        detalles[i] = (cta, d, float(amount(h) + delta), desc)
+                        ajustado = True
+                        break
 
         return cls.crear_asiento(
             cursor=cursor,

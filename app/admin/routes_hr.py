@@ -1053,8 +1053,8 @@ def calcular_nomina():
         hora_ordinaria = salario_diario / 8
         monto_horas_extras = horas_extras * hora_ordinaria * 2
         monto_feriados = dias_feriados_trabajados * salario_diario
-        monto_ausencias = dias_ausentes * salario_diario * 1.1667
-        salario_base_efectivo = max(0.0, salario_base - monto_ausencias)
+        monto_ausencias = round(dias_ausentes * salario_diario * 1.1667, 2)
+        salario_base_efectivo = round(max(0.0, salario_base - monto_ausencias), 2)
 
         # Campos Parte 1: Ingresos adicionales salariales y no salariales
         incentivos = float(amount(datos.get('incentivos', 0)))
@@ -1531,14 +1531,14 @@ def calcular_nomina_batch():
             salario_diario = salario_base / 30
             
             dias_ausentes = obtener_dias_ausentes_auto(cursor, emp.ID, periodo_inicio, periodo_fin)
-            monto_ausencias = dias_ausentes * salario_diario * 1.1667
-            salario_base_efectivo = max(0.0, salario_base - monto_ausencias)
+            monto_ausencias = round(dias_ausentes * salario_diario * 1.1667, 2)
+            salario_base_efectivo = round(max(0.0, salario_base - monto_ausencias), 2)
             
             total_devengado_salarial = salario_base_efectivo
             if total_devengado_salarial <= 0:
                 raise ValueError(f'Revise las ausencias de {emp.NombreCompleto}: no hay salario devengado.')
             
-            inss_laboral = total_devengado_salarial * (tasa_inss_laboral / 100)
+            inss_laboral = round(total_devengado_salarial * (tasa_inss_laboral / 100), 2)
             
             # IR Ley 822 acumulado
             execute_sp(
@@ -1562,7 +1562,7 @@ def calcular_nomina_batch():
             if acum_gravable > 0 or (hist_ir and hist_ir[2] > 0):
                 from app.services.payroll_engine import calcular_ir_metodo_acumulado
                 gravable_mes = total_devengado_salarial - inss_laboral
-                ir_mensual = float(calcular_ir_metodo_acumulado(gravable_mes, acum_gravable, ir_acum, fin_dt.month))
+                ir_mensual = round(float(calcular_ir_metodo_acumulado(gravable_mes, acum_gravable, ir_acum, fin_dt.month)), 2)
             else:
                 renta_neta_anual = (total_devengado_salarial - inss_laboral) * 12
                 ir_anual = 0
@@ -1570,7 +1570,7 @@ def calcular_nomina_batch():
                     if renta_neta_anual >= estrato['desde'] and renta_neta_anual <= estrato['hasta']:
                         ir_anual = ((renta_neta_anual - estrato['exceso']) * estrato['tasa'] / 100) + estrato['base']
                         break
-                ir_mensual = ir_anual / 12
+                ir_mensual = round(ir_anual / 12, 2)
             
             salario_neto_pre = total_devengado_salarial - inss_laboral - ir_mensual
             pension_alimenticia = calcular_deducciones_judiciales(
@@ -1618,7 +1618,7 @@ def calcular_nomina_batch():
 
             fecha_ingreso = as_date(emp.FechaIngreso)
             anios_antiguedad = max(0.0, (fin_dt - fecha_ingreso).days / 365.25)
-            tasa_indem = calcular_tasa_provision_indemnizacion(anios_antiguedad)
+            tasa_indem = Decimal(str(calcular_tasa_provision_indemnizacion(anios_antiguedad)))
             provision_indemnizacion = round(amount(total_devengado_salarial) * tasa_indem, 2)
             total_patronal = inss_patronal + inatec + provision_vacaciones + provision_aguinaldo + provision_indemnizacion
             costo_total_empresa = amount(total_devengado_salarial) + total_patronal
