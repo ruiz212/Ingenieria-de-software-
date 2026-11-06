@@ -12,6 +12,11 @@ from app.db import get_db_connection, as_db_role
 
 WAKE_EVENT = threading.Event()
 _CATALOG_CACHE = {'expires': 0.0, 'items': None}
+_VERIFY_LOCK = threading.Lock()
+_VERIFY_FAILURES: dict = {}
+_VERIFY_MAX_FAILURES = 5
+_VERIFY_WINDOW = 900.0
+OTP_PREFIX = '🔐 Brajher\'s Cake: tu código de verificación'
 
 _CONFIRM_VARIANTS = frozenset({
     'CONFIRMAR',
@@ -209,7 +214,7 @@ class Store:
                 if r.get('Texto') not in (
                     'No pude completar la consulta. Escribe HUMANO para que te atienda una persona.',
                     'El asistente no está disponible. Escribe HUMANO para que te atienda el equipo.',
-                )
+                ) and not str(r.get('Texto') or '').startswith(OTP_PREFIX)
             ]
 
     def finish(self, item, text):
@@ -314,8 +319,15 @@ class Store:
                 for row in result:
                     if 'ID' in row and 'Codigo' not in row:
                         row['Codigo'] = f"COT-{int(row['ID']):04d}"
-            elif name == 'consultar_mis_pedidos':
-                result = self._query_orders_for_session(cur, session)
+                    # Never hand internal file paths to the model; only whether a photo exists.
+                    row['TieneFotoReferencia'] = bool(row.pop('RutaImagenReferencia', None))
+            elif name == 'adjuntar_foto_cotizacion':
+                cur.execute('EXEC crm.sp_WhatsAppCotizacion ?,?,?', session['id'], 'imagen', args['cotizacion_id'])
+                row = cur.fetchone()
+                result = {'cotizacion': f"COT-{int(row[0]):04d}", 'foto_adjuntada': True}
+            elif name in ('consultar_mis_pedidos', 'rastrear_pedido'):
+                code = args.get('codigo_o_factura') or args.get('codigo_seguimiento')
+                result = self._verified_order(cur, session, code, args.get('nombre_cliente'))
             elif name in ('consultar_catalogo', 'obtener_recomendaciones_cliente'):
                 now = time.monotonic()
                 if name == 'consultar_catalogo' and _CATALOG_CACHE['items'] is not None and _CATALOG_CACHE['expires'] > now:
@@ -344,17 +356,6 @@ class Store:
                         catalog = load_marketing_catalog(cur)
                         recommended = store_recommendations(cur, catalog, SimpleNamespace(is_authenticated=False))
                     result = {'tipo': 'tendencias generales, sin historial personal', 'productos': recommended}
-            elif name == 'rastrear_pedido':
-                with as_db_role(cur, 'db_rol_portal_cliente'):
-                    cur.execute('EXEC ventas.sp_SeguimientoEncargoPublico ?', args['codigo_seguimiento'])
-                    result = rows(cur)
-                    # Return only public status, not customer names or reference images.
-                    result = [{k: r[k] for k in ('NumeroFactura', 'Estado', 'FechaEntrega', 'Total') if k in r} for r in result]
-                    cur.execute('EXEC ventas.sp_SeguimientoAdelantoPublico ?', args['codigo_seguimiento'])
-                    paid_row = cur.fetchone()
-                    paid = paid_row[0] if paid_row and paid_row[0] is not None else 0
-                    for row in result:
-                        row['SaldoPendiente'] = max(0, row['Total'] - paid)
             elif name == 'transferir_a_humano':
                 cur.execute('EXEC crm.sp_WhatsAppHandoff ?', session['id'])
                 result = {'atencion': 'HUMANO'}
@@ -369,25 +370,78 @@ class Store:
             return json.loads(payload)
 
     @staticmethod
-    def _query_orders_for_session(cur, session):
+    def _verification_blocked(session_id):
+        now = time.monotonic()
+        with _VERIFY_LOCK:
+            attempts = [t for t in _VERIFY_FAILURES.get(session_id, []) if now - t < _VERIFY_WINDOW]
+            _VERIFY_FAILURES[session_id] = attempts
+            return len(attempts) >= _VERIFY_MAX_FAILURES
+
+    @staticmethod
+    def _record_verification_failure(session_id):
+        with _VERIFY_LOCK:
+            _VERIFY_FAILURES.setdefault(session_id, []).append(time.monotonic())
+
+    def _verified_order(self, cur, session, code, holder_name):
+        """Share an order only when BOTH the holder's name and its private code/invoice match."""
+        from app.whatsapp.security import verify_holder_name
+        denied = {
+            'verificado': False,
+            'mensaje': ('No pudimos validar el pedido con esos datos. Por privacidad solo compartimos el estado '
+                        'cuando el nombre del titular y el código de seguimiento (o número de factura) coinciden.'),
+        }
+        sid = session['id']
+        if self._verification_blocked(sid):
+            return {'verificado': False, 'bloqueado': True,
+                    'mensaje': ('Por seguridad se pausaron las consultas de pedidos de este chat durante 15 minutos '
+                                'por varios intentos no válidos. Puedes escribir HUMANO para que te atienda el equipo.')}
+        raw = re.sub(r'\s+', '', str(code or '')).upper()
+        if not raw or len(raw) > 30 or not re.fullmatch(r'[A-Z0-9-]+', raw):
+            self._record_verification_failure(sid)
+            return denied
+        invoice_digits = None
+        match = re.fullmatch(r'(?:FAC-?)?0*(\d{1,10})', raw)
+        if match and (raw.startswith('FAC') or len(raw) < 10):
+            invoice_digits = match.group(1)
+        record = None
+        # 1) Orders whose contact phone matches this WhatsApp number (code OR invoice accepted).
+        for row in self._orders_for_phone(cur, sid):
+            numero = str(row.get('NumeroFactura') or '').upper()
+            digits = re.sub(r'\D', '', numero).lstrip('0')
+            if raw == str(row.get('CodigoSeguimiento') or '').upper() or raw == numero or (
+                    invoice_digits and digits == invoice_digits):
+                record = row
+                break
+        # 2) Private tracking code from another phone (e.g. a gift): still needs the holder's name.
+        if record is None and invoice_digits is None and len(raw) >= 8:
+            with as_db_role(cur, 'db_rol_portal_cliente'):
+                cur.execute('EXEC ventas.sp_SeguimientoEncargoPublico ?', raw[:20])
+                found = rows(cur)
+                if found:
+                    cur.execute('EXEC ventas.sp_SeguimientoAdelantoPublico ?', raw[:20])
+                    paid_row = cur.fetchone()
+                    record = dict(found[0], CodigoSeguimiento=raw,
+                                  Pagado=paid_row[0] if paid_row and paid_row[0] is not None else 0)
+        if record is None or not verify_holder_name(holder_name, record.get('NombreCliente') or ''):
+            self._record_verification_failure(sid)
+            return denied
+        total = float(record.get('Total') or 0)
+        paid = float(record.get('Pagado') or 0)
+        return {
+            'verificado': True,
+            'NumeroFactura': record.get('NumeroFactura'),
+            'Estado': record.get('Estado'),
+            'FechaEntrega': record.get('FechaEntrega'),
+            'Total': total,
+            'SaldoPendiente': max(0.0, round(total - paid, 2)),
+            'PastelPersonalizado': bool(record.get('Especificaciones')),
+        }
+
+    @staticmethod
+    def _orders_for_phone(cur, sid):
         try:
-            cur.execute('EXEC crm.sp_WhatsAppPedidosCliente ?', session['id'])
-            items = rows(cur)
-            out = []
-            for r in items:
-                if not r.get('NumeroFactura'):
-                    continue
-                total = float(r.get('Total') or 0)
-                paid = float(r.get('Pagado') or 0)
-                out.append({
-                    'NumeroFactura': r.get('NumeroFactura'),
-                    'CodigoSeguimiento': r.get('CodigoSeguimiento'),
-                    'Estado': r.get('Estado'),
-                    'FechaEntrega': r.get('FechaEntrega'),
-                    'Total': total,
-                    'SaldoPendiente': max(0.0, round(total - paid, 2)),
-                })
-            return out
+            cur.execute('EXEC crm.sp_WhatsAppPedidosCliente ?', sid)
+            return [r for r in rows(cur) if r.get('NumeroFactura')]
         except Exception:
             logging.getLogger(__name__).debug('sp_WhatsAppPedidosCliente no disponible en este cursor')
             return []
@@ -501,7 +555,30 @@ def notify(cursor, kind, entity_id, *, phone=None, estado=None, precio=None,
         cursor.execute('EXEC crm.sp_WhatsAppNotificar ?,?', kind, entity_id)
     except Exception:
         logging.getLogger(__name__).debug('sp_WhatsAppNotificar omitido en cursor actual', exc_info=True)
-    # 2. Also ensure phone-based session creation and idempotent queueing when phone is provided
+    # 2. If phone is not provided, query notification metadata via stored procedure
+    if not phone and kind in ('pedido', 'cotizacion'):
+        try:
+            cursor.execute('EXEC crm.sp_WhatsAppDatosAviso ?,?', kind, entity_id)
+            row = cursor.fetchone()
+            if row:
+                if kind == 'pedido':
+                    phone = row[0]
+                    numero_factura = numero_factura or row[1]
+                    codigo_seguimiento = codigo_seguimiento or row[2]
+                    estado = estado or row[3]
+                    fecha_entrega = fecha_entrega or row[4]
+                    total = row[5] or 0
+                    pagado = row[6] or 0
+                    if saldo is None and total is not None and pagado is not None:
+                        saldo = max(0.0, float(total) - float(pagado))
+                elif kind == 'cotizacion':
+                    phone = row[0]
+                    estado = estado or row[1]
+                    precio = precio if precio is not None else row[2]
+                    fecha_entrega = fecha_entrega or row[3]
+        except Exception:
+            logging.getLogger(__name__).debug('No se pudieron resolver datos de aviso para %s:%s', kind, entity_id, exc_info=True)
+    # 3. Also ensure phone-based session creation and idempotent queueing when phone is provided
     if phone and estado:
         if kind == 'cotizacion':
             text = _format_quote_notification(entity_id, estado, precio=precio, fecha_entrega=fecha_entrega)
@@ -519,3 +596,12 @@ def notify(cursor, kind, entity_id, *, phone=None, estado=None, precio=None,
         if text and key:
             enqueue_phone_notification(phone, key, text)
     WAKE_EVENT.set()
+
+
+def send_whatsapp_verification_code(phone, code):
+    """Enqueue a 6-digit verification code directly to user's WhatsApp."""
+    if not phone or not code:
+        return False
+    text = f"{OTP_PREFIX} es: {code}. Válido por 10 minutos. Por seguridad, no compartas este código con nadie."
+    key = f"otp:{phone}:{code}"
+    return enqueue_phone_notification(phone, key, text)

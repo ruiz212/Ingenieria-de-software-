@@ -182,7 +182,7 @@ AS
 BEGIN
  SET NOCOUNT ON;
  SELECT c.*,cl.Nombre AS ClienteNombre,
-  CASE WHEN EXISTS(SELECT 1 FROM crm.WhatsAppSesiones s WHERE s.Token=c.SessionID AND c.ClienteID IS NULL)
+  CASE WHEN EXISTS(SELECT 1 FROM crm.WhatsAppSesiones s WHERE s.Token=c.SessionID)
    THEN 'WhatsApp' ELSE 'Web' END AS CanalOrigen
  FROM crm.Cotizaciones c LEFT JOIN crm.Clientes cl ON c.ClienteID=cl.ID
  WHERE c.Estado IN ('Pendiente','Cotizada','Aceptada')

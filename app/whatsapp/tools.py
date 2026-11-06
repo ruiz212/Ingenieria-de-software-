@@ -7,11 +7,12 @@ FIELDS = {
     'consultar_catalogo': {},
     'obtener_recomendaciones_cliente': {},
     'consultar_mis_cotizaciones': {},
-    'consultar_mis_pedidos': {},
+    'consultar_mis_pedidos': {'nombre_cliente': 'string', 'codigo_o_factura': 'string'},
     'agendar_cotizacion_pastel': {'nombre': 'string', 'especificaciones': 'string',
                                   'fecha_entrega': 'string', 'confirmed': 'boolean'},
+    'adjuntar_foto_cotizacion': {'cotizacion_id': 'integer'},
     'responder_cotizacion': {'cotizacion_id': 'integer', 'decision': 'string', 'confirmed': 'boolean'},
-    'rastrear_pedido': {'codigo_seguimiento': 'string'},
+    'rastrear_pedido': {'codigo_seguimiento': 'string', 'nombre_cliente': 'string'},
     'transferir_a_humano': {'motivo': 'string'},
 }
 
@@ -19,12 +20,21 @@ DESCRIPTIONS = {
     'consultar_catalogo': 'Obtener precios y productos disponibles del catálogo actual de la panadería.',
     'obtener_recomendaciones_cliente': 'Obtener recomendaciones y sugerencias de productos destacados.',
     'consultar_mis_cotizaciones': 'Consultar las cotizaciones de pasteles asociados al número de teléfono o sesión del cliente.',
-    'consultar_mis_pedidos': 'Consultar el estado, fecha de entrega y saldo de los pedidos/encargos asociados al número de teléfono del cliente.',
+    'consultar_mis_pedidos': 'Consultar el estado de un pedido tras verificar obligatoriamente nombre_cliente (titular del pedido) y codigo_o_factura (código privado de seguimiento o número FAC-XXXX).',
     'agendar_cotizacion_pastel': 'Crear borrador de cotización de pastel personalizado tras confirmar nombre, especificaciones y fecha.',
+    'adjuntar_foto_cotizacion': 'Asociar la foto de inspiración enviada por el cliente en la sesión actual a una cotización de pastel existente (COT-XXXX).',
     'responder_cotizacion': 'Aceptar o rechazar una cotización valorada del cliente.',
-    'rastrear_pedido': 'Consultar un pedido específico mediante su código de seguimiento.',
+    'rastrear_pedido': 'Consultar un pedido específico verificando obligatoriamente su codigo_seguimiento (o FAC-XXXX) y el nombre_cliente titular.',
     'transferir_a_humano': 'Transferir la conversación a atención humana del equipo de la panadería.',
 }
+
+
+def _parse_quote_id(raw_id):
+    if isinstance(raw_id, str):
+        match = re.fullmatch(r'(?:COT-)?(\d+)', raw_id.strip(), re.IGNORECASE)
+        if match:
+            raw_id = int(match.group(1))
+    return positive_int(raw_id, maximum=2147483647)
 
 
 class Tools:
@@ -46,22 +56,29 @@ class Tools:
             args = dict(args, nombre=required_text(args.get('nombre'), 'Nombre', 100),
                         especificaciones=required_text(args.get('especificaciones'), 'Especificaciones', 2000),
                         fecha_entrega=delivery_date(raw_fecha).isoformat())
+        elif name == 'adjuntar_foto_cotizacion':
+            args = dict(args, cotizacion_id=_parse_quote_id(args.get('cotizacion_id')))
         elif name == 'responder_cotizacion':
-            raw_id = args.get('cotizacion_id')
-            if isinstance(raw_id, str):
-                match = re.fullmatch(r'(?:COT-)?(\d+)', raw_id.strip(), re.IGNORECASE)
-                if match:
-                    raw_id = int(match.group(1))
             decision = str(args.get('decision', '')).strip().lower()
             if decision in ('aceptada', 'aceptar'):
                 decision = 'aceptar'
             elif decision in ('rechazada', 'rechazar'):
                 decision = 'rechazar'
-            args = dict(args, cotizacion_id=positive_int(raw_id, maximum=2147483647), decision=decision)
+            args = dict(args, cotizacion_id=_parse_quote_id(args.get('cotizacion_id')), decision=decision)
             if args.get('decision') not in ('aceptar', 'rechazar'):
                 raise ValueError('Decisión no válida.')
+        elif name == 'consultar_mis_pedidos':
+            args = dict(
+                args,
+                nombre_cliente=required_text(args.get('nombre_cliente'), 'Nombre del titular', 100),
+                codigo_o_factura=required_text(args.get('codigo_o_factura'), 'Código de seguimiento o factura', 30),
+            )
         elif name == 'rastrear_pedido':
-            args = dict(args, codigo_seguimiento=required_text(args.get('codigo_seguimiento'), 'Código privado', 20))
+            args = dict(
+                args,
+                codigo_seguimiento=required_text(args.get('codigo_seguimiento'), 'Código privado', 30),
+                nombre_cliente=required_text(args.get('nombre_cliente'), 'Nombre del titular', 100),
+            )
         elif name == 'transferir_a_humano':
             args = dict(args, motivo=required_text(args.get('motivo'), 'Motivo', 200))
         return self.store.tool(self.session, name, args, key)

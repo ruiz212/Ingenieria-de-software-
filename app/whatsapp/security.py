@@ -1,5 +1,6 @@
 """Reauthentication for account changes, input/output security guardrails, and phone validation."""
 import re
+import unicodedata
 import pyotp
 from werkzeug.security import check_password_hash
 from app.models import User
@@ -7,6 +8,38 @@ from app.whatsapp.repository import connection
 
 _CONTROL_CHARS_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]')
 _MULTI_NEWLINE_RE = re.compile(r'\n{4,}')
+
+_ROLE_SPOOF_RE = re.compile(
+    r'\b(?:yo\s+)?(?:soy|habla)\s+(?:la\s+|el\s+|un[ao]?\s+)?'
+    r'(?:due[ñn][oa]|propietari[oa]|administrador(?:a)?|superadmin(?:istrador)?|'
+    r'gerente|jef[ea]|encargad[oa]\s+del?\s+sistema|programador(?:a)?|desarrollador(?:a)?|'
+    r'soporte\s+t[eé]cnico|auditor(?:a)?|contador(?:a)?)\b',
+    re.IGNORECASE,
+)
+
+_BAKERY_CONTEXT_RE = re.compile(
+    r'\b(?:pastel(?:es|er[ií]a)?|queque(?:s)?|torta(?:s)?|pan(?:es|ader[ií]a)?|reposter[ií]a|'
+    r'postre(?:s)?|galleta(?:s)?|dona(?:s)?|concha(?:s)?|bolillo(?:s)?|milanesa|pa[ñn]uelito|'
+    r'selva\s+negra|tres\s+leches|chocolate|vainilla|caf[eé]|gaseosa|bebida(?:s)?|'
+    r'cotizaci[oó]n(?:es)?|cotizar|pedido(?:s)?|encargo(?:s)?|factura(?:s)?|fac-\d+|cot-\d+|'
+    r'cat[aá]logo|men[uú]|precio(?:s)?|horario(?:s)?|entrega|retiro|sucursal|tienda|'
+    r'adelanto|saldo|libra(?:s)?|porci[oó]n(?:es)?|pisos?|relleno|cobertura|fondant|'
+    r'chantilly|buttercream|cumplea[ñn]os|boda|evento|foto|imagen|referencia|inspiraci[oó]n|'
+    r'brajher|amada|humano|confirmar|cancelar|avisos)\b',
+    re.IGNORECASE,
+)
+
+_OFF_TOPIC_RE = re.compile(
+    r'(?:\b(?:ra[ií]z\s+cuadrada|teorema\s+de|ecuaci[oó]n|derivada|integral\s+de|'
+    r'primera\s+guerra\s+mundial|segunda\s+guerra\s+mundial|revoluci[oó]n\s+francesa|'
+    r'imperio\s+romano|capital\s+de\s+[a-záéíóúñ]+|presidente\s+de|qui[eé]n\s+descubri[oó]|'
+    r'qui[eé]n\s+invent[oó]|qui[eé]n\s+gan[oó]|escribe\s+un\s+(?:poema|ensayo|c[oó]digo|script|programa)|'
+    r'en\s+(?:python|javascript|java|c\+\+|html)|traduce\s+al\s+(?:ingl[eé]s|franc[eé]s|alem[aá]n)|'
+    r'hor[oó]scopo|pron[oó]stico\s+del\s+clima|receta\s+m[eé]dica|'
+    r'(?:resuelve|hazme)\s+(?:esta|mi)?\s*tarea|tarea\s+de\s+[a-záéíóúñ]+)\b|'
+    r'\bcu[aá]nto\s+es\s+\d+\s*(?:[\+\-\*\/x]|m[aá]s|menos|por|entre)\s*\d+)',
+    re.IGNORECASE,
+)
 
 _INJECTION_PATTERNS = (
     (
@@ -64,8 +97,26 @@ _PAYMENT_HARVEST_RE = re.compile(
 SECURITY_BLOCK_REPLY = (
     "Por seguridad y políticas de privacidad de Brajher's Cake, no puedo compartir instrucciones internas, "
     "credenciales ni información de otros clientes. Con gusto puedo ayudarte a consultar nuestro catálogo, "
-    "cotizar un pastel personalizado o revisar el estado de los pedidos asociados a tu número de teléfono."
+    "cotizar un pastel personalizado o revisar el estado de un pedido validando el nombre del titular y su código."
 )
+
+ROLE_SPOOF_REPLY = (
+    "Por seguridad y políticas de privacidad de Brajher's Cake, no puedo validar cargos administrativos "
+    "ni de propiedad por WhatsApp. Este canal es exclusivamente para atención al cliente; las gestiones "
+    "administrativas solo se realizan en el sistema interno con autenticación de dos factores (2FA). "
+    "Con gusto puedo atenderte como cliente para ver nuestro catálogo, cotizar un pastel o rastrear un pedido."
+)
+
+OFF_TOPIC_REPLY = (
+    "Soy el asistente virtual exclusivo de Brajher's Cake (Panadería Amada) en Managua. "
+    "Solo puedo responder consultas sobre nuestro catálogo de panadería y repostería, cotizaciones de "
+    "pasteles personalizados y seguimiento verificado de pedidos. ¿En qué te puedo colaborar hoy?"
+)
+
+_STOPWORDS_NAME = frozenset({
+    'de', 'del', 'la', 'las', 'el', 'los', 'sr', 'sra', 'srta', 'don', 'dona',
+    'lic', 'ing', 'dr', 'dra', 'arq', 'prof', 'bro', 'cliente', 'invitado', 'general',
+})
 
 SECURITY_PROTOCOLS = (
     {
@@ -76,12 +127,12 @@ SECURITY_PROTOCOLS = (
     {
         'id': 'anti_injection',
         'titulo': 'Escudo Anti-Inyección',
-        'detalle': 'Filtrado de caracteres de control, bloqueo de prompt injection, SQL y consultas cruzadas.',
+        'detalle': 'Filtrado de caracteres de control, bloqueo de prompt injection, SQL, suplantación y consultas cruzadas.',
     },
     {
-        'id': 'phone_isolation',
-        'titulo': 'Aislamiento por Teléfono',
-        'detalle': 'Cotizaciones y avisos de pedidos vinculados estrictamente al teléfono verificado del cliente.',
+        'id': 'order_verification',
+        'titulo': 'Validación de Titular y Pedido',
+        'detalle': 'Exige verificar nombre del titular y código/factura antes de compartir el estado o saldo de un pedido.',
     },
     {
         'id': 'two_step_confirm',
@@ -94,6 +145,29 @@ SECURITY_PROTOCOLS = (
         'detalle': 'Límite de 6 mensajes/minuto por sesión y bloqueo exclusivo por revisión de conversación.',
     },
 )
+
+
+def _normalize_name_tokens(value: str) -> list[str]:
+    if not isinstance(value, str):
+        return []
+    decomposed = unicodedata.normalize('NFKD', value.strip().lower())
+    ascii_only = ''.join(ch for ch in decomposed if not unicodedata.combining(ch))
+    tokens = re.findall(r'[a-z]{3,}', ascii_only)
+    return [t for t in tokens if t not in _STOPWORDS_NAME]
+
+
+def verify_holder_name(provided_name: str, record_name: str) -> bool:
+    """Return True only when the caller provides a real name that matches the order holder."""
+    provided_tokens = _normalize_name_tokens(provided_name)
+    record_tokens = _normalize_name_tokens(record_name)
+    if not provided_tokens or not record_tokens:
+        return False
+    overlap = set(provided_tokens) & set(record_tokens)
+    if not overlap:
+        return False
+    if len(record_tokens) >= 2 and len(provided_tokens) >= 2:
+        return len(overlap) >= 1 and provided_tokens[0] in record_tokens
+    return True
 
 
 def sanitize_incoming_text(text):
@@ -109,6 +183,8 @@ def detect_security_violation(text):
     cleaned = sanitize_incoming_text(text)
     if not cleaned:
         return False, None, None
+    if _ROLE_SPOOF_RE.search(cleaned):
+        return True, 'role_spoofing', ROLE_SPOOF_REPLY
     for code, pattern in _INJECTION_PATTERNS:
         if pattern.search(cleaned):
             # For cross_tenant_probe, ensure we don't block "muéstrame mis pedidos" or "dame mis cotizaciones"
@@ -126,6 +202,8 @@ def detect_security_violation(text):
                 ):
                     continue
             return True, code, SECURITY_BLOCK_REPLY
+    if _OFF_TOPIC_RE.search(cleaned) and not _BAKERY_CONTEXT_RE.search(cleaned):
+        return True, 'off_topic', OFF_TOPIC_REPLY
     return False, None, None
 
 

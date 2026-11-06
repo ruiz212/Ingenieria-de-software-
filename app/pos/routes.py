@@ -717,7 +717,8 @@ def obtener_cotizaciones_pendientes():
         cursor,
         'crm.sp_ObtenerCotizacionesPendientesAdmin',
         fallback_sql="""
-        SELECT c.*, cl.Nombre AS ClienteNombre 
+        SELECT c.*, cl.Nombre AS ClienteNombre,
+            CASE WHEN EXISTS(SELECT 1 FROM crm.WhatsAppSesiones s WHERE s.Token = c.SessionID) THEN 'WhatsApp' ELSE 'Web' END AS CanalOrigen
         FROM Cotizaciones c
         LEFT JOIN Clientes cl ON c.ClienteID = cl.ID
         WHERE c.Estado IN ('Pendiente', 'Cotizada', 'Aceptada')

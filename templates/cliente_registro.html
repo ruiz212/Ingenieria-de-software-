@@ -106,15 +106,15 @@
                     <h2 class="registration-step-title">Seguridad de la Cuenta</h2>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label for="telefono">Teléfono Celular</label>
+                            <label for="telefono">Teléfono Celular (WhatsApp)</label>
                             <input type="tel" id="telefono" name="telefono" class="form-input" required placeholder="8888-8888" data-mask="telefono" maxlength="9">
-                            <button type="button" id="send-sms" class="btn btn-outline">Enviar código SMS</button>
+                            <button type="button" id="send-sms" class="btn btn-outline">Enviar código por WhatsApp / SMS</button>
                         </div>
                         <div class="form-group">
-                            <label for="sms-code">Código de verificación SMS</label>
+                            <label for="sms-code">Código de verificación (6 dígitos)</label>
                             <input type="text" id="sms-code" class="form-input" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6 dígitos">
                             <button type="button" id="verify-sms" class="btn btn-outline" disabled>Verificar teléfono</button>
-                            <p id="sms-status" role="status" aria-live="polite">Verifica tu teléfono antes de registrar la cuenta. El código vence en 10 minutos.</p>
+                            <p id="sms-status" role="status" aria-live="polite">Verifica tu teléfono antes de registrar la cuenta. El código te llegará por WhatsApp o SMS y vence en 10 minutos.</p>
                         </div>
                         <div class="form-group">
                             <label for="password">Contraseña</label>

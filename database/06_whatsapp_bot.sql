@@ -79,6 +79,25 @@ BEGIN
    OUTPUT INSERTED.ID VALUES(NULL,@Token,@Detalle,@Fecha,@Imagen,@Telefono,@Nombre,'Pendiente');
   RETURN;
  END;
+ IF @Operacion='imagen'
+ BEGIN
+  IF @Imagen IS NULL THROW 52026,'No hay una imagen de referencia en la sesión actual.',1;
+  IF @Cotizacion IS NULL
+   SELECT TOP 1 @Cotizacion=c.ID FROM crm.Cotizaciones c LEFT JOIN crm.Clientes cl ON cl.ID=c.ClienteID
+    WHERE c.Estado IN ('Pendiente','Cotizada')
+     AND ((c.ClienteID IS NULL AND c.SessionID=@Token)
+      OR (LEN(@Tel8)=8 AND RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(LTRIM(RTRIM(c.TelefonoContacto)),''),cl.Telefono,''),'+',''),'-',''),' ',''),'.',''),8)=@Tel8))
+    ORDER BY c.ID DESC;
+  UPDATE c WITH(UPDLOCK,HOLDLOCK)
+   SET RutaImagenReferencia=@Imagen
+   FROM crm.Cotizaciones c LEFT JOIN crm.Clientes cl ON cl.ID=c.ClienteID
+   WHERE c.ID=@Cotizacion AND c.Estado IN ('Pendiente','Cotizada')
+    AND ((c.ClienteID IS NULL AND c.SessionID=@Token)
+     OR (LEN(@Tel8)=8 AND RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(LTRIM(RTRIM(c.TelefonoContacto)),''),cl.Telefono,''),'+',''),'-',''),' ',''),'.',''),8)=@Tel8));
+  IF @@ROWCOUNT<>1 THROW 52026,'Cotización ajena, inexistente o ya procesada.',1;
+  SELECT @Cotizacion AS ID, @Imagen AS RutaImagenReferencia;
+  RETURN;
+ END;
  IF @Operacion NOT IN ('aceptar','rechazar') THROW 52026,'Operación no permitida.',1;
  UPDATE c WITH(UPDLOCK,HOLDLOCK)
   SET Estado=CASE WHEN @Operacion='aceptar' THEN 'Aceptada' ELSE 'Rechazada' END
@@ -571,7 +590,10 @@ BEGIN
   FROM crm.WhatsAppSesiones WHERE ID=@Sesion;
  IF LEN(@Tel8)<>8 BEGIN SELECT TOP 0 CAST(NULL AS VARCHAR(50)) AS NumeroFactura; RETURN; END;
  SELECT TOP 10 f.NumeroFactura, f.CodigoSeguimiento, e.Estado, e.FechaEntrega, f.Total,
-  ISNULL((SELECT SUM(p.Monto) FROM ventas.Pagos p WHERE p.FacturaID=f.ID), 0) AS Pagado
+  ISNULL((SELECT SUM(p.Monto) FROM ventas.Pagos p WHERE p.FacturaID=f.ID), 0) AS Pagado,
+  COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(ISNULL(cl.Nombre,N''),N' ',ISNULL(cl.Apellidos,N'')))),N''), N'Cliente') AS NombreCliente,
+  ISNULL(e.Especificaciones, N'') AS Especificaciones,
+  ISNULL(e.RutaImagenReferencia, '') AS RutaImagenReferencia
  FROM ventas.Encargos e JOIN ventas.Facturas f ON f.ID=e.FacturaID
  LEFT JOIN crm.Clientes cl ON cl.ID=f.ClienteID
  WHERE (f.EstadoFiscal IS NULL OR f.EstadoFiscal='Emitida')
@@ -581,6 +603,28 @@ END;
 GO
 GRANT EXECUTE ON crm.sp_WhatsAppPedidosCliente TO usr_bd_whatsapp;
 GO
+-- Post-commit notifications: the worker principal reads only the contact data needed for one message.
+CREATE OR ALTER PROCEDURE crm.sp_WhatsAppDatosAviso
+ @Tipo VARCHAR(12), @ID INT
+AS
+BEGIN
+ SET NOCOUNT ON;
+ IF @Tipo='pedido'
+  SELECT TOP 1 COALESCE(NULLIF(LTRIM(RTRIM(e.TelefonoContacto)),''),cl.Telefono) AS Telefono,
+   f.NumeroFactura, f.CodigoSeguimiento, e.Estado, e.FechaEntrega, f.Total,
+   ISNULL((SELECT SUM(p.Monto) FROM ventas.Pagos p WHERE p.FacturaID=f.ID),0) AS Pagado,
+   CASE WHEN f.ClienteID>1 THEN cl.Nombre ELSE NULL END AS Nombre
+  FROM ventas.Encargos e JOIN ventas.Facturas f ON f.ID=e.FacturaID LEFT JOIN crm.Clientes cl ON cl.ID=f.ClienteID
+  WHERE f.ID=@ID AND (f.EstadoFiscal IS NULL OR f.EstadoFiscal='Emitida');
+ ELSE IF @Tipo='cotizacion'
+  SELECT TOP 1 COALESCE(NULLIF(LTRIM(RTRIM(c.TelefonoContacto)),''),cl.Telefono) AS Telefono,
+   c.Estado, c.PrecioCotizado, c.FechaEntrega,
+   COALESCE(NULLIF(LTRIM(RTRIM(c.NombreContacto)),N''),cl.Nombre) AS Nombre
+  FROM crm.Cotizaciones c LEFT JOIN crm.Clientes cl ON cl.ID=c.ClienteID WHERE c.ID=@ID;
+END;
+GO
+GRANT EXECUTE ON crm.sp_WhatsAppDatosAviso TO usr_bd_whatsapp;
+GO
 IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('crm.WhatsAppInbox') AND name='IX_WhatsAppInbox_Pendiente')
  CREATE INDEX IX_WhatsAppInbox_Pendiente ON crm.WhatsAppInbox(Estado,ID) INCLUDE(SesionID,Intentos);
 IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('crm.WhatsAppOutbox') AND name='IX_WhatsAppOutbox_Pendiente')

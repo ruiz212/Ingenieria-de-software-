@@ -501,6 +501,7 @@ def cliente_registro():
 
 
 @auth_bp.route('/api/enviar_codigo_sms', methods=['POST'])
+@auth_bp.route('/api/enviar_codigo_whatsapp', methods=['POST'])
 def enviar_codigo_sms():
     data = request.get_json(silent=True) or {}
     try:
@@ -510,31 +511,44 @@ def enviar_codigo_sms():
     existente, _ = _customer_by_normalized_phone(telefono)
     if existente:
         return jsonify(error='Este teléfono ya está registrado'), 400
-    account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
-    auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
-    if not account_sid or not auth_token:
-        return jsonify(error='El servicio SMS no está disponible. Inténtalo más tarde.'), 503
     token = None
     try:
         token, codigo = auth_challenges.issue_sms(telefono)
-        Client(account_sid, auth_token).messages.create(
-            to=telefono, from_=os.environ.get('TWILIO_FROM_NUMBER', '+17372212163'),
-            body=f'Tu código de verificación para Panadería Amada es: {codigo}')
+        enviado_wa = False
+        if os.environ.get('WHATSAPP_ENABLED', '0') == '1':
+            try:
+                from app.whatsapp.repository import send_whatsapp_verification_code
+                enviado_wa = send_whatsapp_verification_code(telefono, codigo)
+            except Exception:
+                current_app.logger.debug('No se pudo encolar código vía WhatsApp, intentando fallback', exc_info=True)
+
+        if not enviado_wa:
+            account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
+            auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
+            if not account_sid or not auth_token:
+                if os.environ.get('WHATSAPP_ENABLED', '0') == '1':
+                    return jsonify(error='No se pudo entregar el código por WhatsApp. Verifica tu número e intenta de nuevo.'), 503
+                return jsonify(error='El servicio de mensajería no está disponible. Inténtalo más tarde.'), 503
+            Client(account_sid, auth_token).messages.create(
+                to=telefono, from_=os.environ.get('TWILIO_FROM_NUMBER', '+17372212163'),
+                body=f'Tu código de verificación para Panadería Amada es: {codigo}'
+            )
         auth_challenges.revoke(session.get('sms_challenge_id'))
         _clear_sms_session()
         session['sms_challenge_id'] = token
-        return jsonify(mensaje='Código enviado exitosamente')
+        canal = 'WhatsApp' if enviado_wa else 'SMS'
+        return jsonify(mensaje=f'Código enviado a tu {canal}. Revisa tu chat.', canal=canal)
     except auth_challenges.ResendTooSoon as error:
         return jsonify(error=str(error)), 429, {'Retry-After': '60'}
     except Exception:
         if token:
             auth_challenges.revoke(token)
-        # Provider exceptions may include message bodies and credentials.
-        current_app.logger.warning('No se pudo enviar el mensaje de verificación SMS')
-        return jsonify(error='No se pudo enviar el SMS. Inténtalo más tarde.'), 503
+        current_app.logger.warning('No se pudo enviar el mensaje de verificación')
+        return jsonify(error='No se pudo enviar el código. Inténtalo más tarde.'), 503
 
 
 @auth_bp.route('/api/verificar_codigo_sms', methods=['POST'])
+@auth_bp.route('/api/verificar_codigo_whatsapp', methods=['POST'])
 def verificar_codigo_sms():
     data = request.get_json(silent=True) or {}
     token = session.get('sms_challenge_id')
