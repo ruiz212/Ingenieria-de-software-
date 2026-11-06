@@ -1,28 +1,290 @@
+/* ==========================================================================
+   BALANCE GENERAL — BRAJHER'S CAKE (PANADERÍA Y REPOSTERÍA)
+   Estado de Situación Financiera NIIF PYMES
+   ========================================================================== */
 
+.page-balance-general .balance-container {
+    max-width: 1100px;
+    margin: 1.5rem auto 3rem auto;
+}
 
-.page-balance-general .balance-general-c-table-cell {
+/* ── Encabezado Institucional ── */
+.page-balance-general .balance-header {
     text-align: center;
+    padding: 2.25rem 2rem 1.75rem 2rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow-xs);
+    position: relative;
+    overflow: hidden;
+}
+
+.page-balance-general .balance-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--brand-dorado) 0%, var(--brand-cafe) 50%, var(--brand-dorado) 100%);
+}
+
+.page-balance-general .balance-org {
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--brand-dorado);
+    margin-bottom: 0.35rem;
+}
+
+.page-balance-general .balance-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text-main);
+    margin: 0 0 0.5rem 0;
+    letter-spacing: -0.01em;
+}
+
+.page-balance-general .balance-subtitle {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 0 0 0.35rem 0;
+}
+
+.page-balance-general .balance-currency {
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ── Barra de Navegación de Cortes ── */
+.page-balance-general .balance-nav-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 1.75rem;
+    box-shadow: var(--shadow-xs);
+}
+
+.page-balance-general .balance-controls-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.page-balance-general .balance-label-period {
+    font-weight: 700;
+    font-size: 0.85rem;
     color: var(--text-muted);
 }
 
-.page-balance-general .balance-general-c-report-actions {
-    gap: 15px;
+.page-balance-general .balance-label-date {
+    font-weight: 600;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-left: 0.5rem;
 }
 
-.page-balance-general .balance-general-btn-outline {
-    border-radius: var(--radius-full);
-    padding: 1rem 2rem;
+.page-balance-general .balance-select {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-main);
+    cursor: pointer;
+    min-width: 280px;
+    box-shadow: var(--shadow-xs);
+}
+
+.page-balance-general .balance-date-input {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-main);
+}
+
+/* ── Grid de Dos Columnas Contables ── */
+.page-balance-general .balance-sheet-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.75rem;
+    align-items: start;
+}
+
+.page-balance-general .balance-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 2rem 2.25rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.page-balance-general .balance-column-stack {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 1.75rem;
 }
 
-.page-balance-general .c-report__section { overflow-x: auto; }
-.page-balance-general .c-table { min-width: 420px; }
-.page-balance-general .c-table__cell--amount,
-.page-balance-general .c-table__cell--amount-total,
-.page-balance-general .c-table__cell--amount-supertotal { white-space: nowrap; font-variant-numeric: tabular-nums; }
-@media (max-width: 600px) {
-    .page-balance-general .c-report { padding: 1rem 0; }
-    .page-balance-general .c-report__section { padding: 1rem; }
+.page-balance-general .balance-section-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--text-main);
+    padding-bottom: 0.75rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 2px solid var(--brand-dorado);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.page-balance-general .balance-class-tag {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.page-balance-general .balance-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+}
+
+.page-balance-general .balance-table td {
+    padding: 0.6rem 0.4rem;
+    font-size: 0.9rem;
+    vertical-align: middle;
+}
+
+.page-balance-general .col-code {
+    width: 20%;
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--text-faint);
+}
+
+.page-balance-general .col-name {
+    width: 50%;
+    color: var(--text-main);
+    font-weight: 500;
+}
+
+.page-balance-general .col-amount {
+    width: 30%;
+    text-align: right;
+    font-family: 'Outfit', var(--font-sans, sans-serif);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.page-balance-general .balance-empty-cell {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 1.5rem;
+}
+
+/* Filas de Totales Superiores y Finales */
+.page-balance-general .row-total td {
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+    padding-bottom: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+}
+
+.page-balance-general .balance-total-danger {
+    color: var(--danger);
+}
+
+.page-balance-general .balance-amount-danger {
+    color: var(--danger);
+    font-size: 1.1rem;
+}
+
+.page-balance-general .balance-total-capital {
+    color: var(--brand-dorado);
+}
+
+.page-balance-general .balance-amount-capital {
+    color: var(--brand-dorado);
+    font-size: 1.1rem;
+}
+
+.page-balance-general .row-supertotal td {
+    border-top: 2px solid var(--brand-dorado);
+    border-bottom: 3px double var(--brand-dorado);
+    padding-top: 1.25rem;
+    padding-bottom: 1rem;
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: var(--brand-cafe);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.page-balance-general .supertotal-amount {
+    font-family: 'Outfit', var(--font-sans, sans-serif);
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: var(--brand-dorado);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Banner de Ecuación Contable ── */
+.page-balance-general .equation-banner {
+    margin-top: 2rem;
+    padding: 1.25rem 2rem;
+    border-radius: var(--radius-lg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.85rem;
+    font-weight: 700;
+    font-size: 1.05rem;
+    box-shadow: var(--shadow-xs);
+}
+
+.page-balance-general .equation-banner.balanced {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success-border);
+}
+
+.page-balance-general .equation-banner.unbalanced {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger-border);
+}
+
+@media (max-width: 900px) {
+    .page-balance-general .balance-sheet-grid {
+        grid-template-columns: 1fr;
+    }
+    .page-balance-general .balance-nav-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .page-balance-general .balance-controls-group {
+        width: 100%;
+    }
 }

@@ -65,7 +65,7 @@
   },
   "pages/admin/balance_general": {
     "file": "dist/pages/admin/balance_general.css",
-    "version": "99ef5d387c10"
+    "version": "1e5102b33342"
   },
   "print/balance_imprimir": {
     "file": "dist/print/balance_imprimir.css",
@@ -97,7 +97,7 @@
   },
   "pages/admin/contabilidad": {
     "file": "dist/pages/admin/contabilidad.css",
-    "version": "5b0edc0d4edf"
+    "version": "6a70e183e7e1"
   },
   "pages/admin/estadistica": {
     "file": "dist/pages/admin/estadistica.css",
@@ -109,7 +109,7 @@
   },
   "pages/admin/estado_resultados": {
     "file": "dist/pages/admin/estado_resultados.css",
-    "version": "a1599116318f"
+    "version": "cdbda5772535"
   },
   "print/estado_resultados_imprimir": {
     "file": "dist/print/estado_resultados_imprimir.css",
