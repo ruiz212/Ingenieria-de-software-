@@ -950,6 +950,10 @@
 
 {% block extra_scripts %}
 <script>
+    function getCsrfToken() {
+        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    }
+
     function abrirModalEmpleado() {
         document.getElementById('modal-nuevo-empleado').classList.remove('hidden');
         const hiddenInput = document.getElementById('ne-cargo');
@@ -1119,7 +1123,7 @@
         try {
             const res = await fetch(`/admin/api/rrhh/nomina/${id}/contabilizar`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() }
             });
             hideLoading();
             const result = await res.json();
@@ -1142,7 +1146,7 @@
         try {
             const res = await fetch(`/admin/rrhh/nomina/pagar/${id}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                 body: JSON.stringify({ metodo_pago: metodoPago })
             });
             hideLoading();
@@ -1175,7 +1179,7 @@
         try {
             const res = await fetch(`/admin/api/rrhh/empleado/${id}`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() }
             });
             hideLoading();
             const result = await res.json();
@@ -1241,7 +1245,7 @@
         try {
             const res = await fetch('/admin/api/rrhh/aguinaldo/calcular_batch', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                 body: JSON.stringify(data)
             });
             hideLoading();
@@ -1340,7 +1344,7 @@ function abrirModalNomina() {
         try {
             const res = await fetch('/admin/api/rrhh/nomina/calcular', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                 body: JSON.stringify(data)
             });
             hideLoading();
@@ -1699,7 +1703,7 @@ function abrirModalNomina() {
         try {
             const res = await fetch('/admin/api/rrhh/empleado', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                 body: JSON.stringify(data)
             });
             hideLoading();
@@ -1733,7 +1737,7 @@ function abrirModalNomina() {
         try {
             const res = await fetch('/admin/api/rrhh/nomina/calcular_batch', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                 body: JSON.stringify(data)
             });
             hideLoading();
@@ -1763,7 +1767,7 @@ function abrirModalNomina() {
         try {
             const res = await fetch(`/admin/api/rrhh/empleado/${id}/horario`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                 body: JSON.stringify(data)
             });
             hideLoading();
@@ -1793,7 +1797,7 @@ function abrirModalNomina() {
         try {
             const res = await fetch('/admin/api/rrhh/liquidacion/calcular', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                 body: JSON.stringify(data)
             });
             hideLoading();
