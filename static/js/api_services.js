@@ -66,7 +66,8 @@ const API = {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCsrfToken()
-                }
+                },
+                body: JSON.stringify({})
             });
             const data = await res.json().catch(() => null);
             if (!res.ok) throw new Error((data && data.error) || 'Error al rechazar pedido');
@@ -84,7 +85,8 @@ const API = {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCsrfToken()
-                }
+                },
+                body: JSON.stringify({})
             });
             const result = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(result.error || 'No se pudo aceptar la cotización');

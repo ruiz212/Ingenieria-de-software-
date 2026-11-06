@@ -140,12 +140,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (!visibleIds.has(item.dataset.quoteId)) item.remove();
                     });
                     cotizaciones.forEach(c => {
-                        // Retain existing rows, including their draft price and keyboard focus.
-                        if (preserveEdits && [...listContainer.children].some(item => item.dataset.quoteId === String(c.id))) return;
+                        const existing = [...listContainer.children].find(item => item.dataset.quoteId === String(c.id));
+                        const snapshot = JSON.stringify(c);
+                        // Keep drafts/focus only while the server's quote is unchanged.
+                        if (preserveEdits && existing?.dataset.quoteSnapshot === snapshot) return;
                         const div = document.createElement('div');
                         div.className = 'modal-section';
                         div.dataset.quoteId = String(c.id);
+                        div.dataset.quoteSnapshot = snapshot;
                         const estadoCot = c.estado || 'Pendiente';
+                        const editable = ['Pendiente', 'Cotizada'].includes(estadoCot);
                         const precioVal = c.precio_cotizado !== null && c.precio_cotizado !== undefined ? parseFloat(c.precio_cotizado).toFixed(2) : '';
 
                         div.innerHTML = `
@@ -168,10 +172,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
 
                             <div class="modal-action-row">
-                                <input type="number" id="precio-cotizacion-${c.id}" class="form-control" aria-label="Precio para solicitud ${c.id}" placeholder="Precio (C$)" min="0.01" step="0.01" value="${precioVal}">
-                                <button type="button" class="modal-btn modal-btn--primary" onclick="cotizarPedido(${c.id})">${precioVal ? 'Actualizar Precio' : 'Cotizar'}</button>
+                                ${editable ? `<input type="number" id="precio-cotizacion-${c.id}" class="form-control" aria-label="Precio para solicitud ${c.id}" placeholder="Precio (C$)" min="0.01" step="0.01" value="${precioVal}">
+                                <button type="button" class="modal-btn modal-btn--primary" onclick="cotizarPedido(${c.id})">${precioVal ? 'Actualizar Precio' : 'Cotizar'}</button>` : '<p class="modal-section-meta">El cliente ya aceptó este precio. Continúe en caja.</p>'}
                                 ${precioVal ? `<button type="button" class="modal-btn modal-btn--info btn-facturar-cotizacion" data-cot='${escapeHTML(JSON.stringify(c))}'>Pasar a Caja</button>` : ''}
-                                <button type="button" class="modal-btn modal-btn--danger-outline" onclick="rechazarPedido(${c.id})">Rechazar</button>
+                                ${editable ? `<button type="button" class="modal-btn modal-btn--danger-outline" onclick="rechazarPedido(${c.id})">Rechazar</button>` : ''}
                             </div>
                         `;
                         const referenceLink = referenceImageLink(c.ruta_imagen, 'sales-ui-text-2', 'Ver Foto de Referencia');
@@ -213,7 +217,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 showToast('Cotización cargada en el carrito para facturar.');
                             });
                         }
-                        listContainer.appendChild(div);
+                        if (existing) existing.replaceWith(div);
+                        else listContainer.appendChild(div);
                     });
         }
         let loading = false;
@@ -283,6 +288,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Funciones globales para cotizar o rechazar
     window.cotizarPedido = async function(id) {
         const input = document.getElementById(`precio-cotizacion-${id}`);
+        if (!input) {
+            showToast('La solicitud cambió. Actualice las solicitudes antes de asignar precio.', true);
+            return;
+        }
         const precio = parseFloat(input.value);
         if (isNaN(precio) || precio <= 0) {
             showToast('Ingresa un precio válido', true);
@@ -295,19 +304,11 @@ document.addEventListener('DOMContentLoaded', () => {
             confirmText: 'Asignar precio'
         })) {
             try {
-                const res = await fetch(`/api/cotizaciones/${id}/cotizar`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ precio: precio })
-                });
-                if (res.ok) {
-                    showToast('Precio asignado correctamente');
-                    document.getElementById('btn-ver-pedidos-clientes').click(); // Recargar lista
-                } else {
-                    showToast('Error al asignar precio', true);
-                }
+                await API.cotizarPedido(id, precio);
+                showToast('Precio asignado correctamente');
+                document.getElementById('btn-ver-pedidos-clientes').click();
             } catch (e) {
-                showToast('Error de conexión', true);
+                showToast(e.message || 'No se pudo actualizar el precio.', true);
             }
         }
     }
@@ -320,17 +321,11 @@ document.addEventListener('DOMContentLoaded', () => {
             danger: true
         })) {
             try {
-                const res = await fetch(`/api/cotizaciones/${id}/rechazar`, {
-                    method: 'POST'
-                });
-                if (res.ok) {
-                    showToast('Solicitud rechazada');
-                    document.getElementById('btn-ver-pedidos-clientes').click(); // Recargar lista
-                } else {
-                    showToast('Error al rechazar', true);
-                }
+                await API.rechazarPedido(id);
+                showToast('Solicitud rechazada');
+                document.getElementById('btn-ver-pedidos-clientes').click();
             } catch (e) {
-                showToast('Error de conexión', true);
+                showToast(e.message || 'No se pudo rechazar la solicitud.', true);
             }
         }
     }

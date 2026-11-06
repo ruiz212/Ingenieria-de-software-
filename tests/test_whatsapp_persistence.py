@@ -179,15 +179,14 @@ def test_confirmed_whatsapp_quote_appears_in_the_shared_pos_inbox_once(store, mo
         'fecha_solicitud': '', 'canal': 'WhatsApp'}
 
 
-def test_quote_and_order_notifications_work_with_associated_phone_number(store, monkeypatch):
+def test_direct_phone_and_order_notifications_work_with_associated_phone_number(store, monkeypatch):
     channel, db = store
     monkeypatch.setenv('WHATSAPP_ENABLED', '1')
     dummy_cursor = SimpleNamespace(execute=lambda *a, **kw: None, fetchone=lambda: None)
-    # 1. Quote priced notification to a phone number that hasn't even chatted before
-    repository.notify(
-        dummy_cursor, 'cotizacion', 15,
-        phone='8765-4321', estado='Cotizada', precio=680.0, fecha_entrega='12/11/2026',
-    )
+    # Direct phone messages use their own connection. POS quote notices instead
+    # use the caller's SQL transaction (test_pos_quote_notifications.py).
+    repository.enqueue_phone_notification('8765-4321', 'quote:15:Cotizada:680.00',
+        repository._format_quote_notification(15, 'Cotizada', 680.0, '12/11/2026'))
     session_row = db.execute("SELECT ID, Telefono, Avisos FROM crm.WhatsAppSesiones WHERE Telefono='+50587654321'").fetchone()
     assert session_row is not None and session_row[2] == 1
     outbox = db.execute("SELECT Clave, Texto, Tipo FROM crm.WhatsAppOutbox WHERE SesionID=?", (session_row[0],)).fetchall()
