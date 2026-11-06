@@ -1,0 +1,17 @@
+{% extends 'admin/dgi/layout.html' %}
+{% block dgi_content %}
+<section class="dgi-card">
+  <h2>Revisión histórica #{{ review.ID }}</h2>
+  <p role="status">Esta revisión utiliza un formato anterior o un resultado que no se puede interpretar. El registro original se conserva; necesita revalidar las fuentes para consultar el diagnóstico actual.</p>
+  <p>{{ review.Obligacion }} · versión {{ review.Version }} · período {{ period.Desde.strftime('%m/%Y') }}</p>
+  {% if period.Estado != 'Cerrado' %}
+  <form method="post" action="{{ url_for('admin.dgi_create_review') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="periodo_id" value="{{ review.PeriodoID }}">
+    <input type="hidden" name="obligacion" value="{{ review.Obligacion }}">
+    <button class="btn btn-primary" type="submit">Revalidar fuentes</button>
+  </form>
+  {% else %}<p>Reabra la preparación del período antes de revalidar sus fuentes.</p>{% endif %}
+  <a class="btn btn-outline" href="{{ url_for('admin.dgi_dashboard', periodo=review.PeriodoID) }}">Volver al período</a>
+</section>
+{% endblock %}

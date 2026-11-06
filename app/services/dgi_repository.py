@@ -1,11 +1,11 @@
 """Adaptador SQL Server y flujo transaccional de preparación DGI."""
 import json
 import pyodbc
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from datetime import date, timedelta
 
 from app.db import get_db_connection, execute_sp
-from app.services.dgi_engine import ENGINE_VERSION, analyze, fingerprint, json_dump, monthly_period
+from app.services.dgi_engine import ENGINE_VERSION, analyze, fingerprint, json_dump, monthly_period, stored_object, stored_result
 from app.services.business_time import invoice_time_evidence, reversal_time_evidence
 
 PROFILE_KEYS = ('fiscal_razon_social', 'fiscal_ruc', 'fiscal_regimen',
@@ -39,18 +39,50 @@ class DGIStale(DGIConflict):
     """La única escritura previa a esta excepción es invalidar la revisión."""
 
 
+def require_schema(cursor):
+    if not execute_sp(
+        cursor, 'fiscal.sp_VerificarEsquemaDGI',
+        fallback_sql="SELECT COALESCE(OBJECT_ID('fiscal.DGI_Revisiones','U'), OBJECT_ID('dbo.DGI_Revisiones','U'))",
+    ).fetchone()[0]:
+        raise DGIMissingSchema()
+
+
+@contextmanager
+def reading():
+    """Display queries release statement locks without a long write transaction.
+
+    Approvals, exports and source validation still use transaction(). Dashboard
+    freshness is informational and is rechecked inside those mutation scopes.
+    """
+    conn = get_db_connection()
+    previous_autocommit = conn.autocommit
+    cursor = None
+    try:
+        conn.autocommit = True
+        cursor = conn.cursor()
+        cursor.execute('SET TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCK_TIMEOUT 5000;')
+        require_schema(cursor)
+        yield cursor
+    finally:
+        try:
+            if cursor is not None:
+                cursor.close()
+            with closing(conn.cursor()) as reset_cursor:
+                reset_cursor.execute('SET TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCK_TIMEOUT -1;')
+        finally:
+            try:
+                conn.autocommit = previous_autocommit
+            finally:
+                conn.close()
+
+
 @contextmanager
 def transaction():
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute('SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SET LOCK_TIMEOUT 15000;')
-        if not execute_sp(
-            cursor,
-            'fiscal.sp_VerificarEsquemaDGI',
-            fallback_sql="SELECT COALESCE(OBJECT_ID('fiscal.DGI_Revisiones','U'), OBJECT_ID('dbo.DGI_Revisiones','U'))",
-        ).fetchone()[0]:
-            raise DGIMissingSchema()
+        require_schema(cursor)
         yield cursor
         conn.commit()
     except DGIStale:
@@ -153,18 +185,8 @@ def periods(cursor):
     return rows(cursor)
 
 
-def get_period(cursor, period_id, for_update=False):
-    if not for_update:
-        execute_sp(
-            cursor,
-            'fiscal.sp_ObtenerPeriodoDGIPorID_Lectura',
-            (period_id,),
-            fallback_sql='SELECT ID,Desde,Hasta,Estado FROM DGI_Periodos WHERE ID=?',
-        )
-        result = rows(cursor)
-        if not result:
-            raise DGINotFound('Período no encontrado.')
-        return result[0]
+def get_period(cursor, period_id):
+    # Use the published procedure: restricted roles cannot SELECT its tables.
     execute_sp(
         cursor,
         'fiscal.sp_ObtenerPeriodoDGIPorID',
@@ -342,18 +364,7 @@ def is_review_fresh(cursor, review, period=None):
     return current_hash == saved_hash
 
 
-def get_review(cursor, review_id, for_update=False):
-    if not for_update:
-        execute_sp(
-            cursor,
-            'fiscal.sp_ObtenerRevisionDGIPorID_Lectura',
-            (review_id,),
-            fallback_sql='SELECT * FROM DGI_Revisiones WHERE ID=?',
-        )
-        result = rows(cursor)
-        if not result:
-            raise DGINotFound('Revisión no encontrada.')
-        return result[0]
+def get_review(cursor, review_id):
     execute_sp(
         cursor,
         'fiscal.sp_ObtenerRevisionDGIPorID',
@@ -381,7 +392,10 @@ def create_review(cursor, period_id, obligation, actor):
     )
     previous = cursor.fetchone()
     if previous and previous.Huella == digest and previous.Motor == ENGINE_VERSION and previous.Estado != 'OBSOLETO':
-        return previous.ID
+        saved = get_review(cursor, previous.ID)
+        saved_snapshot = stored_object(saved['SnapshotJSON'])
+        if stored_result(saved['ResultadoJSON']) is not None and saved_snapshot and isinstance(saved_snapshot.get('perfil'), dict):
+            return previous.ID
     version = previous.Version + 1 if previous else 1
     if previous and previous.Estado != 'OBSOLETO':
         execute_sp(
