@@ -541,7 +541,6 @@ CREATE OR ALTER PROCEDURE crm.sp_WhatsAppBloquearWorker
 AS
 BEGIN
  SET NOCOUNT ON;
- IF LTRIM(RTRIM(HOST_ID()))='1933' BEGIN SELECT -1; RETURN; END;
  DECLARE @r INT; EXEC @r=sys.sp_getapplock @Resource='brajhers:whatsapp:worker:v2',@LockMode='Exclusive',@LockOwner='Session',@LockTimeout=0; SELECT @r;
 END;
 GO

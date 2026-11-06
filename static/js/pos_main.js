@@ -229,7 +229,7 @@ function initModule1() {
                     showToast('Error al asignar precio', true);
                 }
             } catch (e) {
-                showToast('Error de conexión', true);
+                showToast(e.message || 'Error de conexión', true);
             }
         }
     }
@@ -247,7 +247,7 @@ function initModule1() {
                     showToast('Error al rechazar', true);
                 }
             } catch (e) {
-                showToast('Error de conexión', true);
+                showToast(e.message || 'Error de conexión', true);
             }
         }
     }
@@ -846,7 +846,7 @@ function initModule1() {
                     btnConfirmarArqueo.textContent = 'Cerrar Turno';
                 }
             } catch (err) {
-                showToast('Error de conexión', true);
+                showToast(err.message || 'Error al cerrar turno', true);
                 btnConfirmarArqueo.disabled = false;
                 btnConfirmarArqueo.textContent = 'Cerrar Turno';
             }
@@ -1264,7 +1264,7 @@ function initModule2() {
                             showToast('Error al enviar cotización', true);
                         }
                     } catch (error) {
-                        showToast('Error de conexión', true);
+                showToast(error.message || 'Error de conexión', true);
                     }
                 });
             });

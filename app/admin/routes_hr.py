@@ -594,7 +594,7 @@ def eliminar_empleado(id):
             del face_service.encodings_cache[id]
             
         return jsonify({'status': 'success', 'mensaje': 'Empleado suspendido. Se conserva todo el historial laboral y contable.'})
-    except ValueError as e:
+    except (ValueError, ContabilidadError) as e:
         conn.rollback()
         return jsonify(error=str(e)), 400
     except Exception as e:
@@ -625,7 +625,7 @@ def actualizar_horario_empleado(id):
         )
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': 'Horario actualizado'})
-    except ValueError as e:
+    except (ValueError, ContabilidadError) as e:
         conn.rollback()
         return jsonify(error=str(e)), 400
     except Exception as e:
@@ -1370,7 +1370,7 @@ def calcular_nomina():
                 'promedio_puntualidad_pct': float(promedio_puntualidad),
             }
         })
-    except ValueError as e:
+    except (ValueError, ContabilidadError) as e:
         conn.rollback()
         return jsonify(error=str(e)), 400
     except Exception as e:
@@ -1755,7 +1755,7 @@ def calcular_nomina_batch():
         extra = f' ({omitidos_contabilizados} ya estaban contabilizados)' if omitidos_contabilizados else ''
         return jsonify({'status': 'success', 'mensaje': f'Planilla generada y contabilizada para {procesados} empleados{extra}.'})
         
-    except ValueError as e:
+    except (ValueError, ContabilidadError) as e:
         conn.rollback()
         return jsonify(error=str(e)), 400
     except Exception as e:
@@ -2960,7 +2960,7 @@ def kiosco_marcar():
         conn.commit()
         return jsonify({'status': 'success', 'mensaje': msg})
         
-    except ValueError as e:
+    except (ValueError, ContabilidadError) as e:
         conn.rollback()
         return jsonify(error=str(e)), 400
     except Exception as e:

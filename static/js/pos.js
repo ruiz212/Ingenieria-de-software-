@@ -1643,7 +1643,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             showToast('Error al enviar cotización', true);
                         }
                     } catch (error) {
-                        showToast('Error de conexión', true);
+                        showToast(error.message || 'Error de conexión', true);
                     }
                 });
             });

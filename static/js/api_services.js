@@ -168,7 +168,7 @@ const API = {
         }
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
             const response = await fetch('/api/factura', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
@@ -184,7 +184,7 @@ const API = {
             return result;
         } catch (error) {
             if (error.name === 'AbortError') {
-                throw new Error('La facturación tardó demasiado tiempo en responder (timeout 15s). Revise la conexión.');
+                throw new Error('La facturación tardó demasiado tiempo en responder (timeout 60s). Revise la conexión.');
             }
             console.error('API Error:', error);
             throw error;
@@ -197,7 +197,7 @@ const API = {
     cerrarTurno: async (datosArqueo) => {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
             const response = await fetch('/admin/api/arqueo/etapa1-conteo', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
@@ -212,7 +212,7 @@ const API = {
             return result;
         } catch (error) {
             if (error.name === 'AbortError') {
-                throw new Error('El cierre de turno tardó demasiado tiempo en responder (timeout 15s). Revise la conexión.');
+                throw new Error('El cierre de turno tardó demasiado tiempo en responder (timeout 60s). Revise la conexión.');
             }
             console.error('API Error:', error);
             throw error;

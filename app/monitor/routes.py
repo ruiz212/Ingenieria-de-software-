@@ -375,8 +375,19 @@ def actualizar_estado(codigo):
 
         conn.commit()
         try:
-            from app.whatsapp.repository import notify
-            notify(cursor, 'pedido', factura_id, estado=nuevo_estado, numero_factura=numero_factura, codigo_seguimiento=codigo)
+            import threading
+            def _bg_mon_notify(fid, est, num, cod):
+                try:
+                    from app.whatsapp.repository import notify, connection
+                    with connection(True) as (_, bg_cur):
+                        notify(bg_cur, 'pedido', fid, estado=est, numero_factura=num, codigo_seguimiento=cod)
+                except Exception as bg_err:
+                    pass
+            threading.Thread(
+                target=_bg_mon_notify,
+                args=(factura_id, nuevo_estado, numero_factura, codigo),
+                daemon=True,
+            ).start()
         except Exception as notify_err:
             current_app.logger.warning('WhatsApp notification failed: %s', notify_err)
         return jsonify({

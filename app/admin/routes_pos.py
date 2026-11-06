@@ -425,8 +425,8 @@ def arqueo_etapa2_verificar(arqueo_id):
         if arqueo.EstadoArqueo != 'Pendiente':
             return jsonify({'error': 'Este arqueo ya fue verificado'}), 400
 
-        # El verificador debe ser diferente al cajero
-        if arqueo.UsuarioID == current_user.id:
+        # El verificador debe ser diferente al cajero (salvo SuperAdmin)
+        if arqueo.UsuarioID == current_user.id and getattr(current_user, 'rol_nombre', None) != 'SuperAdmin':
             return jsonify({'error': 'No puedes verificar tu propio arqueo. Se requiere un supervisor diferente.'}), 400
 
         # Si requiere justificación, las notas son obligatorias

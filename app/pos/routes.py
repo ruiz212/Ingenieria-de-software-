@@ -551,10 +551,23 @@ def registrar_factura():
         conn.commit()
         if es_encargo:
             try:
-                from app.whatsapp.repository import notify
-                notify(cursor, 'pedido', factura_id, phone=encargo.get('telefono'), estado='Pendiente', numero_factura=number, codigo_seguimiento=code, fecha_entrega=delivery.strftime('%d/%m/%Y') if delivery else None, saldo=float(total - (advance or 0)))
+                import threading
+                def _bg_pos_notify(fid, ph, num, cod, dent, sal):
+                    try:
+                        from app.whatsapp.repository import notify, connection
+                        with connection(True) as (_, bg_cur):
+                            notify(bg_cur, 'pedido', fid, phone=ph, estado='Pendiente', numero_factura=num, codigo_seguimiento=cod, fecha_entrega=dent, saldo=sal)
+                    except Exception as bg_err:
+                        pass
+                dent_val = delivery.strftime('%d/%m/%Y') if delivery else None
+                sal_val = float(total - (advance or 0))
+                threading.Thread(
+                    target=_bg_pos_notify,
+                    args=(factura_id, encargo.get('telefono'), number, code, dent_val, sal_val),
+                    daemon=True,
+                ).start()
             except Exception as notify_err:
-                current_app.logger.warning('WhatsApp notification failed: %s', notify_err)
+                current_app.logger.warning('WhatsApp notification thread start failed: %s', notify_err)
         return jsonify(status='success', mensaje='Factura registrada', factura=document)
     except (ValueError, ContabilidadError) as error:
         conn.rollback()
