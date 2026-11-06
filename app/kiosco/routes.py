@@ -13,8 +13,17 @@ from app.services.hr_calculations import can_mark_exit, resolver_horario_y_clasi
 import logging
 import json
 
-# Importamos el servicio de reconocimiento facial (se inicializa al cargar el módulo)
-from app.services.face_service import face_service
+# Cargar OpenCV y los modelos solo cuando se solicita biometría. El lock de
+# importación de Python serializa la primera carga entre hilos de Gunicorn.
+from werkzeug.local import LocalProxy
+
+
+def _get_face_service():
+    from app.services.face_service import face_service
+    return face_service
+
+
+face_service = LocalProxy(_get_face_service)
 
 @kiosco_bp.route('/')
 def kiosco_vista():

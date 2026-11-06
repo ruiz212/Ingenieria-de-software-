@@ -1,6 +1,6 @@
 """Gunicorn production configuration optimized for Azure App Service B1 tier.
-B1 instance constraints: 1 vCPU (burstable), 1.75 GB RAM.
-Configured with 1 worker and 2 threads to prevent OOM kills and CPU throttling.
+Default: 1 worker and 2 threads. Validate capacity with production metrics.
+App Service Basic B1 must not be confused with burstable B-series VMs.
 """
 import os
 
@@ -8,8 +8,7 @@ import os
 port = os.environ.get('PORT', os.environ.get('WEBSITES_PORT', '8000'))
 bind = f"0.0.0.0:{port}"
 
-# Workers: Hard cap at 1 worker on B1 to prevent exceeding the 1.75 GB RAM limit.
-# Each worker with OpenCV, NumPy and pyodbc takes ~180-250MB.
+# Keep memory use conservative; allow at most two explicitly requested workers.
 workers = int(os.environ.get('GUNICORN_WORKERS', os.environ.get('WEB_CONCURRENCY', 1)))
 workers = min(workers, 2)
 

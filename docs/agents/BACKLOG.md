@@ -1,5 +1,38 @@
 # Plantilla de tareas futuras
 
+## TASK-2026-005 — Recuperar despliegue Python y fusionar entrega
+
+- Solicitud: reparar el despliegue, subir a GitHub y hacer merge; 06-11-2026 UTC.
+- Autorización: cambios locales, push, PR, merge y ejecución de la entrega existente.
+- Evidencia: `run.py` presente en el artefacto remoto, pero no importable en Azure;
+  faltan manifiesto y entorno Oryx. La cancelación de la última ejecución fue
+  manual por el usuario y se excluye como causa.
+- Alcance: ZipDeploy con compilación, comprobación del ZIP extraído y arranque
+  Gunicorn Linux en CI; conservar optimizaciones de TASK-2026-004.
+- Aceptación: suite sin SQL operativo, CI de PR aprobado, merge sin forzar y
+  verificación de Oryx y login en el despliegue de `main`.
+- Seguridad: no versionar `.env`, JSON privado de configuración ni cargas;
+  no migrar ni escribir datos SQL durante las pruebas.
+- Estado: implementación y validación local en curso; resultado remoto por verificar.
+- Responsable: Codex; implementación y revisión sin delegación.
+- Plan: `docs/superpowers/plans/2026-11-06-azure-deployment.md`.
+
+## TASK-2026-004 — Rendimiento tras cambio de plan Azure
+
+- Solicitud y fecha: revisar y optimizar carga tras cambio A1 a B1, 05-11-2026.
+- Objetivo: reducir costes locales comprobados de arranque y renderizado.
+- Alcance: carga diferida de biometría, manifiesto CSS y comando Docker; sin reglas de negocio.
+- Componentes: `app/kiosco/routes.py`, `app/assets.py`, `Dockerfile`, `gunicorn.conf.py` y pruebas.
+- Dependencias: medir Azure para diagnosticar la regresión de producción.
+- Prioridad y complejidad: alta, complejidad media.
+- Riesgo: la primera solicitud biométrica asume el coste de importar modelos.
+- Criterios: login y kiosco sin OpenCV; biometría delega al singleton; CSS sin stat repetido en producción, recarga en desarrollo.
+- Responsable e integrador único: Codex; sin delegación.
+- Autorización recibida: revisión, optimizaciones y pruebas locales solicitadas por el usuario.
+- Estado: cambios locales verificados; Azure pendiente de acceso y URL.
+- Evidencia: regresiones nuevas fallaron antes del cambio y pasaron después; informe `docs/RENDIMIENTO_AZURE.md`.
+- Límites: no despliegues, migraciones ni cambios de infraestructura.
+
 ## TASK-2026-003 — Vinculación segura y pedidos de WhatsApp
 
 - Solicitud y fecha: reparar QR, mejorar panel y unificar cotizaciones, 04-11-2026.
