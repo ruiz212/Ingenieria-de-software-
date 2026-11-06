@@ -33,6 +33,9 @@ Guardar datos persistentes de ejecución en almacenamiento apropiado bajo `/home
    genérica de Azure no cuenta como aplicación lista.
 
 La verificación HTTP es pública y no envía las credenciales SCM al sitio web.
+La consulta de progreso conserva siempre el origen SCM del publish profile y
+solo reutiliza la ruta `/api/deployments/<id>` de la cabecera Location; tolera
+que Kudu anuncie un puerto explícito o su origen interno tras el proxy.
 Si falla compilación, revisar Deployment Center. Si falla el login, revisar los
 logs del contenedor y confirmar el comando de inicio. El job no imprime el
 publish profile ni cuerpos de respuestas SCM que puedan contener secretos.

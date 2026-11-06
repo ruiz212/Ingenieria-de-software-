@@ -71,9 +71,10 @@ def test_waits_for_specific_deployment_until_success(monkeypatch):
     assert [call[1] for call in session.calls] == [url, url]
 
 
-def test_zipdeploy_rejects_foreign_polling_url(runtime_archive, monkeypatch):
+@pytest.mark.parametrize('location', ['https://example.org/steal', '/api/deployments/..', '/api/settings'])
+def test_zipdeploy_rejects_foreign_polling_url(runtime_archive, monkeypatch, location):
     module = load_module()
-    session = Session([response(202, headers={'Location': 'https://example.org/steal'})])
+    session = Session([response(202, headers={'Location': location})])
     monkeypatch.setattr(module.requests, 'Session', lambda: session)
     with pytest.raises(ValueError, match='origin'):
         module.deploy(runtime_archive, PROFILE, 'bakery')
@@ -112,10 +113,15 @@ def test_http_error_does_not_echo_response_secrets():
     assert 'synthetic-secret' not in str(error.value)
 
 
-def test_release_requires_oryx_and_login_after_success(runtime_archive, monkeypatch):
+@pytest.mark.parametrize('location', [
+    '/api/deployments/123',
+    'https://bakery.scm.azurewebsites.net:443/api/deployments/123',
+    'http://internal-scm:8080/api/deployments/123',
+])
+def test_release_requires_oryx_and_login_after_success(runtime_archive, monkeypatch, location):
     module = load_module()
     deployment_session = Session([
-        response(202, headers={'Location': '/api/deployments/123'}),
+        response(202, headers={'Location': location}),
         response(data={'status': 4}),
         response(text='virtualEnvName = "antenv"'),
     ])
@@ -126,6 +132,7 @@ def test_release_requires_oryx_and_login_after_success(runtime_archive, monkeypa
     assert deployment_session.auth == ('synthetic-user', 'synthetic-secret')
     assert public_session.auth is None
     assert deployment_session.calls[-1][1].endswith('/api/vfs/site/wwwroot/oryx-manifest.toml')
+    assert deployment_session.calls[1][1] == 'https://bakery.scm.azurewebsites.net/api/deployments/123'
 
 
 def test_busy_kudu_retries_archive_from_beginning(runtime_archive, monkeypatch):
