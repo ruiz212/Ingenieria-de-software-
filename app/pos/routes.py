@@ -766,14 +766,15 @@ def cotizar_pedido(id):
             fallback_sql="UPDATE Cotizaciones SET PrecioCotizado = ?, Estado = 'Cotizada' WHERE ID = ? AND Estado IN ('Pendiente','Cotizada')",
         )
         if cursor.rowcount != 1:
-            return jsonify(error='Cotización inexistente o ya procesada.'), 409
+            return jsonify(error='La cotización ya no admite cambios de precio. Puede haber sido aceptada o procesada; actualice las solicitudes.'), 409
         from app.whatsapp.repository import notify
         notify(cursor, 'cotizacion', id, estado='Cotizada', precio=precio)
         conn.commit()
         return jsonify({'mensaje': 'Cotización enviada'}), 200
-    except Exception as e:
+    except Exception:
         conn.rollback()
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.exception('No se pudo actualizar la cotización y su aviso')
+        return jsonify(error='No se pudo guardar el precio y su aviso. Intente de nuevo.'), 500
     finally:
         conn.close()
 
@@ -806,14 +807,14 @@ def rechazar_cotizacion(id):
             (id,),
             fallback_sql="UPDATE Cotizaciones SET Estado='Rechazada' WHERE ID=?",
         )
-        conn.commit()
         from app.whatsapp.repository import notify
         notify(cursor, 'cotizacion', id, phone=getattr(row, 'TelefonoContacto', None), estado='Rechazada')
+        conn.commit()
         return jsonify({'mensaje': 'Cotización rechazada'}), 200
-    except Exception as e:
+    except Exception:
         conn.rollback()
         current_app.logger.exception("Error al rechazar cotización")
-        return jsonify({'error': str(e)}), 500
+        return jsonify(error='No se pudo guardar el rechazo y su aviso. Intente de nuevo.'), 500
     finally:
         conn.close()
 
@@ -863,13 +864,13 @@ def aceptar_cotizacion(id):
         if cursor.rowcount != 1:
             return jsonify(error='La cotización cambió. Actualice la pantalla.'), 409
 
-        conn.commit()
         from app.whatsapp.repository import notify
         notify(cursor, 'cotizacion', id, phone=getattr(row, 'TelefonoContacto', None), estado='Aceptada', precio=float(row.PrecioCotizado))
+        conn.commit()
         return jsonify(mensaje='Cotización aceptada', id=id, precio_cotizado=float(row.PrecioCotizado)), 200
-    except Exception as error:
+    except Exception:
         conn.rollback()
         current_app.logger.exception("Error al aceptar cotización")
-        return jsonify(error=str(error)), 500
+        return jsonify(error='No se pudo guardar la aceptación y su aviso. Intente de nuevo.'), 500
     finally:
         conn.close()

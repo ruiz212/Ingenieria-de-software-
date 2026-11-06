@@ -550,40 +550,38 @@ def notify(cursor, kind, entity_id, *, phone=None, estado=None, precio=None,
     """Trigger SQL stored procedure and ensure phone-associated session delivery."""
     if os.environ.get('WHATSAPP_ENABLED', '0') != '1':
         return
+    if kind == 'cotizacion':
+        # The published procedure reads the quote and enqueues its notice through
+        # ownership chaining, in the caller's transaction. A second connection
+        # would race/lock this change and could notify a price that rolled back.
+        cursor.execute('EXEC crm.sp_WhatsAppNotificar ?,?', kind, entity_id)
+        WAKE_EVENT.set()
+        return
     # 1. Execute SQL stored procedure (standard contract with ownership chaining)
     try:
         cursor.execute('EXEC crm.sp_WhatsAppNotificar ?,?', kind, entity_id)
     except Exception:
         logging.getLogger(__name__).debug('sp_WhatsAppNotificar omitido en cursor actual', exc_info=True)
     # 2. If phone is not provided, query notification metadata via stored procedure
-    if not phone and kind in ('pedido', 'cotizacion'):
+    if not phone and kind == 'pedido':
         try:
             cursor.execute('EXEC crm.sp_WhatsAppDatosAviso ?,?', kind, entity_id)
             row = cursor.fetchone()
             if row:
-                if kind == 'pedido':
-                    phone = row[0]
-                    numero_factura = numero_factura or row[1]
-                    codigo_seguimiento = codigo_seguimiento or row[2]
-                    estado = estado or row[3]
-                    fecha_entrega = fecha_entrega or row[4]
-                    total = row[5] or 0
-                    pagado = row[6] or 0
-                    if saldo is None and total is not None and pagado is not None:
-                        saldo = max(0.0, float(total) - float(pagado))
-                elif kind == 'cotizacion':
-                    phone = row[0]
-                    estado = estado or row[1]
-                    precio = precio if precio is not None else row[2]
-                    fecha_entrega = fecha_entrega or row[3]
+                phone = row[0]
+                numero_factura = numero_factura or row[1]
+                codigo_seguimiento = codigo_seguimiento or row[2]
+                estado = estado or row[3]
+                fecha_entrega = fecha_entrega or row[4]
+                total = row[5] or 0
+                pagado = row[6] or 0
+                if saldo is None and total is not None and pagado is not None:
+                    saldo = max(0.0, float(total) - float(pagado))
         except Exception:
             logging.getLogger(__name__).debug('No se pudieron resolver datos de aviso para %s:%s', kind, entity_id, exc_info=True)
     # 3. Also ensure phone-based session creation and idempotent queueing when phone is provided
     if phone and estado:
-        if kind == 'cotizacion':
-            text = _format_quote_notification(entity_id, estado, precio=precio, fecha_entrega=fecha_entrega)
-            key = f"quote:{entity_id}:{estado}:{precio if precio is not None else 0}"
-        elif kind == 'pedido' and numero_factura:
+        if kind == 'pedido' and numero_factura:
             text = _format_order_notification(
                 numero_factura, estado,
                 codigo_seguimiento=codigo_seguimiento,

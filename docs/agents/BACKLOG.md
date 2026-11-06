@@ -1,5 +1,18 @@
 # Plantilla de tareas futuras
 
+## TASK-2026-007 — Precio/rechazo de cotizaciones y sincronización WhatsApp
+
+- Solicitud: reparar acciones de cotizaciones del POS y su enlace con el bot.
+- Alcance: API JSON/CSRF, actualización de filas, estado Aceptada y outbox
+  transaccional de cotizaciones. Sin cambios de reglas fiscales ni permisos.
+- Criterios: precio/rechazo guardados con su aviso o revertidos juntos; cambios
+  desde WhatsApp visibles; borradores conservados si no cambia el servidor.
+- Evidencia local: 484 pruebas aprobadas, 168 omitidas y ocho recorridos Edge;
+  SP/roles y heartbeat comprobados mediante consultas de solo lectura.
+- Estado: validación local completa; CI y despliegue pendientes de verificar.
+- Integrador: Codex, sin delegación. Push/merge/main autorizados previamente.
+- Informe: `docs/REPARACION_COTIZACIONES_POS_2026-11-06.md`.
+
 ## TASK-2026-006 — Error DGI y revisión de carga/CSS
 
 - Solicitud: reparar DGI y revisar CSS y tiempos de carga; 06-11-2026.
@@ -13,7 +26,7 @@
   y mutaciones transaccionales; CSS comprobado con navegador real.
 - Evidencia: 475 pruebas aprobadas, 168 omitidas, 46 paquetes CSS vigentes;
   comprobaciones SQL de solo lectura y Edge 390/1440 px.
-- Estado: validación local completa; CI Linux y despliegue por comprobar.
+- Estado: fusionado y desplegado en `1e85bca`; workflow 42176767030 aprobado.
 - Responsable: Codex, sin delegación.
 - Informe: `docs/RENDIMIENTO_DGI_2026-11-06.md`.
 
