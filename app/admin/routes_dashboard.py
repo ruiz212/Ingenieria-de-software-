@@ -370,9 +370,19 @@ def estadistica():
             'stock': f"{stock:.2f} {r.Abreviatura}",
             'consumo_diario': f"{consumo_diario:.2f} {r.Abreviatura}",
             'dias_restantes': dias_restantes,
-            'alerta': dias_restantes <= 7
+            'alerta': dias_restantes <= 7,
+            'atencion': 7 < dias_restantes <= 15,
+            'nivel': 'critico' if dias_restantes <= 7 else ('moderado' if dias_restantes <= 15 else 'optimo')
         })
     pronostico.sort(key=lambda x: x['dias_restantes'])
+
+    pronostico_prioritarios = [p for p in pronostico if p['dias_restantes'] <= 15]
+    pronostico_resumen = {
+        'total': len(pronostico),
+        'criticos': sum(1 for p in pronostico if p['dias_restantes'] <= 7),
+        'moderados': sum(1 for p in pronostico if 7 < p['dias_restantes'] <= 15),
+        'optimos': sum(1 for p in pronostico if p['dias_restantes'] > 15),
+    }
 
     # 9. Pronóstico Estadístico de Ventas (Regresión Lineal para próximos 7 días)
     hoy_ni = business_today()
@@ -401,4 +411,7 @@ def estadistica():
         ventas_por_hora=ventas_por_hora, ventas_diarias=ventas_diarias,
         rotacion_productos=rotacion_productos, mermas_mes=mermas_mes,
         clientes_nivel=clientes_nivel, rendimiento_lotes=rendimiento_lotes,
-        arqueos=arqueos, pronostico=pronostico, pronostico_ventas_data=pronostico_ventas_data)
+        arqueos=arqueos, pronostico=pronostico,
+        pronostico_resumen=pronostico_resumen,
+        pronostico_prioritarios=pronostico_prioritarios,
+        pronostico_ventas_data=pronostico_ventas_data)

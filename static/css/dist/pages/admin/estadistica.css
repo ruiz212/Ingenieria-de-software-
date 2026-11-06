@@ -62,3 +62,251 @@
     max-height: 18rem;
     overflow: auto;
 }
+
+
+/* Pronostico de Abastecimiento Inteligente */
+.page-estadistica .pronostico-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin: 1.25rem 1rem;
+}
+
+.page-estadistica .pronostico-kpi-card {
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color, #e0d5cb);
+    background: var(--surface-card, #ffffff);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.page-estadistica .pronostico-kpi-danger {
+    border-color: #f1b2ab;
+    background: #fff8f7;
+}
+
+.page-estadistica .pronostico-kpi-warning {
+    border-color: #f6d89e;
+    background: #fffdf5;
+}
+
+.page-estadistica .pronostico-kpi-success {
+    border-color: #b7e1be;
+    background: #f7fcf8;
+}
+
+.page-estadistica .pronostico-kpi-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted, #725e51);
+}
+
+.page-estadistica .pronostico-kpi-value {
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.2;
+    color: var(--text-main, #2c1e16);
+}
+
+.page-estadistica .pronostico-kpi-danger .pronostico-kpi-value {
+    color: var(--danger, #c53030);
+}
+
+.page-estadistica .pronostico-kpi-warning .pronostico-kpi-value {
+    color: #b47728;
+}
+
+.page-estadistica .pronostico-kpi-success .pronostico-kpi-value {
+    color: var(--success, #2f855a);
+}
+
+.page-estadistica .pronostico-kpi-desc {
+    font-size: 0.78rem;
+    color: var(--text-muted, #8a7364);
+}
+
+/* Seccion de Enfoque Prioritario */
+.page-estadistica .pronostico-focus-section {
+    margin: 0.5rem 1rem 1.25rem;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid #f6d89e;
+    background: #fffdf7;
+}
+
+.page-estadistica .pronostico-focus-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.page-estadistica .pronostico-focus-header h4 {
+    margin: 0;
+    font-size: 0.96rem;
+    font-weight: 700;
+    color: var(--text-main, #2c1e16);
+}
+
+.page-estadistica .pronostico-healthy-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 0.75rem 1rem 1.25rem;
+    padding: 16px 20px;
+    border-radius: 12px;
+    border: 1px solid #b7e1be;
+    background: #f7fcf8;
+    flex-wrap: wrap;
+}
+
+.page-estadistica .pronostico-healthy-icon {
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.page-estadistica .pronostico-healthy-content {
+    flex: 1 1 300px;
+}
+
+.page-estadistica .pronostico-healthy-content h4 {
+    margin: 0 0 4px 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--success, #2f855a);
+}
+
+.page-estadistica .pronostico-healthy-content p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--text-muted, #615044);
+    line-height: 1.45;
+}
+
+/* Desplegable Estilo DGI */
+.page-estadistica .pronostico-expandable-details {
+    margin: 0.5rem 1rem 1.25rem;
+    border: 1px solid var(--border-color, #e0d5cb);
+    border-radius: 12px;
+    background: var(--surface-card, #ffffff);
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+}
+
+.page-estadistica .pronostico-expandable-details[open] {
+    border-color: #b58f6d;
+}
+
+.page-estadistica .pronostico-expandable-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    background: var(--surface-sunken, #f8f3ee);
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.92rem;
+    user-select: none;
+    transition: background 0.15s ease;
+    list-style: none;
+}
+
+.page-estadistica .pronostico-expandable-summary::-webkit-details-marker {
+    display: none;
+}
+
+.page-estadistica .pronostico-expandable-summary:hover {
+    background: #f2e9e1;
+}
+
+.page-estadistica .summary-title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-main, #2c1e16);
+}
+
+.page-estadistica .summary-badge {
+    font-size: 0.78rem;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: #e9ded4;
+    color: #5c4434;
+    font-weight: 600;
+}
+
+.page-estadistica .pronostico-expandable-details[open] .summary-badge {
+    background: #5c4434;
+    color: #ffffff;
+}
+
+.page-estadistica .pronostico-expandable-content {
+    padding: 16px;
+    border-top: 1px solid var(--border-color, #e0d5cb);
+}
+
+.page-estadistica .pronostico-filter-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.page-estadistica .pronostico-search-box {
+    flex: 1 1 220px;
+}
+
+.page-estadistica .pronostico-filter-pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.page-estadistica .filter-pill {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border-color, #d7c5b6);
+    background: var(--surface, #ffffff);
+    color: var(--text-muted, #6a5649);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.page-estadistica .filter-pill:hover {
+    border-color: #b58f6d;
+    color: var(--text-main, #2c1e16);
+}
+
+.page-estadistica .filter-pill.active {
+    background: var(--primary, #653f25);
+    border-color: var(--primary, #653f25);
+    color: #ffffff;
+}
+
+.page-estadistica .pronostico-full-table-scroll {
+    max-height: 420px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color, #e5d9cd);
+    border-radius: 8px;
+}
+
+.page-estadistica .btn-xs {
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    min-height: auto;
+    line-height: 1.4;
+}

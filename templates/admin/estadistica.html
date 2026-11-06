@@ -133,48 +133,88 @@
 
 <!-- Row 3: Rendimiento de Lotes -->
 <div class="panel panel-full panel-accent-success mt-3">
-    <div class="panel-header">
+    <div class="panel-header flex-between">
         <h3>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             Rendimiento de Lotes (Varianza)
         </h3>
+        <span class="text-muted estadistica-text-muted">Control de eficiencia contra recetas estándar</span>
     </div>
     <div class="panel-body panel-body-flush">
         {% if rendimiento_lotes %}
-        <div class="table-responsive">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Producto</th>
-                        <th class="estadistica-th-spacing">Producido</th>
-                        <th class="estadistica-th-spacing">Esperado</th>
-                        <th class="estadistica-th-spacing">Varianza %</th>
-                        <th class="estadistica-th-spacing">Estado</th>
-                        <th class="estadistica-th-spacing-2">Fecha</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for l in rendimiento_lotes %}
-                    <tr>
-                        <td class="cell-bold">{{ l.producto }}</td>
-                        <td class="estadistica-th-spacing">{{ l.producido }}</td>
-                        <td class="estadistica-th-spacing">{{ l.esperado }}</td>
-                        <td class="statistics-stock-state {{ "statistics-stock-alert" if l.alerta else "statistics-stock-healthy" }}">
-                            {{ l.varianza }}%
-                        </td>
-                        <td class="estadistica-th-spacing">
-                            {% if l.alerta %}
-                            <span class="badge badge-danger">⚠ Alerta</span>
-                            {% else %}
-                            <span class="badge badge-success">✅ Normal</span>
-                            {% endif %}
-                        </td>
-                        <td class="cell-muted estadistica-th-spacing-2">{{ l.fecha }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+            {% set lotes_desviados = rendimiento_lotes | selectattr('alerta') | list %}
+            {% if lotes_desviados %}
+            <div class="pronostico-focus-section">
+                <div class="pronostico-focus-header">
+                    <h4>⚠️ Lotes con desviación fuera de tolerancia (&gt;5%)</h4>
+                    <span class="badge badge-danger">{{ lotes_desviados|length }} alerta{{ 's' if lotes_desviados|length != 1 }}</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th class="estadistica-th-spacing">Producido</th>
+                                <th class="estadistica-th-spacing">Esperado</th>
+                                <th class="estadistica-th-spacing">Varianza %</th>
+                                <th class="estadistica-th-spacing">Estado</th>
+                                <th class="estadistica-th-spacing-2">Fecha</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for l in lotes_desviados %}
+                            <tr>
+                                <td class="cell-bold">{{ l.producto }}</td>
+                                <td class="estadistica-th-spacing">{{ l.producido }}</td>
+                                <td class="estadistica-th-spacing">{{ l.esperado }}</td>
+                                <td class="statistics-stock-state statistics-stock-alert">{{ l.varianza }}%</td>
+                                <td class="estadistica-th-spacing"><span class="badge badge-danger">⚠ Desviado</span></td>
+                                <td class="cell-muted estadistica-th-spacing-2">{{ l.fecha }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <details class="estadistica-data-details" {% if not lotes_desviados %}open{% endif %}>
+                <summary>Ver historial de lotes producidos ({{ rendimiento_lotes|length }} evaluaciones)</summary>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th class="estadistica-th-spacing">Producido</th>
+                                <th class="estadistica-th-spacing">Esperado</th>
+                                <th class="estadistica-th-spacing">Varianza %</th>
+                                <th class="estadistica-th-spacing">Estado</th>
+                                <th class="estadistica-th-spacing-2">Fecha</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for l in rendimiento_lotes %}
+                            <tr>
+                                <td class="cell-bold">{{ l.producto }}</td>
+                                <td class="estadistica-th-spacing">{{ l.producido }}</td>
+                                <td class="estadistica-th-spacing">{{ l.esperado }}</td>
+                                <td class="statistics-stock-state {{ "statistics-stock-alert" if l.alerta else "statistics-stock-healthy" }}">
+                                    {{ l.varianza }}%
+                                </td>
+                                <td class="estadistica-th-spacing">
+                                    {% if l.alerta %}
+                                    <span class="badge badge-danger">⚠ Alerta</span>
+                                    {% else %}
+                                    <span class="badge badge-success">✅ Normal</span>
+                                    {% endif %}
+                                </td>
+                                <td class="cell-muted estadistica-th-spacing-2">{{ l.fecha }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
         {% else %}
             <div class="empty-state">
                 <div class="empty-state-icon">🏭</div>
@@ -234,52 +274,175 @@
     </div>
 </div>
 
-<!-- Row 5: Pronóstico de Abastecimiento -->
+<!-- Row 5: Pronóstico de Abastecimiento Inteligente -->
 <div class="panel panel-full panel-accent-cafe mt-3">
     <div class="panel-header flex-between">
-        <h3>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
-            Pronóstico de Abastecimiento (Inteligencia)
-        </h3>
-        <span class="text-muted estadistica-text-muted">Predicción basada en el historial de consumo por lote</span>
+        <div>
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+                Pronóstico de Abastecimiento Inteligente
+            </h3>
+            <p class="text-muted estadistica-text-muted">Monitoreo predictivo de autonomía y reposición de materias primas a 30 días</p>
+        </div>
+        <div>
+            {% if pronostico %}
+                {% set criticos_count = pronostico_resumen.criticos if pronostico_resumen is defined else (pronostico | selectattr('alerta') | list | length) %}
+                {% set moderados_count = pronostico_resumen.moderados if pronostico_resumen is defined else (pronostico | selectattr('atencion') | list | length) %}
+                {% if criticos_count > 0 %}
+                    <span class="badge badge-danger">{{ criticos_count }} insumo{{ 's' if criticos_count != 1 }} crítico{{ 's' if criticos_count != 1 }}</span>
+                {% elif moderados_count > 0 %}
+                    <span class="badge badge-warning">{{ moderados_count }} en observación</span>
+                {% else %}
+                    <span class="badge badge-success">Abastecimiento saludable</span>
+                {% endif %}
+            {% endif %}
+        </div>
     </div>
     <div class="panel-body panel-body-flush">
         {% if pronostico %}
-        <div class="table-responsive">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Insumo</th>
-                        <th>Stock Actual</th>
-                        <th>Consumo Diario Prom.</th>
-                        <th>Días Restantes</th>
-                        <th>Estado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for p in pronostico %}
-                    <tr>
-                        <td class="cell-bold">{{ p.nombre }}</td>
-                        <td>{{ p.stock }}</td>
-                        <td>{{ p.consumo_diario }}</td>
-                        <td class="fw-700 {% if p.alerta %}text-danger{% endif %}">{{ p.dias_restantes }} días</td>
-                        <td>
-                            {% if p.alerta %}
-                            <span class="badge badge-danger">Comprar Urgente</span>
-                            {% else %}
-                            <span class="badge badge-success">Suficiente</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+            <!-- Tira de KPIs de Estado General -->
+            <div class="pronostico-kpi-grid">
+                <div class="pronostico-kpi-card pronostico-kpi-danger">
+                    <div class="pronostico-kpi-header">
+                        <span class="pronostico-kpi-icon">🚨</span>
+                        <span class="pronostico-kpi-label">Críticos (≤ 7 días)</span>
+                    </div>
+                    <div class="pronostico-kpi-value">{{ pronostico_resumen.criticos if pronostico_resumen is defined else (pronostico | selectattr('alerta') | list | length) }}</div>
+                    <div class="pronostico-kpi-desc">Requieren compra inmediata</div>
+                </div>
+                <div class="pronostico-kpi-card pronostico-kpi-warning">
+                    <div class="pronostico-kpi-header">
+                        <span class="pronostico-kpi-icon">⏳</span>
+                        <span class="pronostico-kpi-label">Atención (8–15 días)</span>
+                    </div>
+                    <div class="pronostico-kpi-value">{{ pronostico_resumen.moderados if pronostico_resumen is defined else (pronostico | selectattr('atencion') | list | length) }}</div>
+                    <div class="pronostico-kpi-desc">Planificar reabastecimiento</div>
+                </div>
+                <div class="pronostico-kpi-card pronostico-kpi-success">
+                    <div class="pronostico-kpi-header">
+                        <span class="pronostico-kpi-icon">🛡️</span>
+                        <span class="pronostico-kpi-label">Stock Seguro (&gt; 15 días)</span>
+                    </div>
+                    <div class="pronostico-kpi-value">{{ pronostico_resumen.optimos if pronostico_resumen is defined else ((pronostico | length) - (pronostico | selectattr('dias_restantes', 'le', 15) | list | length)) }}</div>
+                    <div class="pronostico-kpi-desc">Producción continua asegurada</div>
+                </div>
+            </div>
+
+            <!-- Foco Prioritario: Solo lo Importante -->
+            {% set prioritarios = pronostico_prioritarios if pronostico_prioritarios is defined else (pronostico | selectattr('dias_restantes', 'le', 15) | list) %}
+            {% if prioritarios %}
+            <div class="pronostico-focus-section">
+                <div class="pronostico-focus-header">
+                    <h4>⚠️ Insumos que requieren reabastecimiento próximo</h4>
+                    <a href="/admin/inventario" class="btn btn-primary btn-sm">Gestionar en Compras / Inventario →</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Insumo</th>
+                                <th>Stock Actual</th>
+                                <th>Consumo Diario Prom.</th>
+                                <th>Autonomía Estimada</th>
+                                <th>Estado</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in prioritarios %}
+                            <tr>
+                                <td class="cell-bold">{{ p.nombre }}</td>
+                                <td>{{ p.stock }}</td>
+                                <td>{{ p.consumo_diario }}</td>
+                                <td class="fw-700 {% if p.alerta %}text-danger{% else %}text-warning{% endif %}">{{ p.dias_restantes }} días</td>
+                                <td>
+                                    {% if p.alerta %}
+                                    <span class="badge badge-danger">Comprar Urgente</span>
+                                    {% else %}
+                                    <span class="badge badge-warning">Atención Temprana</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="/admin/inventario" class="btn btn-outline btn-xs">Comprar</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div class="pronostico-healthy-banner">
+                <div class="pronostico-healthy-icon">✨</div>
+                <div class="pronostico-healthy-content">
+                    <h4>Todo el abastecimiento está cubierto para más de 15 días continuos</h4>
+                    <p>No se registran quiebres inminentes de materia prima. El insumo más próximo a reabastecer según el ritmo de elaboración es <strong>{{ pronostico[0].nombre }}</strong> con <strong>{{ pronostico[0].dias_restantes }} días</strong> de inventario restante.</p>
+                </div>
+                <a href="/admin/inventario" class="btn btn-outline btn-sm">Consultar existencias</a>
+            </div>
+            {% endif %}
+
+            <!-- Desplegable Estilo DGI para el Inventario Completo -->
+            <details class="pronostico-expandable-details" id="details-pronostico-completo">
+                <summary class="pronostico-expandable-summary">
+                    <div class="summary-title-wrapper">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                        <strong>Ver inventario completo y pronóstico general ({{ pronostico|length }} materias primas)</strong>
+                    </div>
+                    <span class="summary-badge">Desplegar tabla completa ▾</span>
+                </summary>
+                <div class="pronostico-expandable-content">
+                    <div class="pronostico-filter-toolbar">
+                        <div class="pronostico-search-box">
+                            <label for="buscar-pronostico-insumo" class="visually-hidden">Buscar insumo</label>
+                            <input type="search" id="buscar-pronostico-insumo" class="form-input form-input-sm" placeholder="Buscar materia prima (ej. Harina, Azúcar)...">
+                        </div>
+                        <div class="pronostico-filter-pills" role="radiogroup" aria-label="Filtrar pronóstico">
+                            <button type="button" class="filter-pill active" data-filter="todos">Todos ({{ pronostico|length }})</button>
+                            <button type="button" class="filter-pill" data-filter="critico">Críticos ({{ pronostico_resumen.criticos if pronostico_resumen is defined else (pronostico | selectattr('alerta') | list | length) }})</button>
+                            <button type="button" class="filter-pill" data-filter="moderado">Atención ({{ pronostico_resumen.moderados if pronostico_resumen is defined else (pronostico | selectattr('atencion') | list | length) }})</button>
+                            <button type="button" class="filter-pill" data-filter="optimo">Seguros ({{ pronostico_resumen.optimos if pronostico_resumen is defined else ((pronostico | length) - (pronostico | selectattr('dias_restantes', 'le', 15) | list | length)) }})</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive pronostico-full-table-scroll">
+                        <table class="data-table" id="tabla-pronostico-completo">
+                            <thead>
+                                <tr>
+                                    <th>Insumo</th>
+                                    <th>Stock Actual</th>
+                                    <th>Consumo Diario Prom.</th>
+                                    <th>Días Restantes</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in pronostico %}
+                                <tr class="pronostico-row" data-nivel="{{ p.nivel if p.nivel is defined else ('critico' if p.alerta else ('moderado' if p.dias_restantes <= 15 else 'optimo')) }}" data-nombre="{{ p.nombre | lower }}">
+                                    <td class="cell-bold">{{ p.nombre }}</td>
+                                    <td>{{ p.stock }}</td>
+                                    <td>{{ p.consumo_diario }}</td>
+                                    <td class="fw-700 {% if p.alerta %}text-danger{% elif p.dias_restantes <= 15 %}text-warning{% endif %}">{{ p.dias_restantes }} días</td>
+                                    <td>
+                                        {% if p.alerta %}
+                                        <span class="badge badge-danger">Comprar Urgente</span>
+                                        {% elif p.dias_restantes <= 15 %}
+                                        <span class="badge badge-warning">Atención</span>
+                                        {% else %}
+                                        <span class="badge badge-success">Suficiente</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </details>
         {% else %}
-        <div class="empty-state">
-            <div class="empty-state-icon">📊</div>
-            <p>Hornea algunos lotes de producción para que el sistema calcule tu pronóstico de compras.</p>
-        </div>
+            <div class="empty-state">
+                <div class="empty-state-icon">📊</div>
+                <p>Hornea algunos lotes de producción para que el sistema calcule tu pronóstico de compras.</p>
+            </div>
         {% endif %}
     </div>
 </div>
@@ -394,6 +557,40 @@
                 }
             });
         }
+
+        // 4. Filtrado y búsqueda del Pronóstico de Abastecimiento Desplegable
+        const searchPronostico = document.getElementById('buscar-pronostico-insumo');
+        const filterPills = document.querySelectorAll('.pronostico-filter-pills .filter-pill');
+        const pronosticoRows = document.querySelectorAll('#tabla-pronostico-completo tbody tr.pronostico-row');
+
+        let currentFilter = 'todos';
+        let currentQuery = '';
+
+        function applyPronosticoFilter() {
+            pronosticoRows.forEach(row => {
+                const nivel = row.dataset.nivel;
+                const nombre = row.dataset.nombre || '';
+                const matchesFilter = (currentFilter === 'todos') || (nivel === currentFilter);
+                const matchesSearch = !currentQuery || nombre.includes(currentQuery);
+                row.hidden = !(matchesFilter && matchesSearch);
+            });
+        }
+
+        if (searchPronostico) {
+            searchPronostico.addEventListener('input', (e) => {
+                currentQuery = e.target.value.trim().toLowerCase();
+                applyPronosticoFilter();
+            });
+        }
+
+        filterPills.forEach(pill => {
+            pill.addEventListener('click', () => {
+                filterPills.forEach(p => p.classList.remove('active'));
+                pill.classList.add('active');
+                currentFilter = pill.dataset.filter;
+                applyPronosticoFilter();
+            });
+        });
 
         // 3. Gráfico Clientes por Nivel
         if (document.getElementById('chart-clientes-nivel') && clientesNivel.length > 0) {

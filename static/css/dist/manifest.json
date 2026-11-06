@@ -101,7 +101,7 @@
   },
   "pages/admin/estadistica": {
     "file": "dist/pages/admin/estadistica.css",
-    "version": "7e90e5be1755"
+    "version": "bf6c22d4ac17"
   },
   "pages/admin/mercadotecnia": {
     "file": "dist/pages/admin/mercadotecnia.css",
