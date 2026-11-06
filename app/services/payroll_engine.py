@@ -527,14 +527,14 @@ def calcular_saldo_vacaciones_empleado(
     **kwargs
 ):
     """Calcula el saldo de vacaciones devengadas, gozadas y disponibles con semáforo."""
-    from app.services.hr_calculations import as_date, vacation_days_consumed
+    from app.services.hr_calculations import as_date, vacation_days_consumed, dias_comerciales_360
     f_ingreso = as_date(fecha_ingreso)
     f_corte = as_date(as_of or fecha_corte or date.today())
     if f_corte < f_ingreso:
         f_corte = f_ingreso
         
-    dias_trabajados = (f_corte - f_ingreso).days
-    dias_devengados = round(dias_trabajados * (30.0 / 365.0), 2)
+    dias_trabajados = dias_comerciales_360(f_ingreso, f_corte)
+    dias_devengados = round(dias_trabajados * (30.0 / 360.0), 2)
     if dias_gozados is not None:
         gozados = float(dias_gozados)
     elif licencias:

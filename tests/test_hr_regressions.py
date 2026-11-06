@@ -97,9 +97,9 @@ def test_consumed_vacation_is_not_paid_twice_in_api_or_report(liquidation, monke
     assert api.status_code == report.status_code == 200
     assert api.json['liquidacion']['vacaciones']['dias'] == 0
     assert api.json['liquidacion']['vacaciones']['monto_bruto'] == 0
-    assert api.json['liquidacion']['aguinaldo']['monto'] == 2630.14
+    assert api.json['liquidacion']['aguinaldo']['monto'] == 2583.33
     assert api.json['liquidacion']['indemnizacion']['monto_bruto'] == 30000
-    assert api.json['liquidacion']['total_liquidacion'] == 32630.14
+    assert api.json['liquidacion']['total_liquidacion'] == 32583.33
     assert report.json == api.json['liquidacion']
     assert db.closed
 

@@ -1,5 +1,24 @@
 """Cálculos de RRHH puros, compartidos por API y reportes."""
+import calendar
 from datetime import date, datetime, timedelta, time
+
+
+def dias_comerciales_360(d1, d2, inclusivo=False) -> int:
+    """Calcula los días transcurridos bajo la convención de mes comercial (30 días)
+    y año comercial (360 días / 12 meses).
+    """
+    if not d1 or not d2 or d2 < d1:
+        return 0
+    y1, m1, day1 = d1.year, d1.month, d1.day
+    y2, m2, day2 = d2.year, d2.month, d2.day
+    last_d1 = calendar.monthrange(y1, m1)[1]
+    last_d2 = calendar.monthrange(y2, m2)[1]
+    adj_day1 = 30 if day1 >= 30 or (day1 == last_d1 and day1 in (28, 29)) else day1
+    adj_day2 = 30 if day2 >= 30 or (day2 == last_d2 and day2 in (28, 29)) else day2
+    dias = (y2 - y1) * 360 + (m2 - m1) * 30 + (adj_day2 - adj_day1)
+    if inclusivo:
+        dias += 1
+    return max(0, dias)
 from app.services.business_time import business_now
 
 
@@ -160,9 +179,9 @@ def liquidation(employee, cutoff, reason, recent_salaries, licenses):
         raise ValueError('La fecha de egreso no puede ser anterior al ingreso.')
     salary = float(employee.SalarioBase)
     daily_salary = salary / 30
-    worked_days = (cutoff - hire_date).days
-    years, remaining_months = worked_days // 365, (worked_days % 365) // 30
-    earned = worked_days * (30 / 365)
+    worked_days = dias_comerciales_360(hire_date, cutoff)
+    years, remaining_months = worked_days // 360, (worked_days % 360) // 30
+    earned = worked_days * (30 / 360)
     consumed = vacation_days_consumed(licenses, hire_date, cutoff)
     pending = max(0.0, earned - consumed)
     vacation_salary = (sum(recent_salaries) / len(recent_salaries) if recent_salaries else salary) / 30
@@ -170,8 +189,8 @@ def liquidation(employee, cutoff, reason, recent_salaries, licenses):
     vacation_inss = vacation_gross * 0.07
     maximum_salary = max(recent_salaries) if recent_salaries else salary
     cycle_start = date(cutoff.year if cutoff.month == 12 else cutoff.year - 1, 12, 1)
-    bonus_days = (cutoff - max(cycle_start, hire_date)).days + 1
-    bonus = maximum_salary * (bonus_days / 365.0)
+    bonus_days = min(360, dias_comerciales_360(max(cycle_start, hire_date), cutoff, inclusivo=True))
+    bonus = maximum_salary * (bonus_days / 360.0)
     applies = reason in ('Despido Injustificado', 'Renuncia Voluntaria')
     compensation_days = 0
     if applies:

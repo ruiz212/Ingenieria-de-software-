@@ -16,7 +16,7 @@ from decimal import Decimal
 from app.services.validation import amount, positive_int, required_text, validate_cedula_nicaragua, validate_telefono_nicaragua
 from app.services.hr_calculations import (
     as_date, absent_dates, liquidation, can_mark_exit,
-    resolver_horario_y_clasificar_asistencia,
+    resolver_horario_y_clasificar_asistencia, dias_comerciales_360,
 )
 from app.services.payroll_engine import (
     calcular_planilla_completa,
@@ -1163,7 +1163,7 @@ def calcular_nomina():
         provision_aguinaldo = round(amount(total_devengado_salarial) / Decimal('12'), 2)
 
         fecha_ingreso = as_date(emp.FechaIngreso)
-        anios_antiguedad = max(0.0, (periodo_fin_dt - fecha_ingreso).days / 365.25)
+        anios_antiguedad = max(0.0, dias_comerciales_360(fecha_ingreso, periodo_fin_dt) / 360.0)
         tasa_indem = calcular_tasa_provision_indemnizacion(anios_antiguedad)
         provision_indemnizacion = round(amount(total_devengado_salarial) * tasa_indem, 2)
         total_patronal = inss_patronal + inatec + provision_vacaciones + provision_aguinaldo + provision_indemnizacion
@@ -1627,7 +1627,7 @@ def calcular_nomina_batch():
             provision_aguinaldo = round(amount(total_devengado_salarial) / Decimal('12'), 2)
 
             fecha_ingreso = as_date(emp.FechaIngreso)
-            anios_antiguedad = max(0.0, (fin_dt - fecha_ingreso).days / 365.25)
+            anios_antiguedad = max(0.0, dias_comerciales_360(fecha_ingreso, fin_dt) / 360.0)
             tasa_indem = Decimal(str(calcular_tasa_provision_indemnizacion(anios_antiguedad)))
             provision_indemnizacion = round(amount(total_devengado_salarial) * tasa_indem, 2)
             total_patronal = inss_patronal + inatec + provision_vacaciones + provision_aguinaldo + provision_indemnizacion
@@ -1823,8 +1823,8 @@ def calcular_aguinaldo_batch():
             inicio_aguinaldo_real = max(fecha_inicio_ciclo, fecha_ingreso)
             
             if inicio_aguinaldo_real <= fecha_fin_ciclo:
-                dias_aguinaldo = (fecha_fin_ciclo - inicio_aguinaldo_real).days + 1
-                aguinaldo_proporcional = float(amount(salario_max_6m * (dias_aguinaldo / 365.0)))
+                dias_aguinaldo = min(360, dias_comerciales_360(inicio_aguinaldo_real, fecha_fin_ciclo, inclusivo=True))
+                aguinaldo_proporcional = float(amount(salario_max_6m * (dias_aguinaldo / 360.0)))
                 
                 execute_sp(
                     cursor,
@@ -2662,10 +2662,10 @@ def colilla_pago(nomina_id):
             fecha_inicio_ciclo = date(periodo_fin.year - 1, 12, 1)
             
         inicio_aguinaldo_real = max(fecha_inicio_ciclo, fecha_ingreso)
-        dias_aguinaldo = (periodo_fin - inicio_aguinaldo_real).days + 1
+        dias_aguinaldo = min(360, dias_comerciales_360(inicio_aguinaldo_real, periodo_fin, inclusivo=True))
         
         aguinaldo_proporcional = float(nomina.OtrosIngresos)
-        salario_max_6m = aguinaldo_proporcional / (dias_aguinaldo / 365.0) if dias_aguinaldo > 0 else 0
+        salario_max_6m = aguinaldo_proporcional / (dias_aguinaldo / 360.0) if dias_aguinaldo > 0 else 0
         
         aguinaldo_detalles = {
             'dias': dias_aguinaldo,
@@ -2773,10 +2773,10 @@ def reporte_aguinaldo():
             fecha_inicio_ciclo = date(periodo_fin.year - 1, 12, 1)
             
         inicio_aguinaldo_real = max(fecha_inicio_ciclo, fecha_ingreso)
-        dias_aguinaldo = (periodo_fin - inicio_aguinaldo_real).days + 1
+        dias_aguinaldo = min(360, dias_comerciales_360(inicio_aguinaldo_real, periodo_fin, inclusivo=True))
         
         aguinaldo_proporcional = float(n.AguinaldoMonto)
-        salario_max_6m = aguinaldo_proporcional / (dias_aguinaldo / 365.0) if dias_aguinaldo > 0 else 0
+        salario_max_6m = aguinaldo_proporcional / (dias_aguinaldo / 360.0) if dias_aguinaldo > 0 else 0
         
         registros.append({
             'nombre': n.NombreCompleto,

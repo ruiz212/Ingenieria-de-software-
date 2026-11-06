@@ -31,7 +31,7 @@ with app.app_context():
         inicio_aguinaldo_real = max(fecha_inicio_ciclo, fecha_ingreso)
         if inicio_aguinaldo_real <= fecha_fin_ciclo:
             dias_aguinaldo = (fecha_fin_ciclo - inicio_aguinaldo_real).days + 1
-            aguinaldo_proporcional = salario_max_6m * (dias_aguinaldo / 365.0)
+            aguinaldo_proporcional = salario_max_6m * (dias_aguinaldo / 360.0)
             print('Aguinaldo:', aguinaldo_proporcional)
             try:
                 cursor.execute("""
