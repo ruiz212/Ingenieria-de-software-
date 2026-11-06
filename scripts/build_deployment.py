@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
-ROOT_FILES = {'run.py', 'config.py', 'requirements.txt', 'requirements.lock', 'requirements-whatsapp.txt'}
+ROOT_FILES = {'run.py', 'config.py', 'gunicorn.conf.py', 'requirements.txt', 'requirements.lock', 'requirements-whatsapp.txt'}
 RUNTIME_DIRS = {'app', 'templates', 'static'}
 SCRIPTS = {'scripts/run_whatsapp.py'}
 
@@ -28,6 +28,11 @@ def package(root, output):
             name = relative.as_posix()
             if name in ROOT_FILES or name in SCRIPTS or parts[0] in RUNTIME_DIRS:
                 archive.write(path, name)
+                # Pre-compress static assets with gzip so WhiteNoise serves them compressed directly
+                if parts[0] == 'static' and path.suffix.lower() in {'.css', '.js', '.json', '.svg'}:
+                    import gzip
+                    gz_data = gzip.compress(path.read_bytes(), compresslevel=9)
+                    archive.writestr(f'{name}.gz', gz_data)
     return output
 
 

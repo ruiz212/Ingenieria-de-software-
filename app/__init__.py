@@ -14,8 +14,10 @@ def create_app(config_class=Config):
         static_folder='../static'
     )
     app.config.from_object(config_class)
-    app.config['TEMPLATES_AUTO_RELOAD'] = True
-    app.jinja_env.auto_reload = True
+    import os
+    is_dev = bool(app.debug or os.environ.get('FLASK_DEBUG') == '1')
+    app.config['TEMPLATES_AUTO_RELOAD'] = is_dev
+    app.jinja_env.auto_reload = is_dev
     from app.assets import init_assets
     init_assets(app)
 
@@ -33,7 +35,13 @@ def create_app(config_class=Config):
     # 2. Servir archivos estáticos eficientemente en producción y desarrollo
     import os
     static_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../static')
-    app.wsgi_app = WhiteNoise(app.wsgi_app, root=static_path, prefix='static/', autorefresh=True)
+    app.wsgi_app = WhiteNoise(
+        app.wsgi_app,
+        root=static_path,
+        prefix='static/',
+        autorefresh=is_dev,
+        max_age=60 if is_dev else 31536000,
+    )
 
     # Inicializar extensiones
     from app.extensions import login_manager, csrf

@@ -226,6 +226,18 @@ def contabilidad():
         cursor,
         'contabilidad.sp_ListarPeriodosContablesResumen',
         fallback_sql="""
+        WITH ResumenPeriodos AS (
+            SELECT 
+                a.PeriodoID,
+                ISNULL(SUM(CASE WHEN c.Clase = 'Ingreso' THEN (d.Haber - d.Debe) ELSE 0 END), 0) AS TotalIngresos,
+                ISNULL(SUM(CASE WHEN c.Clase = 'Costo' THEN (d.Debe - d.Haber) ELSE 0 END), 0) AS TotalCostos,
+                ISNULL(SUM(CASE WHEN c.Clase = 'Gasto' THEN (d.Debe - d.Haber) ELSE 0 END), 0) AS TotalGastos
+            FROM AsientosDiario a
+            JOIN DetalleAsientos d ON d.AsientoID = a.ID
+            JOIN CatalogoCuentas c ON d.CuentaID = c.ID AND c.Clase IN ('Ingreso', 'Costo', 'Gasto')
+            WHERE a.Estado = 'Contabilizado'
+            GROUP BY a.PeriodoID
+        )
         SELECT 
             p.ID,
             p.Mes,
@@ -234,14 +246,11 @@ def contabilidad():
             p.FechaApertura,
             p.FechaCierre,
             p.CierreUtilidad,
-            ISNULL(SUM(CASE WHEN c.Clase = 'Ingreso' THEN (d.Haber - d.Debe) ELSE 0 END), 0) AS TotalIngresos,
-            ISNULL(SUM(CASE WHEN c.Clase = 'Costo' THEN (d.Debe - d.Haber) ELSE 0 END), 0) AS TotalCostos,
-            ISNULL(SUM(CASE WHEN c.Clase = 'Gasto' THEN (d.Debe - d.Haber) ELSE 0 END), 0) AS TotalGastos
+            ISNULL(r.TotalIngresos, 0) AS TotalIngresos,
+            ISNULL(r.TotalCostos, 0) AS TotalCostos,
+            ISNULL(r.TotalGastos, 0) AS TotalGastos
         FROM PeriodosContables p
-        LEFT JOIN AsientosDiario a ON a.PeriodoID = p.ID AND a.Estado IN ('Contabilizado', 'Anulado')
-        LEFT JOIN DetalleAsientos d ON d.AsientoID = a.ID
-        LEFT JOIN CatalogoCuentas c ON d.CuentaID = c.ID AND c.Clase IN ('Ingreso', 'Costo', 'Gasto')
-        GROUP BY p.ID, p.Mes, p.Anio, p.Estado, p.FechaApertura, p.FechaCierre, p.CierreUtilidad
+        LEFT JOIN ResumenPeriodos r ON r.PeriodoID = p.ID
         ORDER BY p.Anio DESC, p.Mes DESC
         """,
     )

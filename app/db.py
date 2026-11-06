@@ -232,6 +232,12 @@ def execute_sp(cursor, sp_name: str, params: tuple | list = (), fallback_sql: st
             return cursor.execute(sql, *params)
         return cursor.execute(sql)
     except pyodbc.Error as err:
+        err_str = str(err)
+        if fallback_sql is not None and ('2812' in err_str or 'Could not find stored procedure' in err_str):
+            use_params = params if fallback_params is None else fallback_params
+            if use_params:
+                return cursor.execute(fallback_sql, *use_params)
+            return cursor.execute(fallback_sql)
         try:
             from app.services.smtp_alerts import notify_error
             schema_part = sp_name.split('.')[0] if '.' in sp_name else None
