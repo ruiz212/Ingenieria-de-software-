@@ -26,6 +26,8 @@ Guardar datos persistentes de ejecución en almacenamiento apropiado bajo `/home
    y kiosco sin biometría y se inicia Gunicorn realmente en Linux.
 4. El merge o un workflow manual sobre `main` publica el ZIP mediante
    `/api/zipdeploy?isAsync=true`. Los despliegues de producción se serializan.
+   Si Kudu rechaza el envío con HTTP 409, espera hasta diez minutos y vuelve
+   a enviar el ZIP completo; no reintenta fallos de red con resultado ambiguo.
 5. El job espera el identificador concreto de ese despliegue, comprueba el
    manifiesto Oryx y espera un HTTP 200 del login con formulario CSRF. Una página
    genérica de Azure no cuenta como aplicación lista.

@@ -128,6 +128,32 @@ def test_release_requires_oryx_and_login_after_success(runtime_archive, monkeypa
     assert deployment_session.calls[-1][1].endswith('/api/vfs/site/wwwroot/oryx-manifest.toml')
 
 
+def test_busy_kudu_retries_archive_from_beginning(runtime_archive, monkeypatch):
+    module = load_module()
+    monkeypatch.setattr(module.time, 'sleep', lambda _: None)
+    payloads = []
+    class ReadingSession(Session):
+        def request(self, method, url, **kwargs):
+            payloads.append(kwargs['data'].read())
+            return super().request(method, url, **kwargs)
+    session = ReadingSession([response(409), response(202, headers={'Location': '/api/deployments/123'})])
+    result = module.submit_archive(session, 'https://bakery.scm.azurewebsites.net', runtime_archive, 60)
+    assert result.status_code == 202
+    assert len(session.calls) == 2
+    assert all(call[0] == 'POST' and 'isAsync=true' in call[1] for call in session.calls)
+    assert payloads == [runtime_archive.read_bytes(), runtime_archive.read_bytes()]
+
+
+def test_busy_kudu_has_bounded_wait(runtime_archive, monkeypatch):
+    module = load_module()
+    ticks = iter([0, 0, 61])
+    monkeypatch.setattr(module.time, 'monotonic', lambda: next(ticks))
+    monkeypatch.setattr(module.time, 'sleep', lambda _: None)
+    session = Session([response(409)])
+    with pytest.raises(RuntimeError, match='busy'):
+        module.submit_archive(session, 'https://bakery.scm.azurewebsites.net', runtime_archive, 60)
+
+
 @pytest.mark.parametrize('probe', ['wait_for_deployment', 'wait_for_login'])
 def test_pending_deployment_or_unready_login_times_out(probe, monkeypatch):
     module = load_module()
