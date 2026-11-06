@@ -1,5 +1,22 @@
 # Plantilla de tareas futuras
 
+## TASK-2026-006 — Error DGI y revisión de carga/CSS
+
+- Solicitud: reparar DGI y revisar CSS y tiempos de carga; 06-11-2026.
+- Autorización: reparación y optimización; continuidad de la entrega GitHub/main
+  previamente autorizada. Sin migraciones ni cambios de permisos.
+- Causas: SP de lectura inexistentes con fallback SELECT denegado; resultados
+  históricos sin los campos que esperaba el dashboard.
+- Cambios: SP publicados, compatibilidad histórica con revalidación explícita,
+  consultas sin transacciones largas y omisión de snapshots innecesarios.
+- Criterios: no 500 en DGI, no falsos resultados sin errores, vigencia preservada
+  y mutaciones transaccionales; CSS comprobado con navegador real.
+- Evidencia: 475 pruebas aprobadas, 168 omitidas, 46 paquetes CSS vigentes;
+  comprobaciones SQL de solo lectura y Edge 390/1440 px.
+- Estado: validación local completa; CI Linux y despliegue por comprobar.
+- Responsable: Codex, sin delegación.
+- Informe: `docs/RENDIMIENTO_DGI_2026-11-06.md`.
+
 ## TASK-2026-005 — Recuperar despliegue Python y fusionar entrega
 
 - Solicitud: reparar el despliegue, subir a GitHub y hacer merge; 06-11-2026 UTC.
@@ -13,7 +30,8 @@
   verificación de Oryx y login en el despliegue de `main`.
 - Seguridad: no versionar `.env`, JSON privado de configuración ni cargas;
   no migrar ni escribir datos SQL durante las pruebas.
-- Estado: implementación y validación local en curso; resultado remoto por verificar.
+- Estado: fusionado y desplegado en `60611f8`; workflow 42172260501 aprobado,
+  manifiesto Oryx y login público HTTP 200 comprobados.
 - Responsable: Codex; implementación y revisión sin delegación.
 - Plan: `docs/superpowers/plans/2026-11-06-azure-deployment.md`.
 

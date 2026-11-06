@@ -90,7 +90,7 @@
   <div class="dgi-table"><table id="dgi-revisions-table"><thead><tr><th>Revisión</th><th>Propósito</th><th>Estado interno</th><th>Resultado</th><th>Fecha (Nicaragua)</th><th>Responsables</th></tr></thead><tbody>
   {% for r in reviews %}<tr class="dgi-revision-item" data-proposito="{{ (r.Obligacion or '')|lower }}" data-version="{{ r.Version }}" data-estado="{{ r.Estado }}">
     <td><a href="{{ url_for('admin.dgi_review',review_id=r.ID) }}">#{{ r.ID }} · versión {{ r.Version }}</a></td><td>{{ r.Obligacion }}</td><td><span class="dgi-badge">{{ r.Estado }}</span></td>
-    <td>{% if not r.actual %}Reglas anteriores; abra y revalide{% elif r.errores %}{{ r.errores }} {{ 'error' if r.errores==1 else 'errores' }} en los datos{% else %}Sin errores bloqueantes{% if r.pendientes %}<br><small>Configuración fiscal pendiente</small>{% endif %}{% endif %}</td>
+    <td>{% if not r.actual %}Requiere revalidación; abra la revisión{% elif r.errores %}{{ r.errores }} {{ 'error' if r.errores==1 else 'errores' }} en los datos{% else %}Sin errores bloqueantes{% if r.pendientes %}<br><small>Configuración fiscal pendiente</small>{% endif %}{% endif %}</td>
     <td>{{ r.CreadoEn|dgi_time }}</td><td>Elaboró #{{ r.CreadoPor }}{% if r.AprobadoPor %}<br>Validó #{{ r.AprobadoPor }}{% endif %}</td>
   </tr>{% else %}<tr><td colspan="6">Aún no hay un diagnóstico en este mes. Use Analizar período.</td></tr>{% endfor %}
   <tr id="dgi-revisions-no-match" class="hidden"><td colspan="6" class="dgi-muted text-center py-4">No se encontraron revisiones con los filtros seleccionados.</td></tr>

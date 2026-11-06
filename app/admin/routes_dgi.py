@@ -11,7 +11,7 @@ from app.admin import admin_bp
 from app.auth.decorators import roles_required
 from app.db import execute_sp
 from app.services import dgi_repository as repo
-from app.services.dgi_engine import ENGINE_VERSION, NOTICE, fingerprint, rule_catalog, money
+from app.services.dgi_engine import ENGINE_VERSION, NOTICE, fingerprint, rule_catalog, money, stored_object, stored_result
 from app.services.dgi_excel import export_xlsx
 from app.services.dgi_repository import audit
 from app.services.business_time import business_now, invoice_time_evidence
@@ -101,14 +101,14 @@ def dgi_bad_input(error):
 @admin_bp.route('/dgi')
 @roles_required('Admin', 'SuperAdmin')
 def dgi_dashboard():
-    with repo.transaction() as cursor:
+    with repo.reading() as cursor:
         profile = repo.profile(cursor)
         periods = repo.periods(cursor)
         today = business_now().date()
         past = [p for p in periods if p['Desde'] <= today]
         suggested = past[0] if past else (periods[-1] if periods else None)
         selected_id = positive_id(request.args['periodo']) if request.args.get('periodo') else (suggested['ID'] if suggested else None)
-        selected = repo.get_period(cursor, selected_id, for_update=False) if selected_id else None
+        selected = repo.get_period(cursor, selected_id) if selected_id else None
         all_reviews = repo.history(cursor, selected_id) if selected_id else []
         show_history = request.args.get('historial') == '1'
         reviews, seen = [], set()
@@ -119,16 +119,19 @@ def dgi_dashboard():
             latest = review['Obligacion'] not in seen
             seen.add(review['Obligacion'])
             if show_history or latest:
+                summary = stored_result(review.pop('ResultadoJSON'))
+                can_check_sources = bool(summary is not None and review['Estado'] != 'OBSOLETO'
+                                         and review['Motor'] == ENGINE_VERSION)
                 obligation = review['Obligacion']
-                if selected and obligation not in snapshot_hashes:
+                if can_check_sources and selected and obligation not in snapshot_hashes:
                     if base_snapshot is None:
                         base_snapshot = repo.snapshot_base(cursor, selected)
                     snapshot_hashes[obligation] = fingerprint(repo.snapshot(cursor, selected, obligation, cached_base=base_snapshot))
                 saved_hash = review.get('Huella')
-                if not saved_hash:
-                    saved_hash = repo.get_review(cursor, review['ID'], for_update=False).get('Huella')
+                if can_check_sources and not saved_hash:
+                    saved_hash = repo.get_review(cursor, review['ID']).get('Huella')
                 hash_matches = bool(selected and saved_hash and snapshot_hashes.get(obligation) == saved_hash)
-                is_fresh = review['Estado'] != 'OBSOLETO' and review['Motor'] == ENGINE_VERSION and hash_matches
+                is_fresh = can_check_sources and hash_matches
                 review['actual'] = is_fresh
                 review['stale'] = not is_fresh
                 review['EstadoOriginal'] = review['Estado']
@@ -136,9 +139,8 @@ def dgi_dashboard():
                     review['Estado'] = 'Requiere Revalidación'
                     if latest:
                         any_stale = True
-                summary = json.loads(review.pop('ResultadoJSON'))
-                review['errores'] = summary['bloqueantes']
-                review['pendientes'] = summary.get('pendientes_configuracion', 0)
+                review['errores'] = summary['bloqueantes'] if summary else None
+                review['pendientes'] = summary.get('pendientes_configuracion', 0) if summary else None
                 reviews.append(review)
         if selected:
             selected['stale'] = any_stale
@@ -253,15 +255,17 @@ def dgi_create_review():
 @admin_bp.route('/dgi/revisiones/<int:review_id>')
 @roles_required('Admin', 'SuperAdmin')
 def dgi_review(review_id):
-    with repo.transaction() as cursor:
+    with repo.reading() as cursor:
         review = repo.get_review(cursor, review_id)
-        data, result = json.loads(review['SnapshotJSON']), json.loads(review['ResultadoJSON'])
+        period = repo.get_period(cursor, review['PeriodoID'])
+        data, result = stored_object(review['SnapshotJSON']), stored_result(review['ResultadoJSON'])
+        if result is None or not data or not isinstance(data.get('perfil'), dict):
+            return render_template('admin/dgi/historical.html', review=review, period=period)
         for finding in result['hallazgos']:
             finding['enlace'] = finding_link(finding)
         checks = [f for f in result['hallazgos'] if f.get('categoria', 'DATOS') == 'DATOS']
         configuration = [f for f in result['hallazgos'] if f.get('categoria') == 'CONFIGURACION']
         context = [f for f in result['hallazgos'] if f.get('categoria') == 'CONTEXTO']
-        period = repo.get_period(cursor, review['PeriodoID'])
         fresh = review['Estado'] != 'OBSOLETO' and review['Motor'] == ENGINE_VERSION and fingerprint(
             repo.snapshot(cursor, period, review['Obligacion'])) == review['Huella']
         execute_sp(

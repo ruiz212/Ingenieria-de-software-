@@ -67,6 +67,25 @@ def fingerprint(value):
     return hashlib.sha256(json_dump(value).encode('utf-8')).hexdigest()
 
 
+def stored_object(raw):
+    try:
+        value = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def stored_result(raw):
+    """Unreadable historical results require revalidation, never a zero-error default."""
+    result = stored_object(raw)
+    if not result or not isinstance(result.get('hallazgos'), list) or not isinstance(result.get('totales'), dict):
+        return None
+    for key in ('bloqueantes', 'advertencias'):
+        if type(result.get(key)) is not int or result[key] < 0:
+            return None
+    return result
+
+
 def monthly_period(value):
     try:
         start = date.fromisoformat(str(value) + '-01')
