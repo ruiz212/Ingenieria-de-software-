@@ -59,7 +59,7 @@ class DeliveryCashDB:
         return self
 
     def execute(self, sql, *args):
-        sql = re.sub(r'WITH\s*\(UPDLOCK,\s*HOLDLOCK\)', '', sql, flags=re.I)
+        sql = re.sub(r'WITH\s*\([^)]+\)', '', sql, flags=re.I)
         sql = sql.replace('ISNULL(', 'IFNULL(')
         if 'UPDATE e SET Estado' in sql:
             sql = ('UPDATE Encargos SET Estado=? WHERE FacturaID IN '

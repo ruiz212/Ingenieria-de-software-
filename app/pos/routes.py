@@ -182,7 +182,7 @@ def abrir_turno():
             'ventas.sp_ObtenerTurnoAbiertoBloqueo',
             (current_user.id,),
             fallback_sql=(
-                "SELECT TOP 1 ID FROM TurnosCaja WITH (ROWLOCK) "
+                "SELECT TOP 1 ID FROM TurnosCaja "
                 "WHERE UsuarioID = ? AND Cerrado = 0 ORDER BY ID DESC"
             ),
         )
@@ -386,7 +386,7 @@ def registrar_factura():
             cursor,
             'ventas.sp_ObtenerTurnoActivoParaVenta',
             (current_user.id,),
-            fallback_sql='SELECT ID FROM TurnosCaja WITH (ROWLOCK) WHERE UsuarioID=? AND Cerrado=0',
+            fallback_sql='SELECT ID FROM TurnosCaja WHERE UsuarioID=? AND Cerrado=0',
         )
         shift = cursor.fetchone()
         if shift:

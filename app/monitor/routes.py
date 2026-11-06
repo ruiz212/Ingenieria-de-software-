@@ -312,7 +312,7 @@ def actualizar_estado(codigo):
                     return jsonify(error='El cobro pendiente debe confirmarlo un cajero con turno abierto.'), 409
                 execute_sp(
                     cursor, 'ventas.sp_ObtenerTurnoActivoParaVenta', (current_user.id,),
-                    fallback_sql='SELECT ID FROM TurnosCaja WITH (ROWLOCK) WHERE UsuarioID = ? AND Cerrado = 0',
+                    fallback_sql='SELECT ID FROM TurnosCaja WHERE UsuarioID = ? AND Cerrado = 0',
                 )
                 turno_receptor = cursor.fetchone()
                 if not turno_receptor:
