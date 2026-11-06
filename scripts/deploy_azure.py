@@ -43,15 +43,31 @@ def publish_target(profile_xml, app_name):
     raise ValueError('Publish profile does not match the requested app target')
 
 
-def request(session, method, url, **kwargs):
+def request(session, method, url, *, allowed_statuses=(200, 202), **kwargs):
     try:
         result = session.request(method, url, timeout=60, allow_redirects=False, **kwargs)
     except requests.RequestException:
         raise RuntimeError('Azure request failed; inspect connectivity without exposing credentials') from None
-    if result.status_code not in {200, 202}:
+    if result.status_code not in allowed_statuses:
         # Server bodies and exception strings can echo credentials. Never print them.
         raise RuntimeError(f'Azure request returned HTTP {result.status_code}')
     return result
+
+
+def submit_archive(session, endpoint, archive, timeout=600):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        # A 409 rejects the submission. Reopen to resend from byte zero once free.
+        # Never retry an ambiguous network failure: that could submit the ZIP twice.
+        with Path(archive).open('rb') as stream:
+            result = request(session, 'POST', endpoint + '/api/zipdeploy?isAsync=true',
+                             data=stream, headers={'Content-Type': 'application/zip'},
+                             allowed_statuses=(200, 202, 409))
+        if result.status_code != 409:
+            return result
+        print('Kudu busy (HTTP 409); waiting 15s before resubmitting ZIP.', flush=True)
+        time.sleep(15)
+    raise RuntimeError('Azure SCM remains busy after 10 minutes; inspect active deployment in Deployment Center')
 
 
 def wait_for_deployment(session, url, timeout):
@@ -87,9 +103,7 @@ def deploy(archive, profile_xml, app_name):
     endpoint, credentials, public_url = publish_target(profile_xml, app_name)
     session = requests.Session()
     session.auth = credentials
-    with Path(archive).open('rb') as stream:
-        result = request(session, 'POST', endpoint + '/api/zipdeploy?isAsync=true',
-                         data=stream, headers={'Content-Type': 'application/zip'})
+    result = submit_archive(session, endpoint, archive)
     location = result.headers.get('Location')
     if not location:
         raise RuntimeError('Azure did not return a deployment status URL')
@@ -108,13 +122,38 @@ def deploy(archive, profile_xml, app_name):
     print('ZipDeploy, Oryx manifest and application login verified.', flush=True)
 
 
+def diagnose(profile_xml, app_name):
+    """Read only status flags and expected filenames, never configuration values."""
+    endpoint, credentials, _ = publish_target(profile_xml, app_name)
+    session = requests.Session()
+    session.auth = credentials
+    try:
+        latest = request(session, 'GET', endpoint + '/api/deployments/latest').json()
+        print('Previous Kudu deployment:',
+              'status=', int(latest.get('status', -1)),
+              'complete=', bool(latest.get('complete')),
+              'active=', bool(latest.get('active')), flush=True)
+        entries = request(session, 'GET', endpoint + '/api/vfs/site/wwwroot/').json()
+        expected = {'run.py', 'gunicorn.conf.py', 'requirements.txt', '.deployment',
+                    'oryx-manifest.toml', 'output.tar.gz', 'antenv'}
+        present = {item.get('name') for item in entries} & expected
+        print('Expected runtime entries present:', ', '.join(sorted(present)), flush=True)
+    except (RuntimeError, ValueError, TypeError):
+        print('SCM diagnostic unavailable; deployment will report its own result.', flush=True)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--package', required=True)
     parser.add_argument('--app-name', required=True)
+    parser.add_argument('--diagnose-only', action='store_true')
     args = parser.parse_args()
     try:
-        deploy(args.package, os.environ.get('AZURE_PUBLISH_PROFILE', ''), args.app_name)
+        profile_xml = os.environ.get('AZURE_PUBLISH_PROFILE', '')
+        if args.diagnose_only:
+            diagnose(profile_xml, args.app_name)
+        else:
+            deploy(args.package, profile_xml, args.app_name)
     except (ValueError, RuntimeError, OSError) as error:
         # Keep CLI failure diagnostics useful without dumping XML, HTTP bodies or secrets.
         if isinstance(error, (ValueError, RuntimeError)):
